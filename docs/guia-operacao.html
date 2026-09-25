@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Lunna — Guia de operação do desenvolvimento</title>
+<style>
+  :root { --navy:#030b23; --blue:#3b63ff; --ink:#1b1f33; --muted:#5b6078; --line:#dfe2ee; --soft:#f3f5fc; }
+  @page { size: A4; margin: 18mm 16mm 18mm;
+    @bottom-left  { content: "Lunna — Guia de operação do desenvolvimento"; font: 8pt Ubuntu, sans-serif; color: #8a90a8; }
+    @bottom-right { content: counter(page); font: 8pt Ubuntu, sans-serif; color: #8a90a8; } }
+  @page :first { margin: 0; @bottom-left { content: none } @bottom-right { content: none } }
+  * { box-sizing: border-box; }
+  body { font: 10pt/1.55 Ubuntu, "Noto Sans", "DejaVu Sans", sans-serif; color: var(--ink); margin: 0; }
+  h1, h2, h3 { line-height: 1.25; break-after: avoid; }
+  h2 { font-size: 16pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 2px solid var(--blue); }
+  h3 { font-size: 11.5pt; margin: 6mm 0 2mm; color: var(--navy); }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5.5mm; } li { margin-bottom: 1.2mm; }
+  code { font: 9pt "DejaVu Sans Mono", monospace; background: var(--soft); padding: 0 1mm; border-radius: 1mm; }
+  pre { font: 8.6pt/1.45 "DejaVu Sans Mono", monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 2mm; padding: 3mm 4mm; margin: 2mm 0 4mm; white-space: pre-wrap; break-inside: avoid; }
+  section { margin-top: 9mm; }
+  section.first { margin-top: 0; }
+  .cover { height: 297mm; background: var(--navy); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; break-after: page; position: relative; }
+  .cover img { width: 70mm; margin-bottom: 12mm; }
+  .cover h1 { font-size: 25pt; margin: 0 0 3mm; }
+  .cover p { font-size: 13pt; color: #b9c2ee; margin: 0 0 2mm; }
+  .cover small { position: absolute; bottom: 16mm; color: #7d87b8; font-size: 9pt; }
+  .toc { break-after: page; padding-top: 4mm; }
+  .toc ol { font-size: 11.5pt; line-height: 2; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9pt; break-inside: avoid; }
+  th { background: var(--navy); color: #fff; text-align: left; font-weight: 500; }
+  th, td { padding: 1.6mm 2.4mm; border: 1px solid var(--line); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--soft); }
+  figure { margin: 3mm 0 5mm; break-inside: avoid; }
+  figure img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 2mm; }
+  figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; }
+  .note { border-left: 3px solid var(--blue); background: var(--soft); padding: 2.5mm 4mm; margin: 3mm 0 4mm; font-size: 9.5pt; break-inside: avoid; }
+  .warn { border-left-color: #d98a00; background: #fdf3dc; }
+  .stop { border-left-color: #c53030; background: #fde8e8; }
+  .ok { color: #1a7f37; font-weight: 600; } .bad { color: #b42323; font-weight: 600; }
+  .steps { counter-reset: s; padding-left: 0; list-style: none; }
+  .steps li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.4mm; break-inside: avoid; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 6mm; height: 6mm; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 6mm; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <img src="img/lunna-logo.png" alt="Lunna">
+  <h1>Guia de operação do desenvolvimento</h1>
+  <p>Como criar funcionalidades novas no Lunna com segurança</p>
+  <p style="font-size:10.5pt">Para quem conhece o Mercado Livre e vai trabalhar com o Claude Code</p>
+  <small>Versão 0.1 · 25 de setembro de 2026</small>
+</div>
+
+<div class="toc">
+  <h2>Sumário</h2>
+  <ol>
+    <li>O seu papel e o do Claude</li>
+    <li>As regras de ouro</li>
+    <li>Preparar a máquina (uma vez)</li>
+    <li>O fluxo de uma funcionalidade, passo a passo</li>
+    <li>A ficha da funcionalidade (com um exemplo pronto)</li>
+    <li>Ler o resultado da verificação</li>
+    <li>Prints: o que tirar e como anexar no PR</li>
+    <li>Abrir o PR</li>
+    <li>Referência dos comandos e das skills</li>
+    <li>Se algo der errado</li>
+    <li>O que fica com o dono do projeto</li>
+    <li>Glossário</li>
+  </ol>
+  <div class="note warn"><strong>Status desta versão.</strong> Este guia descreve o kit conforme o design aprovado em 25/09/2026 (<code>docs/superpowers/specs/2026-09-25-kit-desenvolvimento-lunna-design.md</code>). Os scripts e as skills estão em implementação; assim que ficarem prontos, o guia é atualizado com a saída real de cada comando. Se algum comando ainda não existir, avise o dono do projeto.</div>
+</div>
+
+<section class="first">
+  <h2>1. O seu papel e o do Claude</h2>
+  <p>Você entende do Mercado Livre: o que um vendedor precisa enxergar, que número importa, o que é um sinal de problema. O Claude Code escreve o código. O papel de cada um:</p>
+  <table>
+    <tr><th style="width:50%">Você</th><th>O Claude (com as skills do kit)</th></tr>
+    <tr><td>Diz <strong>o que</strong> quer ver e <strong>por quê</strong>, em termos de ML.</td><td>Traduz isso em código de back e de front, seguindo o padrão do projeto.</td></tr>
+    <tr><td>Dá <strong>um exemplo com números</strong> do resultado esperado.</td><td>Transforma o exemplo em teste automático antes de programar.</td></tr>
+    <tr><td>Olha os <strong>prints</strong> e confirma que a tela é o que você imaginou.</td><td>Roda a verificação, tira os prints e monta o texto do PR.</td></tr>
+    <tr><td>Abre o PR e anexa os prints.</td><td>Explica cada passo e avisa quando algo foge das regras.</td></tr>
+  </table>
+  <p>Quem revisa e publica é o dono do projeto (Vinni). <strong>Você nunca publica</strong> nada em produção: seu trabalho termina no PR aberto.</p>
+  <h3>Como conversar com o Claude</h3>
+  <ul>
+    <li><strong>Bom:</strong> “Quero um alerta que avise quando um anúncio ativo está com o preço acima da referência do Mercado Livre.”</li>
+    <li><strong>Melhor ainda:</strong> acrescentar um exemplo: “O anúncio A custa R$ 120 e a referência é R$ 100 → deve entrar. O B custa R$ 95 → não entra.”</li>
+    <li><strong>Sem saber?</strong> Responda “não sei” e peça para ele procurar na documentação do ML do projeto (<code>docs/SPEC.md</code>). Ele não deve inventar campos.</li>
+    <li>Se o Claude propuser algo que você não entendeu, peça: “explica isso como se eu não fosse de tecnologia”.</li>
+  </ul>
+</section>
+
+<section style="break-before:page">
+  <h2>2. As regras de ouro</h2>
+  <p>São oito regras. O Claude as conhece e as confere, mas é bom você saber por que existem.</p>
+  <table>
+    <tr><th style="width:5%">#</th><th style="width:34%">Regra</th><th>Por quê</th></tr>
+    <tr><td>1</td><td><strong>O Lunna só lê o Mercado Livre.</strong></td><td>Nenhuma função altera preço, estoque ou anúncio do vendedor. Um erro aqui mexeria na loja de um cliente de verdade. O único envio ao ML é o pedido de token de acesso.</td></tr>
+    <tr><td>2</td><td><strong>Tudo é separado por empresa.</strong></td><td>O Lunna atende várias empresas. Uma empresa jamais pode ver dados de outra; um anúncio de outra empresa deve dar “não encontrado”.</td></tr>
+    <tr><td>3</td><td><strong>Cálculo e regra ficam no back; o front só mostra.</strong></td><td>Assim o número é o mesmo em qualquer tela e pode ser testado.</td></tr>
+    <tr><td>4</td><td><strong>Parâmetros de negócio são da empresa</strong> (imposto, margem mínima, cortes da Curva ABC).</td><td>Cada empresa tem os seus valores; nada fixo no código.</td></tr>
+    <tr><td>5</td><td><strong>Segredos nunca aparecem</strong> em código, log, print ou PR.</td><td>Chave do app do ML, tokens e chave da OpenRouter dão acesso às contas dos clientes.</td></tr>
+    <tr><td>6</td><td><strong>Não inventar campos da API do ML.</strong></td><td>Um campo que não existe quebra a sincronização. Para usar um dado novo, é preciso um exemplo de resposta real do ML.</td></tr>
+    <tr><td>7</td><td><strong>Teste junto com o código, e verificação verde antes do PR.</strong></td><td>É o que garante que a funcionalidade nova não quebrou as antigas.</td></tr>
+    <tr><td>8</td><td><strong>Peça ao dono antes de</strong> mexer em <code>cd/prod/</code>, arquivos <code>.env</code>, <code>docs/DECISOES.md</code>, migrations que apagam dados, bibliotecas novas ou qualquer deploy.</td><td>São as partes que podem derrubar ou expor a produção.</td></tr>
+  </table>
+  <div class="note stop"><strong>Atenção.</strong> Nesta versão o kit <strong>orienta, mas não bloqueia</strong>: tecnicamente nada impede um envio direto para a <code>main</code> ou um deploy. A barreira é a sua disciplina e a revisão do dono. Trabalhe sempre em uma branch <code>feature/…</code> e nunca na <code>main</code>.</div>
+</section>
+
+<section>
+  <h2>3. Preparar a máquina (uma vez)</h2>
+  <h3>O que precisa estar instalado</h3>
+  <table>
+    <tr><th style="width:26%">Item</th><th>Para quê</th></tr>
+    <tr><td>Docker e Docker Compose</td><td>Roda o back, o banco e os testes sem instalar Ruby.</td></tr>
+    <tr><td>Node 22 (via nvm)</td><td>Roda o front e os testes dele. O Node 24 não serve para este projeto.</td></tr>
+    <tr><td>Git com acesso SSH ao Bitbucket</td><td>Baixar e enviar o código.</td></tr>
+    <tr><td>Google Chrome</td><td>Usado pelo script que tira os prints (nada é baixado).</td></tr>
+    <tr><td>Claude Code</td><td>Onde você conversa e onde as skills do kit funcionam.</td></tr>
+  </table>
+  <h3>Passo a passo</h3>
+  <ol class="steps">
+    <li>Baixe o repositório <code>lunna-api</code> (o dono passa o endereço) para <code>~/workspace/lunna/lunna-api</code>.</li>
+    <li>Abra um terminal dentro da pasta <code>lunna-api</code> e rode:<pre>./script/setup.sh</pre>Ele confere o que falta, baixa o <code>lunna-web</code> (o front) ao lado, cria o arquivo de configuração e instala as dependências. No fim mostra uma lista com <span class="ok">✔</span> ou <span class="bad">✘</span>. Se houver <span class="bad">✘</span>, a própria mensagem diz o que fazer.</li>
+    <li>Suba o ambiente de teste:<pre>./script/dev-up.sh</pre>Quando terminar, ele imprime os endereços e o login de demonstração: <code>demo@lunna.dev</code> / <code>lunna12345</code>. Front em <code>http://localhost:3101</code>.</li>
+    <li>Abra o Claude Code <strong>dentro da pasta <code>lunna-api</code></strong>. Ele já vem configurado para enxergar também o front (<code>lunna-web</code>, ao lado); você não precisa abrir nada além disso.</li>
+  </ol>
+  <div class="note">O ambiente de teste usa <strong>dados fictícios</strong> (conta <code>LUNNA_DEMO</code>). Você não mexe em nenhuma loja real e nada do que fizer aí chega ao Mercado Livre. Por padrão o sincronizador automático fica desligado; para ligá-lo use <code>./script/dev-up.sh --com-jobs</code> (a conta demo não tem token e vai registrar falhas de sincronização, é normal).</div>
+</section>
+
+<section>
+  <h2>4. O fluxo de uma funcionalidade, passo a passo</h2>
+  <ol class="steps">
+    <li><strong>Comece limpo.</strong> Termine ou descarte o que estiver em andamento e rode <code>./script/dev-up.sh</code>.</li>
+    <li><strong>Peça a funcionalidade ao Claude.</strong> Digite <code>/lunna-nova-funcionalidade</code> e conte o que quer. Ele vai entrevistar você com a <strong>ficha da funcionalidade</strong> (seção 5) e criar a branch <code>feature/&lt;nome&gt;</code> nos dois projetos.</li>
+    <li><strong>Confirme o entendimento.</strong> Antes de programar, o Claude resume o que entendeu e mostra o exemplo com números como teste. Corrija o que estiver errado. É o momento mais barato de corrigir.</li>
+    <li><strong>Ele escreve os testes primeiro e depois o código.</strong> Você acompanha; não precisa ler o código. Se ele perguntar algo de negócio, responda; se perguntar algo técnico que você não entende, diga “decida seguindo o padrão do projeto”.</li>
+    <li><strong>Verificação.</strong> Digite <code>/lunna-verificar</code>. Tudo precisa estar verde (seção 6). O Claude corrige o que falhar.</li>
+    <li><strong>Prints</strong> (se a mudança for visual). Digite <code>/lunna-prints</code>, abra as imagens em <code>evidencias/&lt;branch&gt;/prints/</code> e confirme que a tela é a que você imaginou (seção 7).</li>
+    <li><strong>Texto do PR.</strong> Digite <code>/lunna-pr</code>. Ele gera o <code>PR.md</code> e imprime o link para abrir o PR de cada projeto alterado (seção 8).</li>
+    <li><strong>Envie a branch e abra o PR.</strong> O Claude mostra o comando de envio (<code>git push</code> da sua branch). Depois abra o link, cole o texto do <code>PR.md</code> e arraste os prints.</li>
+    <li><strong>Espere a revisão.</strong> O dono pode pedir ajustes; volte ao Claude com o comentário dele. O merge e o deploy são dele.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>5. A ficha da funcionalidade</h2>
+  <p>É o documento que transforma o seu conhecimento de ML em algo que o Claude consegue programar e testar. A skill preenche com você, em conversa. O modelo fica em <code>docs/modelos/ficha-funcionalidade.md</code>.</p>
+  <h3>As seis perguntas</h3>
+  <ol>
+    <li><strong>O que você quer ver</strong> (tela, coluna, alerta) e <strong>por quê</strong> (que decisão isso ajuda a tomar).</li>
+    <li><strong>De onde vem o dado.</strong> Se souber o campo do ML, ótimo; se não, o Claude procura no mapa de endpoints do projeto.</li>
+    <li><strong>Como calcular, com um exemplo numérico.</strong> O exemplo vira o teste automático.</li>
+    <li><strong>Quem pode ver:</strong> só administradores, ou também membros.</li>
+    <li><strong>Critério de aceite:</strong> uma lista “dado X → deve aparecer Y”.</li>
+    <li><strong>O que não pode mudar</strong>, para não estragar o que já funciona.</li>
+  </ol>
+  <h3>Exemplo preenchido: alerta “Preço acima da referência do ML”</h3>
+  <pre>1. O que quero ver
+   Um novo alerta em "Precisa de atenção" (Visão geral) chamado
+   "Preço acima da referência do ML", com a contagem de anúncios.
+   Ao clicar, a tabela de Anúncios abre filtrada por ele.
+   Por quê: anúncio mais caro que a referência tende a perder conversão;
+   quero saber quais rever primeiro.
+
+2. De onde vem o dado
+   Referência de preço do ML, já sincronizada a cada 12 h
+   (campo "status": with_benchmark_highest / with_benchmark_high).
+
+3. Como calcular (exemplo)
+   Entra no alerta: anúncio ATIVO cujo status da referência é
+   with_benchmark_highest ou with_benchmark_high.
+   - Anúncio A: ativo, R$ 120, referência R$ 100, status
+     with_benchmark_high            -> ENTRA
+   - Anúncio B: ativo, R$ 95, referência R$ 100, status no_benchmark_ok
+                                    -> NÃO entra
+   - Anúncio C: PAUSADO, R$ 130, status with_benchmark_highest
+                                    -> NÃO entra (só ativos)
+
+4. Quem vê: administradores e membros.
+
+5. Critério de aceite
+   - Com A, B e C, o alerta mostra "1".
+   - Clicar no alerta filtra a tabela e mostra só o anúncio A.
+   - Sem nenhum anúncio na regra, o alerta não aparece.
+
+6. O que não muda: os outros sete alertas e a ordem em que aparecem.</pre>
+  <div class="note">Repare que o exemplo tem <strong>casos que entram e casos que não entram</strong>. Os que não entram são tão importantes quanto os que entram: são eles que evitam alertas falsos.</div>
+</section>
+
+<section>
+  <h2>6. Ler o resultado da verificação</h2>
+  <p>O comando <code>./script/verificar.sh tudo</code> (ou <code>/lunna-verificar</code>) roda, de uma vez, o que o dono usaria para aprovar:</p>
+  <table>
+    <tr><th style="width:24%">Parte</th><th>O que confere</th></tr>
+    <tr><td>Testes do back</td><td>Toda a suíte automática (RSpec). Nenhum teste fala com o Mercado Livre de verdade.</td></tr>
+    <tr><td>Estilo do back</td><td>Padrão de escrita do código Ruby (RuboCop).</td></tr>
+    <tr><td>Segurança do back</td><td>Brakeman (falhas comuns de segurança) e bundler-audit (bibliotecas com problema conhecido).</td></tr>
+    <tr><td>Testes do front</td><td>Vitest.</td></tr>
+    <tr><td>Tipos e estilo do front</td><td>Typecheck e ESLint.</td></tr>
+  </table>
+  <p>O resultado sai como uma lista curta:</p>
+  <pre>API  testes        ✔  413 exemplos, 0 falhas
+API  estilo        ✔
+API  segurança     ✔
+WEB  testes        ✔  236 testes
+WEB  tipos/estilo  ✔
+Log completo: evidencias/feature-meu-alerta/verificacao-2026-09-25.txt</pre>
+  <ul>
+    <li><span class="ok">Tudo ✔:</span> pode seguir para os prints e o PR.</li>
+    <li><span class="bad">Algum ✘:</span> não abra o PR. Digite <code>/lunna-verificar</code> e o Claude mostra o que quebrou em português e corrige. O log completo fica no arquivo indicado (o dono pode pedir para ver).</li>
+    <li>O log da verificação é a sua <strong>evidência de que os testes passaram</strong> e é resumido no texto do PR.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>7. Prints: o que tirar e como anexar</h2>
+  <p>Em toda mudança <strong>visual</strong> (tela, coluna, alerta, cor, texto) o PR precisa de prints. Sem print, o dono não consegue aprovar sem rodar tudo na máquina dele. Mudança que não aparece na tela (cálculo interno, correção invisível) não precisa.</p>
+  <h3>Como gerar</h3>
+  <ol class="steps">
+    <li>Digite <code>/lunna-prints</code> (ou <code>./script/prints.sh</code>). O script confere se a porta é realmente do Lunna, monta a versão de produção do front, entra com o login demo e fotografa as telas.</li>
+    <li>Abra a pasta <code>evidencias/&lt;branch&gt;/prints/</code> e <strong>olhe cada imagem</strong>. Confira se aparece o que você pediu, se o texto está em português correto e se nenhum dado real ou secreto aparece.</li>
+    <li>Se faltar a tela da sua funcionalidade, peça ao Claude para incluí-la no roteiro de prints e gerar de novo.</li>
+  </ol>
+  <h3>Padrão dos arquivos</h3>
+  <table>
+    <tr><th style="width:44%">Arquivo</th><th>Significado</th></tr>
+    <tr><td><code>01-visao-geral-claro.png</code></td><td>Tela no computador, tema claro.</td></tr>
+    <tr><td><code>02-visao-geral-escuro.png</code></td><td>A mesma tela, tema escuro.</td></tr>
+    <tr><td><code>03-visao-geral-mobile.png</code></td><td>A mesma tela em celular (360 px).</td></tr>
+  </table>
+  <p>Toda tela nova precisa aparecer nos três formatos. O roteiro básico já cobre login, Visão geral, Anúncios, Curva ABC e Configurações; a sua funcionalidade entra no roteiro da própria branch.</p>
+  <figure>
+    <img src="img/exemplo-print.jpg" alt="Exemplo de print da Visão geral">
+    <figcaption>Exemplo de print (Visão geral, tema claro, dados de demonstração).</figcaption>
+  </figure>
+  <h3>Como anexar no PR</h3>
+  <p>O Bitbucket não recebe imagens por script, então o anexo é manual: na página do PR, <strong>arraste os arquivos</strong> (ou cole com Ctrl+V) na descrição ou em um comentário. Anexe todos e coloque uma legenda curta em cada um (“Alerta novo, tema claro”). O texto do PR gerado já lista os prints na ordem certa.</p>
+</section>
+
+<section>
+  <h2>8. Abrir o PR</h2>
+  <p>PR (pull request) é o pedido para o dono revisar e juntar o seu trabalho ao projeto. Se a funcionalidade mexeu no back e no front, são <strong>dois PRs</strong>, um em cada projeto.</p>
+  <ol class="steps">
+    <li>Digite <code>/lunna-pr</code>. Ele cria <code>evidencias/&lt;branch&gt;/PR.md</code> e imprime um link de PR para cada projeto alterado.</li>
+    <li>Envie a sua branch (o Claude mostra o comando exato).</li>
+    <li>Abra o link. No campo de descrição, cole o texto do <code>PR.md</code>. Se o seu Bitbucket oferecer “rascunho”, marque; senão comece o título com <code>[WIP]</code> até anexar os prints.</li>
+    <li>Arraste os prints (seção 7) e tire o <code>[WIP]</code>.</li>
+    <li>Avise o dono. Ele revisa, pede ajustes se precisar, faz o merge e o deploy.</li>
+  </ol>
+  <h3>O que tem no texto do PR</h3>
+  <ul>
+    <li><strong>Resumo em linguagem de negócio:</strong> o que muda para o vendedor.</li>
+    <li><strong>O que mudou</strong> em cada projeto (lista de arquivos).</li>
+    <li><strong>Como testar:</strong> passos com o login demo.</li>
+    <li><strong>Evidências:</strong> a lista dos prints com legenda.</li>
+    <li><strong>Resultado da verificação:</strong> o resumo ✔ da seção 6.</li>
+    <li><strong>Checklist das regras de ouro:</strong> cada item marcado.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>9. Referência dos comandos e das skills</h2>
+  <h3>Scripts (rode dentro da pasta <code>lunna-api</code>)</h3>
+  <table>
+    <tr><th style="width:30%">Comando</th><th style="width:24%">Quando usar</th><th>O que faz</th></tr>
+    <tr><td><code>./script/setup.sh</code></td><td>Uma vez, na máquina nova</td><td>Confere pré-requisitos, baixa o front (<code>lunna-web</code>) ao lado, prepara configuração e dependências.</td></tr>
+    <tr><td><code>./script/dev-up.sh</code></td><td>Ao começar o dia</td><td>Sobe banco, back e front com dados de demonstração; imprime endereços e login. <code>--com-jobs</code> liga também o sincronizador.</td></tr>
+    <tr><td><code>./script/dev-down.sh</code></td><td>Ao terminar</td><td>Desliga tudo.</td></tr>
+    <tr><td><code>./script/nova-branch.sh nome</code></td><td>Ao iniciar uma funcionalidade</td><td>Cria <code>feature/nome</code> nos dois projetos a partir da <code>main</code> atualizada. Recusa se houver alteração pendente.</td></tr>
+    <tr><td><code>./script/verificar.sh [api|web|tudo]</code></td><td>Antes de qualquer PR</td><td>Testes, estilo e segurança; resumo em português e log em <code>evidencias/</code>.</td></tr>
+    <tr><td><code>./script/prints.sh</code></td><td>Mudança visual</td><td>Tira os prints numerados (claro, escuro, celular).</td></tr>
+    <tr><td><code>./script/pr.sh</code></td><td>Ao fechar a funcionalidade</td><td>Gera o <code>PR.md</code> e imprime os links de PR.</td></tr>
+    <tr><td><code>./script/testar-kit.sh</code></td><td>Se um script se comportar de forma estranha</td><td>Testa o próprio kit e confere se os caminhos citados nos guias existem.</td></tr>
+  </table>
+  <h3>Skills do Claude Code</h3>
+  <table>
+    <tr><th style="width:30%">Skill</th><th>Use quando…</th></tr>
+    <tr><td><code>/lunna-nova-funcionalidade</code></td><td>Quiser uma tela, alerta, métrica ou coluna nova. Conduz o fluxo inteiro.</td></tr>
+    <tr><td><code>/lunna-api-mercado-livre</code></td><td>Tiver dúvida sobre qual dado ou endpoint do ML existe, ou quiser propor um novo.</td></tr>
+    <tr><td><code>/lunna-verificar</code></td><td>For abrir um PR ou quiser saber se “está tudo certo”.</td></tr>
+    <tr><td><code>/lunna-prints</code></td><td>A mudança for visual.</td></tr>
+    <tr><td><code>/lunna-pr</code></td><td>For abrir o PR.</td></tr>
+    <tr><td><code>/lunna-corrigir-bug</code></td><td>Algo estiver errado ou quebrado. Ele reproduz com um teste, corrige a causa e verifica.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>10. Se algo der errado</h2>
+  <table>
+    <tr><th style="width:36%">O que aparece</th><th>O que fazer</th></tr>
+    <tr><td>“Porta 3100 ou 3101 ocupada por outro projeto”</td><td>O script mostra quem está usando. Encerre esse outro projeto e tente de novo. Não force nem reaproveite: já aconteceu de a tela mostrar uma versão errada por isso.</td></tr>
+    <tr><td>Erro do Docker falando de rede ou de espaço</td><td>Não apague redes ou imagens de outros projetos. Chame o dono.</td></tr>
+    <tr><td><span class="bad">✘</span> na verificação</td><td>Digite <code>/lunna-verificar</code>. Se depois de duas tentativas continuar falhando, chame o dono com o arquivo de log.</td></tr>
+    <tr><td>Print com tela em branco ou diferente do esperado</td><td>Rode <code>./script/dev-up.sh</code> de novo e gere os prints outra vez. Se persistir, mande o print ao dono.</td></tr>
+    <tr><td>O Claude quer mexer em algo da lista “fica com o dono” (seção 11)</td><td><strong>Pare.</strong> Diga “não faça isso” e chame o dono.</td></tr>
+    <tr><td>O ML devolve erro 403 ou 404 em algum dado novo</td><td>Provavelmente falta permissão no app do ML ou o campo não existe. Não tente contornar; avise o dono com o nome do endpoint.</td></tr>
+    <tr><td>Não sabe se pode fazer algo</td><td>Na dúvida, pergunte ao dono antes. Perguntar custa uma mensagem; errar em produção custa a loja de um cliente.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>11. O que fica com o dono do projeto</h2>
+  <p>Estas tarefas <strong>não são suas</strong>, mesmo que o Claude ofereça fazer:</p>
+  <ul>
+    <li><strong>Deploy</strong> e qualquer comando que publique em produção (<code>cd/prod/deploy.sh</code>).</li>
+    <li><strong>Segredos e configuração de produção:</strong> arquivos <code>.env</code>, o arquivo de segredos do servidor, chaves de criptografia.</li>
+    <li><strong>Configuração do app no DevCenter do Mercado Livre</strong> (permissões, fluxos, URLs).</li>
+    <li>A pasta <code>cd/prod/</code> (manifests do servidor) e o arquivo <code>docs/DECISOES.md</code> (decisões fechadas do produto).</li>
+    <li>O <strong>merge na <code>main</code></strong> e o envio direto para ela.</li>
+    <li>Adicionar bibliotecas novas e migrations que apagam dados.</li>
+  </ul>
+  <div class="note">A produção é uma loja de verdade: a conta conectada é real, e o banco guarda tokens de acesso dos clientes. Por isso o ambiente de teste é separado, com dados fictícios.</div>
+</section>
+
+<section>
+  <h2>12. Glossário</h2>
+  <table>
+    <tr><th style="width:24%">Termo</th><th>Significado</th></tr>
+    <tr><td>Back / API</td><td>O programa (<code>lunna-api</code>) que fala com o Mercado Livre, guarda os dados e faz todos os cálculos.</td></tr>
+    <tr><td>Front</td><td>O programa (<code>lunna-web</code>) que desenha as telas que o usuário vê.</td></tr>
+    <tr><td>Branch</td><td>Uma cópia paralela do código onde você trabalha sem afetar a versão principal.</td></tr>
+    <tr><td><code>main</code></td><td>A versão principal e oficial do código. Só o dono mexe.</td></tr>
+    <tr><td>PR (pull request)</td><td>O pedido de revisão para juntar a sua branch à <code>main</code>.</td></tr>
+    <tr><td>Seed demo</td><td>Dados fictícios carregados no ambiente de teste (conta <code>LUNNA_DEMO</code>).</td></tr>
+    <tr><td>Sincronização</td><td>O ciclo (a cada 5 minutos) em que o Lunna busca dados novos no Mercado Livre.</td></tr>
+    <tr><td>Teste automático</td><td>Um pequeno programa que confere se uma regra continua funcionando. O seu “exemplo com números” vira um.</td></tr>
+    <tr><td>Fixture</td><td>Uma resposta real do ML guardada como arquivo, usada nos testes para nunca chamar o ML de verdade.</td></tr>
+    <tr><td>Curva ABC</td><td>Classificação dos anúncios pelo faturamento dos últimos 30 dias (A concentra ~80%).</td></tr>
+    <tr><td>Verificação</td><td>O conjunto de testes, estilo e segurança que precisa estar verde antes de um PR.</td></tr>
+    <tr><td>Deploy</td><td>Publicar uma nova versão em produção. Fica com o dono.</td></tr>
+  </table>
+</section>
+
+</body>
+</html>
