@@ -44,6 +44,12 @@ module Abc
 
     def tax_per_unit = price * @params.tax_pct / 100.0
 
+    # Preço cheio só quando há desconto de verdade (o front mostra "de R$ x" sem decidir nada).
+    def full_price
+      full = @item&.price&.to_f
+      full if full && full > price
+    end
+
     def unit_economics
       sobra = price - fee_per_unit - shipping_per_unit - tax_per_unit
       profit = has_cost? ? sobra - @cost.to_f : sobra
@@ -51,7 +57,7 @@ module Abc
 
       {
         price: price,
-        full_price: @item&.price&.to_f,
+        full_price: full_price,
         fee: fee_per_unit,
         shipping: shipping_per_unit,
         tax: tax_per_unit,

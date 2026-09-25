@@ -83,6 +83,15 @@ RSpec.describe Abc::Economics do
     expect(com_custo.unit[:profit_state]).to eq("bad")
   end
 
+  it "full_price fica nil quando não há desconto (preço cheio igual ao de venda)" do
+    metric = build_metric(price: 120)
+    item = build_item(price: 120)
+
+    result = described_class.call(metric: metric, item: item, cost: nil, params: abc_params)
+
+    expect(result.unit[:full_price]).to be_nil
+  end
+
   it "full_price vem do preço cheio do ml_item (não do preço de venda do item_metrics)" do
     metric = build_metric(price: 90)
     item = build_item(price: 120)

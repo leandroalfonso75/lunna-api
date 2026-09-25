@@ -155,7 +155,7 @@ scenarios.each_with_index do |scenario, index|
     attrs_missing_required: details_loaded ? [] : [ "BRAND" ],
     attrs_missing_main: [], brand: "Lunna", model: "Modelo #{n}",
     description_len: details_loaded ? [ 0, 180, 420, 950, 1600 ][n % 5] : 0,
-    quality_score: quality_score, quality_level: quality_score >= 80 ? "green" : (quality_score >= 60 ? "yellow" : "red"),
+    quality_score: quality_score, quality_level: quality_score >= 80 ? "Profissional" : (quality_score >= 60 ? "Padrão" : "Básica"),
     quality_pending: quality_pending_for(quality_score),
     # Tarifa ~ Premium 16,5% / Clássico 12% (+ R$ 6,50 abaixo de R$ 79); frete pago pelo vendedor.
     fee_now: (price * (listing_type_id == "gold_pro" ? 0.165 : 0.12) + (price < 79 ? 6.5 : 0)).round(2),
