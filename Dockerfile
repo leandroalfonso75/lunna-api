@@ -21,14 +21,14 @@ ENV RAILS_ENV=production \
     BUNDLE_PATH="/usr/local/bundle"
 RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential libpq-dev libyaml-dev curl && \
-    rm -rf /var/lib/apt/lists/*
 COPY Gemfile Gemfile.lock ./
-RUN bundle install --jobs 4 --retry 3 && \
+# Toolchain instalada e removida no MESMO RUN: numa camada separada ela ficaria
+# na imagem final mesmo depois do purge.
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential libpq-dev libyaml-dev curl libpq5 libyaml-0-2 && \
+    bundle install --jobs 4 --retry 3 && \
     rm -rf /usr/local/bundle/cache && \
     apt-get purge -y build-essential libpq-dev libyaml-dev && apt-get autoremove -y && \
-    apt-get update -qq && apt-get install --no-install-recommends -y libpq5 libyaml-0-2 && \
     rm -rf /var/lib/apt/lists/*
 COPY --chown=rails:rails . .
 RUN bundle exec bootsnap precompile app/ lib/ && \
