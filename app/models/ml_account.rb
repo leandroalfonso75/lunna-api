@@ -8,6 +8,7 @@ class MlAccount < ApplicationRecord
   has_many :ml_item_visits
   has_many :ml_orders
   has_many :ml_sync_runs
+  has_many :item_metrics
 
   encrypts :access_token, :refresh_token
 

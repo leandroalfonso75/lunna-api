@@ -9,7 +9,7 @@ class CompanyController < ApplicationController
   def update
     company = Current.company
     company.update!(company_params)
-    # A5: recalcular item_metrics das contas
+    company.ml_accounts.find_each { |account| Painel::ItemMetrics.refresh(account) }
     render json: { company: company_payload(company) }
   end
 

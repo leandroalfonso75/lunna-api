@@ -1,0 +1,35 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Mass Assignment",
+      "fingerprint": "3fffed3d72054a8916b06d866104f21ec6bf477d56e3ba621d8b03eb5d0c606e",
+      "check_name": "PermitAttributes",
+      "message": "Potentially dangerous key allowed for mass assignment",
+      "file": "app/controllers/users_controller.rb",
+      "line": 54,
+      "code": "params.permit(:name, :email, :password, :role)",
+      "note": "Só admin chega aqui (require_admin!); role é validado no model (admin|member) e o último admin é protegido no controller."
+    },
+    {
+      "warning_type": "Mass Assignment",
+      "fingerprint": "6407151daa492b5769b27cb1b2e2dddc1b12cfbcaa2df8be8593c3a9f3abf5c3",
+      "check_name": "PermitAttributes",
+      "message": "Potentially dangerous key allowed for mass assignment",
+      "file": "app/controllers/users_controller.rb",
+      "line": 58,
+      "code": "params.permit(:name, :role)",
+      "note": "Só admin chega aqui (require_admin!); role é validado no model (admin|member) e o último admin é protegido no controller."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "fingerprint": "f632cf08f5705bcf2fb55bc57038c94e08beb0e362de3f4f8311252403bc553c",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/painel/item_query.rb",
+      "line": 171,
+      "code": "Arel.sql(\"#{column} #{dir.upcase} NULLS LAST, visits_7d DESC, item_id ASC\")",
+      "note": "Coluna vem de SORTABLE_COLUMNS e direção de %w[asc desc] — nenhum valor do usuário entra cru no ORDER BY."
+    }
+  ],
+  "brakeman_version": "8.0.6"
+}

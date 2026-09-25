@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_300006) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_400001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -24,6 +24,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_300006) do
     t.decimal "group_down_pct", precision: 6, scale: 2, default: "-15.0", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "title", collation: "pt-BR-x-icu"
+    t.string "status"
+    t.string "sku"
+    t.string "listing_type"
+    t.boolean "full"
+    t.boolean "free_shipping"
+    t.boolean "catalog"
+    t.integer "variations"
+    t.decimal "price", precision: 12, scale: 2
+    t.decimal "original_price", precision: 12, scale: 2
+    t.integer "stock"
+    t.integer "quality_score"
+    t.integer "visits_7d", default: 0, null: false
+    t.integer "prev_visits_7d", default: 0, null: false
+    t.integer "visits_30d", default: 0, null: false
+    t.integer "prev_visits_30d", default: 0, null: false
+    t.integer "units_today", default: 0, null: false
+    t.integer "units_7d", default: 0, null: false
+    t.integer "prev_units_7d", default: 0, null: false
+    t.integer "units_30d", default: 0, null: false
+    t.integer "prev_units_30d", default: 0, null: false
+    t.decimal "revenue_7d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "prev_revenue_7d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "revenue_30d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "prev_revenue_30d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "net_after_fee_7d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "fees_30d", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "conversion_7d", precision: 8, scale: 2
+    t.decimal "prev_conversion_7d", precision: 8, scale: 2
+    t.decimal "conversion_30d", precision: 8, scale: 2
+    t.decimal "prev_conversion_30d", precision: 8, scale: 2
+    t.integer "units_delta"
+    t.decimal "coverage_days", precision: 10, scale: 1
+    t.decimal "coverage_30d", precision: 10, scale: 1
+    t.datetime "computed_at"
+    t.index ["ml_account_id", "revenue_30d"], name: "index_item_metrics_on_ml_account_id_and_revenue_30d"
+    t.index ["ml_account_id", "status"], name: "index_item_metrics_on_ml_account_id_and_status"
+    t.index ["ml_account_id", "units_7d"], name: "index_item_metrics_on_ml_account_id_and_units_7d"
+    t.index ["ml_account_id"], name: "index_item_metrics_on_ml_account_id"
   end
 
   create_table "ml_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -339,6 +382,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_300006) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "item_metrics", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify
   add_foreign_key "ml_costs", "companies", on_delete: :cascade

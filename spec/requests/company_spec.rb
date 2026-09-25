@@ -43,5 +43,17 @@ RSpec.describe "/api/company", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(json["errors"]).to be_present
     end
+
+    it "recalcula item_metrics de todas as contas da empresa" do
+      account_a = create(:ml_account, company: company)
+      account_b = create(:ml_account, company: company)
+
+      expect(Painel::ItemMetrics).to receive(:refresh).with(account_a)
+      expect(Painel::ItemMetrics).to receive(:refresh).with(account_b)
+
+      patch "/api/company", params: { tax_pct: 12 }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+    end
   end
 end
