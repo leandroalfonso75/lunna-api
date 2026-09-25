@@ -78,9 +78,11 @@ module Ml
         price_ref = safe(notes, item.item_id, "referência de preço") { fetch_price_ref(client, item) }
         attrs[:price_ref] = price_ref unless price_ref == FAILED
 
-        fee_at_ref, ship_at_ref = ref_fees(client, account, item, effective_price, price_ref == FAILED ? nil : price_ref, notes)
-        attrs[:fee_at_ref] = fee_at_ref
-        attrs[:ship_at_ref] = ship_at_ref
+        # Referência que falhou nesta rodada: mantém price_ref, fee_at_ref e ship_at_ref da
+        # última coleta boa (até a próxima rodada de 12 h) em vez de zerar os valores no sugerido.
+        unless price_ref == FAILED
+          attrs[:fee_at_ref], attrs[:ship_at_ref] = ref_fees(client, account, item, effective_price, price_ref, notes)
+        end
 
         [ attrs, notes ]
       end

@@ -173,4 +173,22 @@ RSpec.describe Ml::Sync::Details do
     expect(item.description_len).to be_nil
     expect(item.fee_now.to_f).to eq(23.08)
   end
+
+  it "referência de preço com erro nesta rodada preserva price_ref, fee_at_ref e ship_at_ref anteriores" do
+    item.update!(price_ref: { "status" => "with_benchmark_high", "suggested" => 129.9 }, fee_at_ref: 20.5, ship_at_ref: 18.0)
+    stub_description
+    stub_category
+    stub_sale_price(amount: 0)
+    stub_fee(price: 149.9)
+    stub_ship(item_price: 149.9, free_shipping: true)
+    stub_suggestion(status: 500)
+
+    result = described_class.call(client, account, [ item ])
+    item.reload
+
+    expect(result.notes.join).to include("referência de preço")
+    expect(item.price_ref["suggested"]).to eq(129.9)
+    expect(item.fee_at_ref.to_f).to eq(20.5)
+    expect(item.ship_at_ref.to_f).to eq(18.0)
+  end
 end

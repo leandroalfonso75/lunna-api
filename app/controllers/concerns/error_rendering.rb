@@ -24,6 +24,6 @@ module ErrorRendering
   end
 
   def render_parameter_missing(exception)
-    render_errors([ exception.message ], status: :unprocessable_content)
+    render_errors([ "Parâmetro obrigatório ausente: #{exception.param}" ], status: :unprocessable_content)
   end
 end
