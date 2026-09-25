@@ -12,12 +12,17 @@ module Ai
 
     CONFIG_ERROR = "Configure a chave e o modelo da OpenRouter em Configurações › Empresa."
     GENERIC_ERROR = "Não foi possível gerar o plano agora. Tente de novo."
+    EMPTY_ERROR = "A IA não devolveu o plano. Tente de novo."
+    LENGTH_ERROR = "O modelo gastou todo o limite de tokens raciocinando e não gerou o plano. " \
+                   "Use um modelo sem raciocínio em Configurações › Empresa."
 
     def self.stream(company, prompt, &block) = new(company, prompt).call(&block)
 
     def initialize(company, prompt)
       @company = company
       @prompt = prompt
+      @emitted = false
+      @finish_reason = nil
     end
 
     def call(&block)
@@ -45,7 +50,13 @@ module Ai
       end
 
       status ||= response.status
-      return if success?(status)
+      if success?(status)
+        # Stream "ok" sem nenhum texto: o modelo pensou até o limite de tokens
+        # (finish_reason "length") ou devolveu vazio — nunca entregar plano vazio.
+        raise Error, (@finish_reason == "length" ? LENGTH_ERROR : EMPTY_ERROR) unless @emitted
+
+        return
+      end
 
       Rails.logger.error("Ai::ActionPlan: status #{status} da OpenRouter — #{error_body.byteslice(0, 200)}")
       raise_for_status(status)
@@ -55,11 +66,15 @@ module Ai
 
     private
 
+    # `reasoning.enabled: false`: modelos de raciocínio (ex.: deepseek) gastam
+    # o max_tokens pensando e podem não devolver texto nenhum; o plano não
+    # precisa disso.
     def request_body
       {
         model: @company.ai_model,
         stream: true,
         max_tokens: MAX_TOKENS,
+        reasoning: { enabled: false },
         messages: [
           { role: "system", content: @prompt[:system] },
           { role: "user", content: @prompt[:user] }
@@ -84,8 +99,15 @@ module Ai
       event = JSON.parse(data)
       raise Error, GENERIC_ERROR if event["error"]
 
-      content = event.dig("choices", 0, "delta", "content")
-      block.call(content) if content
+      choice = event.dig("choices", 0)
+      @finish_reason = choice["finish_reason"] if choice&.dig("finish_reason")
+
+      # `content` vem como "" enquanto o modelo raciocina: só texto de verdade conta.
+      content = choice&.dig("delta", "content")
+      return if content.nil? || content.empty?
+
+      @emitted = true
+      block.call(content)
     end
 
     def success?(status) = status && (200...300).cover?(status)

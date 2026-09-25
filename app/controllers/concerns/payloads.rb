@@ -40,6 +40,18 @@ module Payloads
     sync_run_payload(account.ml_sync_runs.order(started_at: :desc).first)
   end
 
+  # Plano parado (worker caiu) sai como erro em vez de ficar "gerando" pra sempre.
+  def ai_plan_payload(plan)
+    stale = plan.stale?
+    {
+      id: plan.id,
+      status: stale ? "error" : plan.status,
+      text: plan.text,
+      error: stale ? AiPlan::STALE_ERROR : plan.error,
+      updated_at: plan.updated_at
+    }
+  end
+
   def sync_run_payload(run)
     return nil unless run
 

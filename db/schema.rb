@@ -10,9 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_200001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "ai_plans", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.string "status", default: "pending", null: false
+    t.text "text", default: "", null: false
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ai_plans_on_ml_account_id_and_item_id", unique: true
+  end
 
   create_table "companies", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "name", null: false
@@ -384,6 +395,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100001) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  add_foreign_key "ai_plans", "ml_accounts", on_delete: :cascade
   add_foreign_key "item_metrics", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify

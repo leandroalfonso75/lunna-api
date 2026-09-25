@@ -47,12 +47,42 @@ RSpec.describe Ai::ActionPlan do
           model: company.ai_model,
           stream: true,
           max_tokens: 4096,
+          reasoning: { enabled: false },
           messages: [
             { role: "system", content: "prompt do sistema" },
             { role: "user", content: "dados do anúncio" }
           ]
         }
       )
+  end
+
+  # Regressão (produção, 2026-09-25): deepseek-v4.1-flash raciocina, manda ~1.100
+  # eventos com content "" e termina com finish_reason "length" sem nenhum texto.
+  it 'ignora content "" e falha com mensagem clara quando o modelo gastou o limite raciocinando' do
+    body = <<~SSE
+      data: {"choices":[{"index":0,"delta":{"content":"","reasoning":"pensando"},"finish_reason":null}]}
+
+      data: {"choices":[{"index":0,"delta":{"content":"","reasoning":" mais"},"finish_reason":null}]}
+
+      data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"length"}]}
+
+      data: [DONE]
+
+    SSE
+    stub_request(:post, url).to_return(status: 200, body: body)
+
+    chunks = []
+    expect { described_class.stream(company, prompt) { |text| chunks << text } }
+      .to raise_error(Ai::ActionPlan::Error, /gastou todo o limite de tokens raciocinando/)
+    expect(chunks).to be_empty
+  end
+
+  it "stream ok sem nenhum texto (finish_reason stop) -> erro, nunca plano vazio" do
+    body = %(data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n)
+    stub_request(:post, url).to_return(status: 200, body: body)
+
+    expect { described_class.stream(company, prompt) { |_text| } }
+      .to raise_error(Ai::ActionPlan::Error, "A IA não devolveu o plano. Tente de novo.")
   end
 
   it "empresa sem chave e sem modelo -> erro de configuração, sem nenhuma requisição" do

@@ -28,7 +28,9 @@ Rails.application.routes.draw do
     # Leituras do painel (SPEC 10), sempre com ?account_id= (concern CurrentAccount).
     get "painel", to: "painel#show"
     get "items", to: "items#index"
+    get "items/:id/ai-plan", to: "ai_plans#show"
     post "items/:id/ai-plan", to: "ai_plans#create", as: :item_ai_plan
+    delete "items/:id/ai-plan", to: "ai_plans#destroy"
     get "abc", to: "abc#index"
     get "abc/items/:id", to: "abc#show", as: :abc_item
   end

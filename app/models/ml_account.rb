@@ -9,6 +9,7 @@ class MlAccount < ApplicationRecord
   has_many :ml_orders
   has_many :ml_sync_runs
   has_many :item_metrics
+  has_many :ai_plans
 
   encrypts :access_token, :refresh_token
 

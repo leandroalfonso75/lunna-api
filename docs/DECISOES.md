@@ -126,7 +126,7 @@ Substitui a chamada direta à Claude API da SPEC 9: o plano com IA usa a **OpenR
 - **Payload `company`** ganha: `ai_model` (string|null), `ai_configured` (boolean: tem chave **e** modelo) e `ai_key_hint` (string|null: `"…"` + 4 últimos caracteres da chave). A chave em si nunca aparece em resposta nem em log.
 - **`PATCH /api/company`** (admin) aceita também `ai_model`, `openrouter_api_key` (string; ausente ou vazio = mantém a atual) e `remove_openrouter_api_key` (boolean `true` = apaga a chave). Atualizar só a chave ou só o modelo não recalcula `item_metrics`.
 - **Chamada**: `POST https://openrouter.ai/api/v1/chat/completions` com `Authorization: Bearer <chave da empresa>`, `HTTP-Referer: FRONT_URL`, `X-Title: Lunna`, corpo `{model: ai_model, stream: true, max_tokens: 4096, messages: [{role: "system", content: prompt[:system]}, {role: "user", content: prompt[:user]}]}`. Resposta em SSE: linhas `data: {json}` com o texto em `choices[0].delta.content`; `data: [DONE]` encerra; linhas que começam com `:` são comentários (keep-alive) e são ignoradas; um `data:` com `{"error": {...}}` no meio do stream vira erro.
-- **Erros** (viram `event: error` no SSE do `POST /api/items/:id/ai-plan`, mensagens exatas):
+- **Erros** (gravados em `ai_plans.error` pelo job e devolvidos no `GET /api/items/:id/ai-plan`; a configuração ausente vira 422 já no `POST`; mensagens exatas):
 
 | Situação | Mensagem |
 |---|---|
@@ -138,3 +138,15 @@ Substitui a chamada direta à Claude API da SPEC 9: o plano com IA usa a **OpenR
 | outros / rede / erro no meio do stream | Não foi possível gerar o plano agora. Tente de novo. |
 
 - O prompt (`Ai::ActionPlanPrompt`) não muda. A gem `anthropic` sai do projeto; o HTTP é Faraday com leitura em streaming (`on_data`).
+
+### 10.1 Execução assíncrona por polling — decisão de 2026-09-25
+
+Substitui o SSE do `POST /api/items/:id/ai-plan` (a resposta longa ficava presa numa conexão do navegador até o proxy/timeout). Agora a geração roda em background e a tela faz polling:
+
+- **Tabela `ai_plans`** (uuid; `ml_account_id` com cascade; `item_id`; `status` = `pending|running|done|error|cancelled`; `text`; `error`; único por `(ml_account_id, item_id)`). "Gerar de novo" sobrescreve a linha; o último plano fica salvo e reaparece ao reabrir o anúncio.
+- **`POST /api/items/:id/ai-plan`** (logado; 10/min por empresa): sem chave/modelo → 422 com a mensagem de configuração; já em geração (gravação há < 5 min) → 409; senão grava `pending`, enfileira `Ai::ActionPlanJob` e responde **202** `{ai_plan}`.
+- **`GET /api/items/:id/ai-plan`** → `{ai_plan: {id, status, text, error, updated_at} | null}`. É o que o front consulta a cada 2 s até `done`/`error`. Plano `pending`/`running` sem gravação há mais de 5 min (worker caiu, deploy no meio) sai como `error` ("A geração foi interrompida. Tente de novo.").
+- **`DELETE /api/items/:id/ai-plan`** ("Parar"): marca `cancelled`; o job confere a cada gravação e interrompe. 204 mesmo sem plano em geração.
+- **`Ai::ActionPlanJob`** lê a OpenRouter em streaming e grava o texto parcial a cada ~1,5 s (o polling mostra o texto crescendo). Termina só a partir de `running`, então um `cancelled` não é sobrescrito. Qualquer exceção vira `error` genérico (a exceção não vaza).
+- **Modelos de raciocínio**: o request leva `reasoning: {enabled: false}`. Sem isso o `deepseek/deepseek-v4.1-flash` gastou os 4096 `max_tokens` só raciocinando (~1.100 eventos com `content: ""`, `finish_reason: "length"`) e o plano saiu vazio com o aviso de "gerado" (produção, 2026-09-25). Eventos com `content` vazio são ignorados.
+- **Nunca plano vazio**: stream "ok" sem nenhum texto vira erro — "O modelo gastou todo o limite de tokens raciocinando e não gerou o plano. Use um modelo sem raciocínio em Configurações › Empresa." (`finish_reason: "length"`) ou "A IA não devolveu o plano. Tente de novo.".
