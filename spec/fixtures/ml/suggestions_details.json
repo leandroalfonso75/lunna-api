@@ -1,0 +1,10 @@
+{"item_id":"MLB1000000001","status":"with_benchmark_high","current_price":{"amount":139.9},"suggested_price":{"amount":129.9},"lowest_price":{"amount":119.0},"internal_price":{"amount":134.5},"percent_difference":7.7,"applicable_suggestion":true,"costs":{"selling_fees":21.43,"shipping_fees":21.45},"compared_values":6,
+ "metadata":{"compared_values":6,"graph":[
+  {"price":{"amount":119.0},"info":{"title":"Luminária LED Touch Recarregável Preta","sold_quantity":340}},
+  {"price":{"amount":124.9},"info":{"title":"Luminária Mesa Led 3 Cores","sold_quantity":210}},
+  {"price":{"amount":129.9},"info":{"title":"Abajur Led Recarregável Touch","sold_quantity":98}},
+  {"price":{"amount":135.0},"info":{"title":"Luminária de Leitura Led Usb","sold_quantity":77}},
+  {"price":{"amount":139.9},"info":{"title":"Luminária Aurora","sold_quantity":830}},
+  {"price":{"amount":159.9},"info":{"title":"Luminária Premium Led","sold_quantity":12}}
+ ]},
+ "last_updated":"2026-09-23T06:00:00Z"}

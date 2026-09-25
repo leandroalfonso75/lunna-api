@@ -1,0 +1,16 @@
+{"query":"","display":"complete","paging":{"total":3,"offset":0,"limit":50},
+ "results":[
+  {"id":2000000001,"status":"paid","date_created":"2026-09-23T14:05:00.000-03:00","date_closed":"2026-09-23T14:05:03.000-03:00","total_amount":299.8,"currency_id":"BRL",
+   "order_items":[
+    {"item":{"id":"MLB1000000001","title":"Luminária de Mesa Lunna Aurora LED Recarregável Touch","variation_id":null,"seller_sku":"LUN-001"},"quantity":1,"unit_price":149.9,"sale_fee":24.73,"listing_type_id":"gold_pro"},
+    {"item":{"id":"MLB1000000001","title":"Luminária de Mesa Lunna Aurora LED Recarregável Touch","variation_id":null,"seller_sku":"LUN-001"},"quantity":1,"unit_price":149.9,"sale_fee":24.73,"listing_type_id":"gold_pro"}
+   ]},
+  {"id":2000000002,"status":"paid","date_created":"2026-09-22T23:30:00.000-03:00","date_closed":"2026-09-22T23:30:05.000-03:00","total_amount":64.9,"currency_id":"BRL",
+   "order_items":[
+    {"item":{"id":"MLB1000000002","title":"Kit 2 Velas Aromáticas Frete Grátis","variation_id":null,"seller_sku":"LUN-002"},"quantity":1,"unit_price":64.9,"sale_fee":10.06,"listing_type_id":"gold_special"}
+   ]},
+  {"id":2000000003,"status":"cancelled","date_created":"2026-09-21T10:00:00.000-03:00","date_closed":null,"total_amount":39.9,"currency_id":"BRL",
+   "order_items":[
+    {"item":{"id":"MLB1000000003","title":"Porta-Retrato Lunna Madeira 15x21","variation_id":17000000001,"seller_sku":"LUN-003-BR"},"quantity":1,"unit_price":39.9,"sale_fee":6.18,"listing_type_id":"gold_special"}
+   ]}
+ ]}

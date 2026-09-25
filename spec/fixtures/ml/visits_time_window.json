@@ -1,0 +1,8 @@
+{"item_id":"MLB1000000001","date_from":"2026-07-27T00:00:00Z","date_to":"2026-09-24T00:00:00Z","total_visits":95,"last":60,"unit":"day",
+ "results":[
+  {"date":"2026-09-20T00:00:00Z","total":30,"visits_detail":[{"company":"mercadolibre","quantity":30}]},
+  {"date":"2026-09-21T00:00:00Z","total":25,"visits_detail":[{"company":"mercadolibre","quantity":25}]},
+  {"date":"2026-09-22T00:00:00Z","total":22,"visits_detail":[{"company":"mercadolibre","quantity":22}]},
+  {"date":"2026-09-23T00:00:00Z","total":18,"visits_detail":[{"company":"mercadolibre","quantity":18}]},
+  {"date":"2026-09-24T00:00:00Z","total":0,"visits_detail":[]}
+ ]}

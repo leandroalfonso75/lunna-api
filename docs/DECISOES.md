@@ -48,21 +48,19 @@ Estado de sincronização por conta vai para `ml_accounts`: `orders_backfilled_a
 
 - O navegador não carrega o Bearer num redirect, então `GET /auth/ml/start` vira **`POST /api/ml_accounts/authorize`** (autenticado, admin) → `200 {url}`. O front faz `window.location = url`. Gera `state` (UUID), grava em `ml_oauth_states` com `company_id` e `user_id`, apaga states > 1 h. Sem `ML_CLIENT_ID`/`ML_CLIENT_SECRET` → 422 `{errors: ["Integração com o Mercado Livre não configurada."]}`.
 - `redirect_uri` = `"#{ENV.fetch('API_URL')}/auth/ml/callback"` (idêntico ao cadastrado no DevCenter).
-- **`GET /auth/ml/callback`** (público) sempre responde **302** para `"#{ENV.fetch('FRONT_URL')}/configuracoes?aba=contas&ml=<resultado>"`:
+- **`GET /auth/ml/callback`** (público) é só repasse — não toca no banco nem chama o ML. Sempre responde **302** para `"#{ENV.fetch('FRONT_URL')}/configuracoes?aba=contas&..."`: veio `error` → `&ml=cancelada`; sem `code` ou `state` → `&ml=link_invalido`; senão → `&code=<code>&state=<state>` (`CGI.escape`). O front, já logado, é quem termina a conexão chamando **`POST /api/ml_accounts/connect`** (autenticado, admin) com `{code, state}`, respondendo JSON (não redirect):
 
-| Situação | `ml=` |
+| Situação | resposta |
 |---|---|
-| veio `error` | `cancelada` |
-| sem `code` ou `state` | `link_invalido` |
-| state inexistente ou > 1 h | `expirada` |
-| usuário do state não é mais admin da empresa | `sem_permissao` |
-| app sem client id/secret | `erro_config` |
-| troca do code falhou | `erro` |
-| resposta sem `refresh_token` | `sem_offline_access` |
-| seller já vinculado a outra empresa | `outra_empresa` |
-| sucesso | `conectada` |
+| state inexistente ou > 1 h | 422 `code: "expirada"` |
+| state de outro usuário ou de outra empresa | 403 `code: "sem_permissao"` (state **não** é consumido) |
+| app sem client id/secret | 422 `code: "erro_config"` |
+| troca do code falhou | 422 `code: "erro"` |
+| resposta sem `refresh_token` | 422 `code: "sem_offline_access"` |
+| seller já vinculado a outra empresa | 409 `code: "outra_empresa"` |
+| sucesso | 200 `code: "conectada", ml_account: {...}` |
 
-- O state é consumido numa transação com lock (uso único). A empresa vem **só** do state.
+  Erros sempre `{errors: ["mensagem"], code: "<código>"}`. O state só é aceito pelo mesmo usuário que o gerou (comparado com `Current.user`/`Current.company` da sessão) — é isso que impede alguém de gerar a URL de autorização na própria empresa e induzir o dono de outra conta ML a autorizá-la (sem CORS com credenciais nem cookie: a garantia vem do Bearer da sessão de quem chama `connect`, não do navegador). Consumido (apagado) numa transação com lock só quando aceito — uso único; nos demais casos (inclusive `sem_permissao`) o state fica intacto no banco.
 - Gravação: `find_or_initialize_by(seller_id:)` + `save!` (não upsert), `status: "active"`, `last_error: nil`, `expires_at = agora + expires_in` (padrão 21.600 s). Em seguida enfileira a primeira sync.
 - **Renovação** (SPEC 2.7) dentro de `account.with_lock` (reload, renova se faltar < 10 min). Grava sempre o novo `access_token` **e** o novo `refresh_token`. Falha → `status: "reauth_required"`, `last_error: "Falha ao renovar token … Autorize de novo."` e a rodada termina `ok=false`. O agendador pula contas `reauth_required` até nova autorização.
 
@@ -97,6 +95,7 @@ Erros sempre `{errors: ["mensagem"]}` com status 401/403/404/409/422/429. Payloa
 | `DELETE /api/users/:id` | admin | 204 |
 | `GET /api/ml_accounts` | logado | `{ml_accounts: [...]}` |
 | `POST /api/ml_accounts/authorize` | admin | 200 `{url}` |
+| `POST /api/ml_accounts/connect` | admin | `{code, state}` → 200 `{code: "conectada", ml_account}`; ver seção 5 pros demais `code` |
 | `DELETE /api/ml_accounts/:id` | admin | 204 |
 | `POST /api/sync?account_id=` | admin | 202 `{run_id}`; 409 se rodando |
 | `GET /api/sync/runs?account_id=&limit=20` | logado | `{runs: [{id, started_at, finished_at, ok, items, orders, detail}]}` |

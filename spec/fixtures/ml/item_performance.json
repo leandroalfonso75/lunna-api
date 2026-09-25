@@ -1,0 +1,18 @@
+{"entity_type":"ITEM","entity_id":"MLB1000000001","score":65,"level":"Standard","level_wording":"Padrão","calculated_at":"2026-09-23T05:00:00Z",
+ "buckets":[
+  {"key":"CHARACTERISTICS","title":"Ficha técnica","status":"PENDING","score":50,
+   "variables":[
+    {"key":"TECHNICAL_SPECS","title":"Atributos","status":"PENDING","score":50,
+     "rules":[
+      {"key":"COMPLETE_GTIN","status":"PENDING","progress":0,"mode":"OPPORTUNITY","wordings":{"title":"Informe o código universal","label":"Completar ficha técnica","link":"https://www.mercadolivre.com.br/anuncios/MLB1000000001/modificar"}},
+      {"key":"COMPLETE_BRAND","status":"COMPLETED","progress":100,"mode":"OPPORTUNITY","wordings":{"title":"Marca informada","label":"Ver","link":""}}
+     ]}
+   ]},
+  {"key":"OFFER","title":"Condições de venda","status":"PENDING","score":70,
+   "variables":[
+    {"key":"INSTALLMENTS","title":"Parcelamento","status":"PENDING","score":0,
+     "rules":[
+      {"key":"OFFER_INSTALLMENTS","status":"PENDING","progress":0,"mode":"OPPORTUNITY","wordings":{"title":"Ofereça parcelamento sem juros","label":"Mudar para Premium","link":""}}
+     ]}
+   ]}
+ ]}

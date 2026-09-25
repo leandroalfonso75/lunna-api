@@ -1,0 +1,63 @@
+[
+  {"code":200,"body":{
+    "id":"MLB1000000001","title":"Luminária de Mesa Lunna Aurora LED Recarregável Touch","status":"active","sub_status":[],
+    "price":149.9,"original_price":179.9,"available_quantity":42,"sold_quantity":830,"listing_type_id":"gold_pro","category_id":"MLB1234",
+    "shipping":{"mode":"me2","free_shipping":true,"logistic_type":"fulfillment","tags":["self_service_out"]},
+    "catalog_listing":false,"permalink":"https://produto.mercadolivre.com.br/MLB-1000000001-luminaria-de-mesa-_JM","thumbnail":"http://http2.mlstatic.com/D_1-I.jpg",
+    "seller_custom_field":"LUN-001",
+    "attributes":[
+      {"id":"BRAND","name":"Marca","value_id":"9344","value_name":"Lunna","values":[{"id":"9344","name":"Lunna"}]},
+      {"id":"MODEL","name":"Modelo","value_id":null,"value_name":"Aurora","values":[{"id":null,"name":"Aurora"}]},
+      {"id":"COLOR","name":"Cor","value_id":"52049","value_name":"Preto","values":[{"id":"52049","name":"Preto"}]},
+      {"id":"GTIN","name":"Código universal de produto","value_id":null,"value_name":null,"values":[]},
+      {"id":"SELLER_SKU","name":"SKU","value_id":null,"value_name":"LUN-001","values":[{"id":null,"name":"LUN-001"}]}
+    ],
+    "variations":[],
+    "pictures":[{"id":"1-A"},{"id":"1-B"},{"id":"1-C"},{"id":"1-D"},{"id":"1-E"},{"id":"1-F"},{"id":"1-G"}],
+    "video_id":"YT-aurora","health":0.92,"date_created":"2024-05-02T13:20:11.000Z","last_updated":"2026-09-20T09:15:00.000Z"}},
+  {"code":200,"body":{
+    "id":"MLB1000000002","title":"Kit 2 Velas Aromáticas Frete Grátis","status":"active","sub_status":[],
+    "price":64.9,"original_price":null,"available_quantity":0,"sold_quantity":95,"listing_type_id":"gold_special","category_id":"MLB5678",
+    "shipping":{"mode":"me2","free_shipping":false,"logistic_type":"cross_docking","tags":[]},
+    "catalog_listing":false,"permalink":"https://produto.mercadolivre.com.br/MLB-1000000002-kit-2-velas-_JM","thumbnail":"http://http2.mlstatic.com/D_2-I.jpg",
+    "seller_custom_field":null,
+    "attributes":[
+      {"id":"BRAND","name":"Marca","value_id":null,"value_name":"Lunna Home","values":[{"id":null,"name":"Lunna Home"}]},
+      {"id":"SELLER_SKU","name":"SKU","value_id":null,"value_name":"LUN-002","values":[{"id":null,"name":"LUN-002"}]}
+    ],
+    "variations":[],
+    "pictures":[{"id":"2-A"},{"id":"2-B"}],
+    "video_id":null,"health":0.61,"date_created":"2025-01-10T10:00:00.000Z","last_updated":"2026-09-18T12:00:00.000Z"}},
+  {"code":200,"body":{
+    "id":"MLB1000000003","title":"Porta-Retrato Lunna Madeira 15x21","status":"paused","sub_status":["out_of_stock"],
+    "price":39.9,"original_price":null,"available_quantity":0,"sold_quantity":210,"listing_type_id":"gold_special","category_id":"MLB5678",
+    "shipping":{"mode":"me2","free_shipping":false,"logistic_type":"drop_off","tags":[]},
+    "catalog_listing":false,"permalink":"https://produto.mercadolivre.com.br/MLB-1000000003-porta-retrato-_JM","thumbnail":"http://http2.mlstatic.com/D_3-I.jpg",
+    "seller_custom_field":null,
+    "attributes":[{"id":"BRAND","name":"Marca","value_id":null,"value_name":"Lunna","values":[{"id":null,"name":"Lunna"}]}],
+    "variations":[
+      {"id":17000000001,"price":39.9,"available_quantity":0,"sold_quantity":120,"seller_custom_field":null,
+       "attribute_combinations":[{"id":"COLOR","name":"Cor","value_id":"52055","value_name":"Branco","values":[{"id":"52055","name":"Branco"}]}],
+       "attributes":[{"id":"SELLER_SKU","name":"SKU","value_id":null,"value_name":"LUN-003-BR","values":[{"id":null,"name":"LUN-003-BR"}]}]},
+      {"id":17000000002,"price":39.9,"available_quantity":0,"sold_quantity":90,"seller_custom_field":null,
+       "attribute_combinations":[{"id":"COLOR","name":"Cor","value_id":"52049","value_name":"Preto","values":[{"id":"52049","name":"Preto"}]}],
+       "attributes":[{"id":"SELLER_SKU","name":"SKU","value_id":null,"value_name":"LUN-003-PT","values":[{"id":null,"name":"LUN-003-PT"}]}]}
+    ],
+    "pictures":[{"id":"3-A"},{"id":"3-B"},{"id":"3-C"},{"id":"3-D"}],
+    "video_id":null,"health":null,"date_created":"2023-08-01T10:00:00.000Z","last_updated":"2026-09-01T08:00:00.000Z"}},
+  {"code":200,"body":{
+    "id":"MLB1000000004","title":"Caneca Lua","status":"closed","sub_status":[],
+    "price":29.9,"original_price":null,"available_quantity":0,"sold_quantity":12,"listing_type_id":"gold_special","category_id":"MLB9999",
+    "shipping":{"mode":"me2","free_shipping":false,"logistic_type":"drop_off","tags":[]},
+    "catalog_listing":true,"permalink":"https://produto.mercadolivre.com.br/MLB-1000000004-caneca-lua-_JM","thumbnail":"http://http2.mlstatic.com/D_4-I.jpg",
+    "seller_custom_field":null,"attributes":[],"variations":[],"pictures":[{"id":"4-A"}],
+    "video_id":null,"health":null,"date_created":"2022-02-01T10:00:00.000Z","last_updated":"2025-11-01T08:00:00.000Z"}},
+  {"code":200,"body":{
+    "id":"MLB1000000005","title":"Abajur Lunna Nuvem Infantil Promoção Imperdível","status":"under_review","sub_status":["forbidden"],
+    "price":119.0,"original_price":null,"available_quantity":8,"sold_quantity":3,"listing_type_id":"gold_pro","category_id":"MLB1234",
+    "shipping":{"mode":"me2","free_shipping":true,"logistic_type":"cross_docking","tags":[]},
+    "catalog_listing":false,"permalink":"https://produto.mercadolivre.com.br/MLB-1000000005-abajur-_JM","thumbnail":"http://http2.mlstatic.com/D_5-I.jpg",
+    "seller_custom_field":"LUN-005","attributes":[],"variations":[],"pictures":[{"id":"5-A"},{"id":"5-B"},{"id":"5-C"}],
+    "video_id":null,"health":0.4,"date_created":"2026-08-20T10:00:00.000Z","last_updated":"2026-09-22T08:00:00.000Z"}},
+  {"code":404,"body":{"message":"Item with id MLB1000000099 not found","error":"not_found","status":404,"cause":[]}}
+]

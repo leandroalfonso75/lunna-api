@@ -1,0 +1,13 @@
+[
+ {"id":"BRAND","name":"Marca","tags":{"required":true,"catalog_required":true},"relevance":1,"value_type":"string"},
+ {"id":"MODEL","name":"Modelo","tags":{"catalog_required":true},"relevance":1,"value_type":"string"},
+ {"id":"GTIN","name":"Código universal de produto","tags":{"conditional_required":true,"required":true},"relevance":1,"value_type":"string"},
+ {"id":"COLOR","name":"Cor","tags":{},"relevance":1,"value_type":"list"},
+ {"id":"MATERIAL","name":"Material","tags":{},"relevance":1,"value_type":"string"},
+ {"id":"POWER","name":"Potência","tags":{},"relevance":1,"value_type":"number_unit"},
+ {"id":"WEIGHT","name":"Peso","tags":{},"relevance":2,"value_type":"number_unit"},
+ {"id":"SELLER_SKU","name":"SKU","tags":{"variation_attribute":true},"relevance":2,"value_type":"string"},
+ {"id":"ITEM_CONDITION","name":"Condição do item","tags":{"read_only":true},"relevance":1,"value_type":"list"},
+ {"id":"PACKAGE_WEIGHT","name":"Peso da embalagem","tags":{"hidden":true,"read_only":true},"relevance":2,"value_type":"number_unit"},
+ {"id":"IS_KIT","name":"É kit","tags":{"fixed":true},"relevance":1,"value_type":"boolean"}
+]
