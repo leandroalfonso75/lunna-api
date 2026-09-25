@@ -1,5 +1,5 @@
 # Configuração não secreta da API (web, jobs e job-migrate via envFrom).
-# Domínios são placeholders (*.change-me.invalid): trocar antes do primeiro deploy (ver README.md).
+# Produção: api.lunnashop.com.br (API) e gestao.lunnashop.com.br (front).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -15,7 +15,7 @@ data:
   # Pool por processo: threads do Puma (5) ou do worker (3) + folga do Solid Queue.
   DB_POOL: "10"
   JOB_CONCURRENCY: "1"
-  API_HOST: api.change-me.invalid
-  API_URL: https://api.change-me.invalid
-  FRONT_URL: https://app.change-me.invalid
-  CORS_ORIGINS: https://app.change-me.invalid
+  API_HOST: api.lunnashop.com.br
+  API_URL: https://api.lunnashop.com.br
+  FRONT_URL: https://gestao.lunnashop.com.br
+  CORS_ORIGINS: https://gestao.lunnashop.com.br

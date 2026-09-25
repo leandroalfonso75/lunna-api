@@ -16,7 +16,7 @@ tabela filtrável e Curva ABC já calculados. O front é o [lunna-web](../lunna-
 ## Configurar o app no DevCenter do Mercado Livre
 
 1. Em <https://developers.mercadolivre.com.br/devcenter>, crie (ou edite) o aplicativo.
-2. **Redirect URI**: `<API_URL>/auth/ml/callback` — por exemplo `https://api.seudominio.com.br/auth/ml/callback`
+2. **Redirect URI**: `<API_URL>/auth/ml/callback` — em produção `https://api.lunnashop.com.br/auth/ml/callback`
    (em dev: `http://localhost:3100/auth/ml/callback`). Precisa ser idêntica ao `API_URL` da API.
 3. **Permissões**: leitura e escrita (a escrita fica reservada para funções futuras) e **`offline_access`**
    — sem ele o ML não devolve `refresh_token` e a conexão é recusada (`sem_offline_access`).
@@ -85,5 +85,11 @@ docker compose run --rm api bin/brakeman --no-pager
 
 ## Deploy
 
-Kubernetes no padrão timeia/meustorytv (ingress-nginx, cert-manager, imagens no Docker Hub).
-Manifests e passo a passo em [`cd/prod/README.md`](cd/prod/README.md).
+Kubernetes (k3s) no padrão timeia/meustorytv: front em https://gestao.lunnashop.com.br e API em
+https://api.lunnashop.com.br. Um comando builda as duas imagens, importa no servidor e aplica tudo:
+
+```bash
+VERSION=0.1.1 ./cd/prod/deploy.sh
+```
+
+Manifests, segredos, preparação do servidor e operação em [`cd/prod/README.md`](cd/prod/README.md).

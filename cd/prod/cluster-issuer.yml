@@ -1,0 +1,16 @@
+# Emissor de certificados do cluster (uma vez por cluster). Mesmo nome usado nos
+# Ingress do padrão timeia/meustorytv. Sem e-mail: o Let's Encrypt não exige; com
+# e-mail ele avisa quando um certificado está perto de vencer sem renovação.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx

@@ -18,10 +18,10 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [api.change-me.invalid]
+    - hosts: [api.lunnashop.com.br]
       secretName: lunna-api-tls
   rules:
-    - host: api.change-me.invalid
+    - host: api.lunnashop.com.br
       http:
         paths:
           - path: /
