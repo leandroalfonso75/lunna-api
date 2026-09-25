@@ -21,5 +21,8 @@ Rails.application.routes.draw do
       post :authorize, on: :collection
       post :connect, on: :collection
     end
+
+    post "sync", to: "sync#create"
+    get "sync/runs", to: "sync#runs"
   end
 end

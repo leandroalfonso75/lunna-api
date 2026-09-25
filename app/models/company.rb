@@ -1,6 +1,7 @@
 class Company < ApplicationRecord
   has_many :users
   has_many :ml_accounts
+  has_many :ml_costs
 
   validates :name, presence: true
   validates :tax_pct, :min_margin_pct,

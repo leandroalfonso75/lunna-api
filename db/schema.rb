@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_200001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_300006) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -46,12 +46,112 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_200001) do
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
   end
 
+  create_table "ml_costs", force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.string "sku", null: false
+    t.decimal "cost", precision: 12, scale: 2
+    t.decimal "extra", precision: 12, scale: 2, default: "0.0", null: false
+    t.string "source"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "sku"], name: "index_ml_costs_on_company_id_and_sku", unique: true
+    t.index ["company_id"], name: "index_ml_costs_on_company_id"
+  end
+
+  create_table "ml_item_visits", primary_key: ["item_id", "day"], force: :cascade do |t|
+    t.string "item_id", null: false
+    t.uuid "ml_account_id", null: false
+    t.date "day", null: false
+    t.integer "visits", null: false
+    t.index ["ml_account_id", "day"], name: "index_ml_item_visits_on_ml_account_id_and_day"
+    t.index ["ml_account_id"], name: "index_ml_item_visits_on_ml_account_id"
+  end
+
+  create_table "ml_items", primary_key: "item_id", id: :string, force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "seller_id", null: false
+    t.string "title", collation: "pt-BR-x-icu"
+    t.string "status"
+    t.jsonb "sub_status", default: [], null: false
+    t.decimal "price", precision: 12, scale: 2
+    t.decimal "original_price", precision: 12, scale: 2
+    t.decimal "sale_price", precision: 12, scale: 2
+    t.decimal "regular_price", precision: 12, scale: 2
+    t.integer "available_quantity"
+    t.integer "sold_quantity"
+    t.string "listing_type_id"
+    t.string "category_id"
+    t.string "logistic_type"
+    t.boolean "free_shipping"
+    t.boolean "catalog_listing"
+    t.string "sku"
+    t.integer "variations_count"
+    t.string "permalink"
+    t.string "thumbnail"
+    t.decimal "health", precision: 5, scale: 2
+    t.integer "pictures_count"
+    t.boolean "has_video"
+    t.jsonb "attrs_filled", default: [], null: false
+    t.jsonb "attrs_missing_required", default: [], null: false
+    t.jsonb "attrs_missing_main", default: [], null: false
+    t.string "brand"
+    t.string "model"
+    t.integer "description_len"
+    t.integer "quality_score"
+    t.string "quality_level"
+    t.jsonb "quality_pending", default: [], null: false
+    t.decimal "fee_now", precision: 12, scale: 2
+    t.decimal "ship_cost", precision: 12, scale: 2
+    t.jsonb "price_ref"
+    t.decimal "fee_at_ref", precision: 12, scale: 2
+    t.decimal "ship_at_ref", precision: 12, scale: 2
+    t.datetime "date_created"
+    t.datetime "last_updated"
+    t.datetime "details_checked_at"
+    t.datetime "quality_checked_at"
+    t.datetime "synced_at"
+    t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
+    t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
+  end
+
   create_table "ml_oauth_states", primary_key: "state", id: :string, force: :cascade do |t|
     t.uuid "company_id", null: false
     t.uuid "user_id", null: false
     t.datetime "created_at", null: false
     t.index ["company_id"], name: "index_ml_oauth_states_on_company_id"
     t.index ["user_id"], name: "index_ml_oauth_states_on_user_id"
+  end
+
+  create_table "ml_order_items", primary_key: ["order_id", "item_id"], force: :cascade do |t|
+    t.bigint "order_id", null: false
+    t.string "item_id", null: false
+    t.integer "quantity"
+    t.decimal "unit_price", precision: 12, scale: 2
+    t.decimal "sale_fee", precision: 12, scale: 2
+    t.index ["item_id"], name: "index_ml_order_items_on_item_id"
+  end
+
+  create_table "ml_orders", primary_key: "order_id", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "status"
+    t.datetime "date_created"
+    t.datetime "date_closed"
+    t.decimal "total_amount", precision: 12, scale: 2
+    t.datetime "synced_at"
+    t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
+    t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
+  end
+
+  create_table "ml_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.boolean "ok"
+    t.integer "items"
+    t.integer "orders"
+    t.text "detail"
+    t.index ["ml_account_id", "started_at"], name: "index_ml_sync_runs_on_ml_account_id_and_started_at"
+    t.index ["ml_account_id"], name: "index_ml_sync_runs_on_ml_account_id"
   end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -241,8 +341,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_200001) do
 
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify
+  add_foreign_key "ml_costs", "companies", on_delete: :cascade
+  add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_oauth_states", "companies", on_delete: :cascade
   add_foreign_key "ml_oauth_states", "users", on_delete: :cascade
+  add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
+  add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
   add_foreign_key "sessions", "users", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_batches", column: "batch_id", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

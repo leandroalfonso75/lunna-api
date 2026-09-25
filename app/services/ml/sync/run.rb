@@ -1,0 +1,135 @@
+# Orquestra uma rodada de sincronização (SPEC 4, DECISOES §6): resolve qual
+# rodada usar (ou se já tem uma em andamento), roda as etapas em ordem e
+# fecha o registro em ml_sync_runs. Só a falha da etapa 0 (renovar token)
+# encerra a rodada com ok: false; as demais falhas viram nota e a rodada
+# segue com ok: true.
+module Ml
+  module Sync
+    class Run
+      STALE_AFTER = 6.minutes
+      VISITS_EVERY = 30.minutes
+      QUALITY_EVERY = 6.hours
+      DETAILS_EVERY = 12.hours
+      QUALITY_BATCH = 200
+      DETAILS_BATCH = 60
+      DETAIL_MAX_LENGTH = 2_000
+
+      # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
+      # etapa bate num 429/5xx (retentativa do Ml::Client) — em produção usa
+      # o `sleep` real, igual ao default do próprio Client.
+      def self.call(account, run_id: nil, sleeper: ->(seconds) { sleep(seconds) })
+        new(account, run_id, sleeper).call
+      end
+
+      def initialize(account, run_id, sleeper)
+        @account = account
+        @run_id = run_id
+        @sleeper = sleeper
+        @notes = []
+      end
+
+      def call
+        run = resolve_run!
+        return unless run
+
+        begin
+          Ml::OAuth.refresh!(@account)
+        rescue Ml::OAuth::Error
+          run.update!(finished_at: Time.current, ok: false, detail: truncate(@account.last_error))
+          return
+        end
+
+        client = Ml::Client.new(access_token: @account.access_token, sleeper: @sleeper)
+
+        scan_result = Ml::Sync::Scan.call(client, @account.seller_id)
+        @notes.concat(scan_result.notes)
+
+        items_result = Ml::Sync::Items.call(client, @account, scan_result.ids)
+        @notes.concat(items_result.notes)
+
+        sync_visits(client)
+        orders_result = sync_orders(client)
+        sync_quality(client)
+        sync_details(client)
+
+        Painel::ItemMetrics.refresh(@account)
+
+        run.update!(
+          finished_at: Time.current,
+          ok: true,
+          items: items_result.ids.size,
+          orders: orders_result.order_ids.size,
+          detail: truncate(@notes.join("\n"))
+        )
+      rescue StandardError => e
+        # Erro inesperado (não é falha de API tratada como nota): fecha a rodada
+        # como falha na hora, em vez de deixá-la aberta até virar "interrompida".
+        run&.update_columns(finished_at: Time.current, ok: false,
+          detail: truncate((@notes + [ "Erro inesperado na sincronização (#{e.class})." ]).join("\n")))
+        raise
+      end
+
+      private
+
+      # Fecha rodadas presas (>= 6 min sem terminar) antes de decidir se essa
+      # execução pode seguir. Se ainda sobrar uma rodada em andamento que não
+      # seja a que essa execução recebeu, não faz nada ("rodada anterior
+      # ainda em andamento").
+      def resolve_run!
+        MlSyncRun.unfinished.where(ml_account: @account).where("started_at <= ?", STALE_AFTER.ago)
+          .update_all(finished_at: Time.current, ok: false, detail: "interrompida")
+
+        blocking = MlSyncRun.unfinished.where(ml_account: @account)
+        blocking = blocking.where.not(id: @run_id) if @run_id
+        return nil if blocking.exists?
+
+        @run_id ? MlSyncRun.find(@run_id) : MlSyncRun.create!(ml_account: @account, started_at: Time.current)
+      end
+
+      def sync_visits(client)
+        return if @account.visits_synced_at.present? && @account.visits_synced_at > VISITS_EVERY.ago
+
+        ids = @account.ml_items.where(status: %w[active paused]).pluck(:item_id)
+        result = Ml::Sync::Visits.call(client, @account, ids)
+        @notes.concat(result.notes)
+        @account.update_columns(visits_synced_at: Time.current)
+      end
+
+      def sync_orders(client)
+        backfilling = @account.orders_backfilled_at.nil?
+        from = backfilling ? 62.days.ago.beginning_of_day : 4.days.ago.beginning_of_day
+
+        result = Ml::Sync::Orders.call(client, @account, from: from)
+        @notes.concat(result.notes)
+        @account.update_columns(orders_backfilled_at: Time.current) if backfilling && result.ok
+
+        result
+      end
+
+      def sync_quality(client)
+        ids = @account.ml_items.where(status: "active")
+          .where("quality_checked_at IS NULL OR quality_checked_at <= ?", QUALITY_EVERY.ago)
+          .order(Arel.sql("quality_checked_at ASC NULLS FIRST"))
+          .limit(QUALITY_BATCH)
+          .pluck(:item_id)
+
+        result = Ml::Sync::Quality.call(client, ids)
+        @notes.concat(result.notes)
+      end
+
+      def sync_details(client)
+        items = @account.ml_items.where(status: %w[active paused under_review])
+          .where("details_checked_at IS NULL OR details_checked_at <= ?", DETAILS_EVERY.ago)
+          .order(Arel.sql("details_checked_at ASC NULLS FIRST"))
+          .limit(DETAILS_BATCH)
+
+        result = Ml::Sync::Details.call(client, @account, items)
+        @notes.concat(result.notes)
+      end
+
+      def truncate(text)
+        text.to_s[0, DETAIL_MAX_LENGTH]
+      end
+    end
+  end
+end

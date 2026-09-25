@@ -33,8 +33,21 @@ module Payloads
     }
   end
 
-  # Preenchido por um bloco posterior a partir de ml_sync_runs.
-  def last_sync_payload(_account)
-    nil
+  def last_sync_payload(account)
+    sync_run_payload(account.ml_sync_runs.order(started_at: :desc).first)
+  end
+
+  def sync_run_payload(run)
+    return nil unless run
+
+    {
+      id: run.id,
+      started_at: run.started_at,
+      finished_at: run.finished_at,
+      ok: run.ok,
+      items: run.items,
+      orders: run.orders,
+      detail: run.detail
+    }
   end
 end
