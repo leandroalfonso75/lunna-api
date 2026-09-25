@@ -12,6 +12,8 @@ RSpec.describe "/api/items", type: :request do
     get "/api/items", params: { account_id: account.id }, headers: auth_headers(member)
 
     expect(response).to have_http_status(:ok)
+
+    expect(numeric_strings(json)).to be_empty
     expect(json["items"].size).to eq(1) # status ativo por padrão
     expect(json["items"].first["title"]).to eq("Produto A")
     expect(json).to include("total" => 1, "page" => 1, "per_page" => 50)

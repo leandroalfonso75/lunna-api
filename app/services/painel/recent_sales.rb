@@ -22,7 +22,7 @@ module Painel
       lines.map do |at, item_id, quantity, unit_price|
         {
           at: at, item_id: item_id, title: titles[item_id] || item_id,
-          quantity: quantity, total: (unit_price * quantity).round(2)
+          quantity: quantity, total: (unit_price * quantity).round(2).to_f
         }
       end
     end

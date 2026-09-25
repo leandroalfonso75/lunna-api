@@ -13,6 +13,8 @@ RSpec.describe "/api/painel", type: :request do
     get "/api/painel", params: { account_id: account.id }, headers: auth_headers(member)
 
     expect(response).to have_http_status(:ok)
+
+    expect(numeric_strings(json)).to be_empty
     expect(json["account"]).to eq("id" => account.id, "nickname" => account.nickname, "seller_id" => account.seller_id)
     expect(json["sync"]["state"]).to eq("ok")
     expect(json["kpis"].size).to eq(6)

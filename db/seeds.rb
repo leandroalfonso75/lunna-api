@@ -10,6 +10,41 @@
 return unless Rails.env.development?
 
 rng = Random.new(42)
+
+# Referência de preço fictícia no formato gravado pela sync (SPEC 5).
+def demo_price_ref(price, n)
+  status, factor = [ [ "with_benchmark_highest", 0.86 ], [ "with_benchmark_high", 0.93 ],
+                     [ "no_benchmark_ok", 1.0 ], [ "no_benchmark_lowest", 1.08 ] ][n % 4]
+  suggested = (price * factor).round(2)
+  graph = (1..6).map { |i| { "p" => (suggested * (0.9 + i * 0.04)).round(2), "t" => "Concorrente #{i} — similar", "s" => 40 * i } }
+  { "status" => status, "current" => price, "suggested" => suggested, "lowest" => graph.first["p"],
+    "pct" => ((suggested - price) / price * 100).round(1), "applicable" => true, "compared" => graph.size,
+    "graph" => graph, "updated" => Time.current.iso8601 }
+end
+
+PRODUCT_NAMES = [
+  "Luminária de Mesa LED Recarregável Touch 3 Cores", "Kit 2 Velas Aromáticas Lavanda e Baunilha 180g",
+  "Porta-Retrato de Madeira Maciça 15x21 Natural", "Caneca de Cerâmica Lua Crescente 350ml",
+  "Abajur Infantil Nuvem com Luz Noturna", "Difusor de Aromas Ultrassônico 300ml Madeira",
+  "Jogo de Lençol Queen 400 Fios Algodão Egípcio", "Almofada Decorativa Linho 45x45 com Enchimento",
+  "Organizador de Maquiagem Acrílico Giratório", "Espelho Redondo Decorativo 60cm Moldura Dourada",
+  "Tapete Sala Shaggy 2x1,5m Cinza", "Cortina Blackout 2,80x2,30 Tecido Linho",
+  "Relógio de Parede Minimalista 30cm Silencioso", "Vaso de Cerâmica Fosco Branco Médio",
+  "Kit Toalhas de Banho 4 Peças Fio Penteado", "Cesto Organizador Fibra Natural com Alça",
+  "Fita LED 5m RGB Wi-Fi Controle por App", "Umidificador de Ar 2,5L Silencioso Bivolt",
+  "Quadro Decorativo Abstrato 60x40 Moldura Preta", "Prateleira Flutuante MDF 60cm Kit 3",
+  "Garrafa Térmica Inox 1L Mantém 24h", "Jogo de Panelas Antiaderente 5 Peças Cerâmica",
+  "Porta-Temperos Giratório 12 Potes Vidro", "Tábua de Corte Bambu Grande com Canaleta",
+  "Kit Potes Herméticos Vidro 10 Peças", "Luminária Pendente Industrial Preta E27",
+  "Cabideiro de Chão Madeira com Sapateira", "Manta Sofá Tricô 1,50x2,00 Off White",
+  "Sapateira Organizadora 30 Pares Empilhável", "Lixeira Inox Pedal 12L Cozinha",
+  "Suporte Notebook Ajustável Alumínio", "Mouse Pad Grande 90x40 Borda Costurada",
+  "Kit Pincéis de Maquiagem 12 Peças com Estojo", "Escova Secadora 3 em 1 1200W Bivolt",
+  "Chaleira Elétrica Inox 1,8L Desligamento Automático", "Balança Digital Cozinha 10kg Vidro",
+  "Organizador de Gaveta Modular 8 Peças", "Varal de Chão Retrátil Alumínio 20m",
+  "Travesseiro Nasa Viscoelástico Cervical", "Kit Jardinagem 10 Peças com Bolsa"
+].freeze
+
 today = Date.current
 sp_now = Time.current.in_time_zone("America/Sao_Paulo")
 
@@ -107,7 +142,7 @@ scenarios.each_with_index do |scenario, index|
 
   item_rows << {
     item_id: item_id, ml_account_id: account.id, seller_id: account.seller_id,
-    title: "Produto demo #{n} — #{scenario[:status]}",
+    title: PRODUCT_NAMES[(n - 1) % PRODUCT_NAMES.size],
     status: scenario[:status], sub_status: [],
     price: price, original_price: original_price, sale_price: nil, regular_price: original_price,
     available_quantity: scenario[:stock], sold_quantity: scenario[:week] + scenario[:prev_week],
@@ -115,15 +150,17 @@ scenarios.each_with_index do |scenario, index|
     logistic_type: full ? "fulfillment" : "drop_off", free_shipping: full || n.even?,
     catalog_listing: n % 5 == 0, sku: sku, variations_count: n % 6 == 0 ? 2 : 1,
     permalink: "https://produto.mercadolivre.com.br/#{item_id}", thumbnail: nil,
-    health: 0.9, pictures_count: details_loaded ? 5 : 1, has_video: n % 7 == 0,
+    health: 0.9, pictures_count: details_loaded ? [ 2, 4, 5, 7, 9 ][n % 5] : 1, has_video: n % 7 == 0,
     attrs_filled: details_loaded ? [ "BRAND", "MODEL" ] : [],
     attrs_missing_required: details_loaded ? [] : [ "BRAND" ],
     attrs_missing_main: [], brand: "Lunna", model: "Modelo #{n}",
-    description_len: details_loaded ? 400 : 0,
+    description_len: details_loaded ? [ 0, 180, 420, 950, 1600 ][n % 5] : 0,
     quality_score: quality_score, quality_level: quality_score >= 80 ? "green" : (quality_score >= 60 ? "yellow" : "red"),
     quality_pending: quality_pending_for(quality_score),
-    fee_now: (price * 0.11).round(2), ship_cost: full ? 0 : (price * 0.06).round(2),
-    price_ref: n % 8 == 0 ? { "status" => "ok", "current" => price, "suggested" => (price * 0.95).round(2) } : nil,
+    # Tarifa ~ Premium 16,5% / Clássico 12% (+ R$ 6,50 abaixo de R$ 79); frete pago pelo vendedor.
+    fee_now: (price * (listing_type_id == "gold_pro" ? 0.165 : 0.12) + (price < 79 ? 6.5 : 0)).round(2),
+    ship_cost: (full || n.even?) ? (18 + (n % 6) * 3).to_f : (5 + n % 4).to_f,
+    price_ref: details_loaded && n % 3 == 0 ? demo_price_ref(price, n) : nil,
     fee_at_ref: nil, ship_at_ref: nil,
     date_created: (400 - n).days.ago, last_updated: 1.day.ago,
     details_checked_at: details_loaded ? 1.hour.ago : nil,
@@ -169,9 +206,12 @@ order_item_rows.each_slice(200) { |batch| MlOrderItem.upsert_all(batch) } # PK c
 
 # Custo pra metade dos SKUs (pra Curva ABC do A5 mostrar lucro líquido).
 skus = item_rows.filter_map { |row| row[:sku] }
+price_by_sku = item_rows.to_h { |row| [ row[:sku], row[:price] ] }
 skus.each_slice(2).map(&:first).compact.each_with_index do |sku, i|
+  # Custo entre ~38% e ~56% do preço (alguns ficam abaixo da margem mínima).
+  cost = (price_by_sku[sku].to_f * (0.38 + (i % 4) * 0.06)).round(2)
   MlCost.upsert_all(
-    [ { company_id: company.id, sku: sku, cost: (10 + i * 3.5).round(2), extra: 2.5, source: "seed", created_at: Time.current, updated_at: Time.current } ],
+    [ { company_id: company.id, sku: sku, cost: cost, extra: 3.5, source: "seed", created_at: Time.current, updated_at: Time.current } ],
     unique_by: [ :company_id, :sku ]
   )
 end

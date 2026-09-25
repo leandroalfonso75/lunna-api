@@ -130,7 +130,7 @@ module Abc
         rank: entry[:rank], share_pct: entry[:share_pct], cum_pct: entry[:cum_pct],
         visits_30d: metric.visits_30d, units_30d: metric.units_30d,
         units_change_pct: entry[:units_change_pct], units_change_state: entry[:units_change_state],
-        is_new: entry[:is_new], conversion_30d: metric.conversion_30d, revenue_30d: metric.revenue_30d,
+        is_new: entry[:is_new], conversion_30d: metric.conversion_30d&.to_f, revenue_30d: metric.revenue_30d.to_f,
         profit_month: month[:profit], profit_is_before_cost: month[:profit_is_before_cost],
         margin_pct: month[:margin_pct], margin_state: month[:margin_state],
         suggestions_count: entry[:suggestions].size,
@@ -147,7 +147,7 @@ module Abc
         indicators: {
           visits: metric.visits_30d, prev_visits: metric.prev_visits_30d,
           units: metric.units_30d, prev_units: metric.prev_units_30d,
-          conversion: metric.conversion_30d, revenue: metric.revenue_30d,
+          conversion: metric.conversion_30d&.to_f, revenue: metric.revenue_30d.to_f,
           share_pct: entry[:share_pct], cum_pct: entry[:cum_pct]
         },
         month: entry[:economics].month,

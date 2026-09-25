@@ -29,6 +29,8 @@ RSpec.describe "Curva ABC (/api/abc)", type: :request do
       get "/api/abc", params: { account_id: account.id }, headers: auth_headers(user)
 
       expect(response).to have_http_status(:ok)
+
+      expect(numeric_strings(json)).to be_empty
       expect(json.keys).to contain_exactly("params", "period", "has_costs", "details", "notice", "summary", "groups", "rows")
       expect(json["params"].keys).to contain_exactly("tax_pct", "min_margin_pct", "cut_a", "cut_b", "up_pct", "down_pct")
 
@@ -77,6 +79,8 @@ RSpec.describe "Curva ABC (/api/abc)", type: :request do
       get "/api/abc/items/MLB1", params: { account_id: account.id }, headers: auth_headers(user)
 
       expect(response).to have_http_status(:ok)
+
+      expect(numeric_strings(json)).to be_empty
       expect(json.keys).to contain_exactly("indicators", "month", "unit", "listing", "price", "suggestions", "links")
       expect(json["links"]["public"]).to eq("https://produto.mercadolivre.com.br/MLB-1")
     end
