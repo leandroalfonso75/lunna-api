@@ -2,20 +2,39 @@
 class CompanyController < ApplicationController
   before_action :require_admin!, only: :update
 
+  # Só estas mudam métricas já calculadas (A5) — trocar só a IA não precisa
+  # recalcular nada (DECISOES §10).
+  BUSINESS_PARAMS = %w[tax_pct min_margin_pct abc_cut_a abc_cut_b group_up_pct group_down_pct].freeze
+
   def show
     render json: { company: company_payload(Current.company) }
   end
 
   def update
     company = Current.company
-    company.update!(company_params)
-    company.ml_accounts.find_each { |account| Painel::ItemMetrics.refresh(account) }
+    company.assign_attributes(company_params)
+    apply_openrouter_api_key!(company)
+    company.save!
+
+    if (company.saved_changes.keys & BUSINESS_PARAMS).any?
+      company.ml_accounts.find_each { |account| Painel::ItemMetrics.refresh(account) }
+    end
+
     render json: { company: company_payload(company) }
   end
 
   private
 
   def company_params
-    params.permit(:name, :tax_pct, :min_margin_pct, :abc_cut_a, :abc_cut_b, :group_up_pct, :group_down_pct)
+    params.permit(:name, :tax_pct, :min_margin_pct, :abc_cut_a, :abc_cut_b, :group_up_pct, :group_down_pct, :ai_model)
+  end
+
+  # `openrouter_api_key` ausente ou vazio mantém a atual; `remove_openrouter_api_key: true` apaga.
+  def apply_openrouter_api_key!(company)
+    if ActiveModel::Type::Boolean.new.cast(params[:remove_openrouter_api_key])
+      company.openrouter_api_key = nil
+    elsif params[:openrouter_api_key].present?
+      company.openrouter_api_key = params[:openrouter_api_key]
+    end
   end
 end

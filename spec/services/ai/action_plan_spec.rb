@@ -1,66 +1,113 @@
 require "rails_helper"
 
 RSpec.describe Ai::ActionPlan do
-  # O cliente é memoizado globalmente (@client, DECISOES/A5) — precisa
-  # resetar entre exemplos pra não vazar a chave/stub de um teste pro outro.
-  before { described_class.instance_variable_set(:@client, nil) }
-  after { described_class.instance_variable_set(:@client, nil) }
-
+  let(:company) { build(:company, :with_ai) }
   let(:prompt) { { system: "prompt do sistema", user: "dados do anúncio" } }
+  let(:url) { "https://openrouter.ai/api/v1/chat/completions" }
+
+  before { stub_env("FRONT_URL" => "https://app.lunna.test") }
 
   def sse_body
     <<~SSE
-      event: message_start
-      data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-opus-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":0}}}
+      : OPENROUTER PROCESSING
 
-      event: content_block_start
-      data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+      data: {"id":"gen-1","choices":[{"index":0,"delta":{"content":"Diagnóstico: "}}]}
 
-      event: content_block_delta
-      data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Olá, mundo"}}
+      data: {"id":"gen-1","choices":[{"index":0,"delta":{"content":"tudo certo."}}]}
 
-      event: content_block_delta
-      data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
+      data: {"id":"gen-1","choices":[{"index":0,"delta":{}}]}
 
-      event: content_block_stop
-      data: {"type":"content_block_stop","index":0}
-
-      event: message_delta
-      data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}
-
-      event: message_stop
-      data: {"type":"message_stop"}
+      data: [DONE]
 
     SSE
   end
 
-  it "entrega os pedaços de texto do streaming da Claude API" do
-    stub_env("ANTHROPIC_API_KEY" => "fake-key")
-    stub_request(:post, "https://api.anthropic.com/v1/messages")
-      .to_return(status: 200, headers: { "Content-Type" => "text/event-stream" }, body: sse_body)
+  it "entrega os pedaços de texto na ordem do streaming da OpenRouter" do
+    stub_request(:post, url).to_return(status: 200, headers: { "Content-Type" => "text/event-stream" }, body: sse_body)
 
     chunks = []
-    described_class.stream(prompt) { |text| chunks << text }
+    described_class.stream(company, prompt) { |text| chunks << text }
 
-    expect(chunks.join).to eq("Olá, mundo!")
+    expect(chunks).to eq([ "Diagnóstico: ", "tudo certo." ])
   end
 
-  it "sem ANTHROPIC_API_KEY -> erro de configuração" do
-    stub_env("ANTHROPIC_API_KEY" => nil)
+  it "envia Authorization, o modelo, stream: true e as mensagens system/user" do
+    stub_request(:post, url).to_return(status: 200, body: sse_body)
 
-    expect { described_class.stream(prompt) { |_text| } }
-      .to raise_error(Ai::ActionPlan::Error, "Integração com a IA não configurada.")
+    described_class.stream(company, prompt) { |_text| }
+
+    expect(WebMock).to have_requested(:post, url)
+      .with(
+        headers: {
+          "Authorization" => "Bearer #{company.openrouter_api_key}",
+          "HTTP-Referer" => "https://app.lunna.test",
+          "X-Title" => "Lunna"
+        },
+        body: {
+          model: company.ai_model,
+          stream: true,
+          max_tokens: 4096,
+          messages: [
+            { role: "system", content: "prompt do sistema" },
+            { role: "user", content: "dados do anúncio" }
+          ]
+        }
+      )
   end
 
-  it "429 da Claude API -> mensagem de limite de uso" do
-    stub_env("ANTHROPIC_API_KEY" => "fake-key")
-    stub_request(:post, "https://api.anthropic.com/v1/messages").to_return(
-      status: 429,
-      headers: { "Content-Type" => "application/json" },
-      body: { type: "error", error: { type: "rate_limit_error", message: "limited" } }.to_json
-    )
+  it "empresa sem chave e sem modelo -> erro de configuração, sem nenhuma requisição" do
+    sem_ia = build(:company)
 
-    expect { described_class.stream(prompt) { |_text| } }
-      .to raise_error(Ai::ActionPlan::Error, "Limite de uso atingido, tente em instantes.")
+    expect { described_class.stream(sem_ia, prompt) { |_text| } }
+      .to raise_error(Ai::ActionPlan::Error, "Configure a chave e o modelo da OpenRouter em Configurações › Empresa.")
+
+    expect(WebMock).not_to have_requested(:post, url)
+  end
+
+  it "empresa sem modelo -> erro de configuração, sem nenhuma requisição" do
+    sem_modelo = build(:company, openrouter_api_key: "sk-or-v1-chave")
+
+    expect { described_class.stream(sem_modelo, prompt) { |_text| } }
+      .to raise_error(Ai::ActionPlan::Error, "Configure a chave e o modelo da OpenRouter em Configurações › Empresa.")
+
+    expect(WebMock).not_to have_requested(:post, url)
+  end
+
+  {
+    401 => "A OpenRouter recusou a chave. Confira em Configurações › Empresa.",
+    403 => "A OpenRouter recusou a chave. Confira em Configurações › Empresa.",
+    402 => "Sem créditos na OpenRouter.",
+    429 => "Limite de uso atingido, tente em instantes.",
+    404 => 'A OpenRouter não aceitou o modelo "anthropic/claude-sonnet-4.5". Confira o nome em Configurações › Empresa.',
+    500 => "Não foi possível gerar o plano agora. Tente de novo."
+  }.each do |status, message|
+    it "HTTP #{status} -> #{message.inspect}" do
+      stub_request(:post, url).to_return(status: status, body: { error: { message: "falhou" } }.to_json)
+
+      expect { described_class.stream(company, prompt) { |_text| } }
+        .to raise_error(Ai::ActionPlan::Error, message)
+    end
+  end
+
+  it 'erro no meio do stream (data: com "error") -> mensagem genérica' do
+    body = <<~SSE
+      data: {"choices":[{"index":0,"delta":{"content":"início"}}]}
+
+      data: {"error":{"message":"algo quebrou"}}
+
+    SSE
+    stub_request(:post, url).to_return(status: 200, body: body)
+
+    chunks = []
+    expect { described_class.stream(company, prompt) { |text| chunks << text } }
+      .to raise_error(Ai::ActionPlan::Error, "Não foi possível gerar o plano agora. Tente de novo.")
+    expect(chunks).to eq([ "início" ])
+  end
+
+  it "erro de conexão/timeout -> mensagem genérica" do
+    stub_request(:post, url).to_timeout
+
+    expect { described_class.stream(company, prompt) { |_text| } }
+      .to raise_error(Ai::ActionPlan::Error, "Não foi possível gerar o plano agora. Tente de novo.")
   end
 end

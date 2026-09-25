@@ -1,0 +1,27 @@
+pt-BR:
+  activerecord:
+    models:
+      company: Empresa
+      user: Usuário
+    attributes:
+      company:
+        name: Nome da empresa
+        tax_pct: Imposto
+        min_margin_pct: Margem mínima
+        abc_cut_a: Corte da curva A
+        abc_cut_b: Corte da curva B
+        group_up_pct: Limite "Vendendo"
+        group_down_pct: Limite "Em queda"
+        ai_model: Modelo da OpenRouter
+        openrouter_api_key: Chave da OpenRouter
+      user:
+        name: Nome
+        email: E-mail
+        password: Senha
+        role: Papel
+    errors:
+      models:
+        user:
+          attributes:
+            password:
+              too_short: "deve ter pelo menos %{count} caracteres"

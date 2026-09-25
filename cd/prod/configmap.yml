@@ -19,4 +19,3 @@ data:
   API_URL: https://api.change-me.invalid
   FRONT_URL: https://app.change-me.invalid
   CORS_ORIGINS: https://app.change-me.invalid
-  ANTHROPIC_MODEL: claude-opus-5

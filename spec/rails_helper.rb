@@ -8,7 +8,7 @@ require "rspec/rails"
 require "webmock/rspec"
 require "active_job/test_helper"
 
-# Nenhum teste chama a API real do ML nem da Anthropic (DECISOES §1); localhost
+# Nenhum teste chama a API real do ML nem da OpenRouter (DECISOES §1); localhost
 # liberado pra request specs contra a própria app.
 WebMock.disable_net_connect!(allow_localhost: true)
 

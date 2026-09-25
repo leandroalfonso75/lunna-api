@@ -53,4 +53,58 @@ RSpec.describe Company, type: :model do
     expect(build(:company, group_down_pct: 0.1)).not_to be_valid
     expect(build(:company, group_down_pct: 0)).to be_valid
   end
+
+  describe "ai_model (id OpenRouter, DECISOES §10)" do
+    it "aceita ids no formato fornecedor/modelo" do
+      expect(build(:company, ai_model: "anthropic/claude-sonnet-4.5")).to be_valid
+      expect(build(:company, ai_model: "openai/gpt-4o:online")).to be_valid
+    end
+
+    it "rejeita sem barra, com espaço, ou muito longo" do
+      expect(build(:company, ai_model: "claude")).not_to be_valid
+      expect(build(:company, ai_model: "a b/c")).not_to be_valid
+      expect(build(:company, ai_model: "f/#{'m' * 119}")).not_to be_valid # 121 chars, formato válido
+    end
+
+    it "vazio normaliza para nil (é opcional)" do
+      company = create(:company, ai_model: "  ")
+
+      expect(company.ai_model).to be_nil
+    end
+  end
+
+  describe "openrouter_api_key" do
+    it "fica cifrada no banco (a coluna bruta não é a chave)" do
+      company = create(:company, :with_ai)
+
+      raw_value = ActiveRecord::Base.connection.select_value(
+        "SELECT openrouter_api_key FROM companies WHERE id = #{ActiveRecord::Base.connection.quote(company.id)}"
+      )
+
+      expect(raw_value).to be_present
+      expect(raw_value).not_to eq(company.openrouter_api_key)
+      expect(company.reload.openrouter_api_key).to eq("sk-or-v1-fake-key-1234")
+    end
+  end
+
+  describe "#ai_configured?" do
+    it "só é true com chave e modelo" do
+      expect(build(:company)).not_to be_ai_configured
+      expect(build(:company, openrouter_api_key: "chave")).not_to be_ai_configured
+      expect(build(:company, ai_model: "anthropic/claude-sonnet-4.5")).not_to be_ai_configured
+      expect(build(:company, :with_ai)).to be_ai_configured
+    end
+  end
+
+  describe "#ai_key_hint" do
+    it "mostra só os 4 últimos caracteres da chave" do
+      company = build(:company, openrouter_api_key: "sk-or-v1-abcdef1234")
+
+      expect(company.ai_key_hint).to eq("…1234")
+    end
+
+    it "é nil sem chave" do
+      expect(build(:company).ai_key_hint).to be_nil
+    end
+  end
 end

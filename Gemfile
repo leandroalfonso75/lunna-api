@@ -20,11 +20,8 @@ gem "solid_queue"
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 
-# HTTP client for the Mercado Livre API
+# HTTP client para a API do Mercado Livre e a OpenRouter (plano de ação com IA)
 gem "faraday"
-
-# Claude API (plano de ação com IA)
-gem "anthropic"
 
 gem "rails-i18n"
 

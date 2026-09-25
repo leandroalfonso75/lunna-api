@@ -8,7 +8,7 @@ tabela filtrável e Curva ABC já calculados. O front é o [lunna-web](../lunna-
 - **Especificação**: [`docs/SPEC.md`](docs/SPEC.md) (original) e [`docs/DECISOES.md`](docs/DECISOES.md)
   (adaptação SaaS — prevalece). Contrato das métricas por anúncio: [`docs/METRICS.md`](docs/METRICS.md).
 - **Stack**: Ruby 3.3 · Rails 8.1 (modo API) · PostgreSQL 16 · Solid Queue e Solid Cache no mesmo
-  banco (sem Redis) · Faraday · gem `anthropic` · RSpec + FactoryBot + WebMock.
+  banco (sem Redis) · Faraday (ML e OpenRouter) · RSpec + FactoryBot + WebMock.
 - **Regra de ouro**: toda regra de negócio (períodos, métricas, alertas, Curva ABC, lucro, sugestões,
   filtros e ordenação da tabela) mora aqui. O front só exibe.
 - **Somente leitura no Mercado Livre**: o único POST ao ML é o `/oauth/token`.
@@ -27,12 +27,21 @@ Fluxo de conexão: o admin clica em "Conectar conta" → `POST /api/ml_accounts/
 → o ML chama `GET /auth/ml/callback`, que repassa `code`/`state` ao front → o front, logado, finaliza em
 `POST /api/ml_accounts/connect`. O `state` só vale para o usuário que o criou (detalhes em DECISOES §5).
 
+## Plano de ação com IA (OpenRouter)
+
+Não existe chave nem modelo global de IA no ambiente: cada empresa configura a própria chave da
+[OpenRouter](https://openrouter.ai/) e o próprio modelo (id no formato `fornecedor/modelo`, ex.:
+`anthropic/claude-sonnet-4.5`) em **Configurações › Empresa**. Sem chave e modelo configurados, o
+plano de ação (`POST /api/items/:id/ai-plan`) responde com um erro pedindo para configurar. A chave
+nunca aparece em resposta, log ou mensagem de erro (fica cifrada no banco, `Active Record Encryption`);
+a UI só recebe uma dica (`ai_key_hint`, os 4 últimos caracteres). Detalhes do contrato em DECISOES §10.
+
 ## Rodar localmente
 
 Pré-requisito: Docker. Não é preciso Ruby na máquina.
 
 ```bash
-cp .env.example .env                        # preencha ML_CLIENT_ID/SECRET e ANTHROPIC_API_KEY se for usar
+cp .env.example .env                        # preencha ML_CLIENT_ID/SECRET
 docker compose up -d                        # postgres + api (http://localhost:3100) + jobs (Solid Queue)
 docker compose exec api bin/rails db:seed   # empresa demo com dados fictícios (opcional)
 docker compose --profile web up -d          # também sobe o lunna-web (repo irmão em ../lunna-web) em :3101
@@ -55,18 +64,18 @@ Todas estão comentadas em [`.env.example`](.env.example).
 | `CORS_ORIGINS` | Origens do front (vírgula) |
 | `API_HOST` | Produção: host aceito pelo Rails |
 | `ML_CLIENT_ID`, `ML_CLIENT_SECRET` | App do Mercado Livre |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Plano de ação com IA (padrão `claude-opus-5`) |
 | `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_POOL` | Banco em dev/test |
 | `DATABASE_URL` | Banco em produção |
 | `SECRET_KEY_BASE`, `ACTIVE_RECORD_ENCRYPTION_*` | Produção; as chaves de criptografia protegem os tokens do ML |
 | `RAILS_MAX_THREADS`, `JOB_CONCURRENCY`, `TRUSTED_PROXIES` | Ajustes de produção |
 
-Segredos (`ML_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, tokens) nunca vão para o front, logs ou respostas.
-Os tokens das contas ficam criptografados no banco (Active Record Encryption).
+Segredos (`ML_CLIENT_SECRET`, tokens do ML, chave da OpenRouter de cada empresa) nunca vão para o
+front, logs ou respostas. Tokens do ML e a chave da OpenRouter ficam criptografados no banco
+(Active Record Encryption).
 
 ## Testes
 
-Nenhum teste chama o Mercado Livre ou a Claude API de verdade (WebMock + fixtures em `spec/fixtures/ml/`).
+Nenhum teste chama o Mercado Livre ou a OpenRouter de verdade (WebMock + fixtures em `spec/fixtures/ml/`).
 
 ```bash
 docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"

@@ -17,7 +17,10 @@ module Payloads
       abc_cut_a: company.abc_cut_a.to_f,
       abc_cut_b: company.abc_cut_b.to_f,
       group_up_pct: company.group_up_pct.to_f,
-      group_down_pct: company.group_down_pct.to_f
+      group_down_pct: company.group_down_pct.to_f,
+      ai_model: company.ai_model,
+      ai_configured: company.ai_configured?,
+      ai_key_hint: company.ai_key_hint
     }
   end
 

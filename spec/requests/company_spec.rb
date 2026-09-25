@@ -55,5 +55,57 @@ RSpec.describe "/api/company", type: :request do
 
       expect(response).to have_http_status(:ok)
     end
+
+    it "mudar só ai_model não recalcula item_metrics" do
+      create(:ml_account, company: company)
+
+      expect(Painel::ItemMetrics).not_to receive(:refresh)
+
+      patch "/api/company", params: { ai_model: "anthropic/claude-sonnet-4.5" }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    describe "OpenRouter (DECISOES §10)" do
+      it "salva a chave e o modelo" do
+        patch "/api/company",
+          params: { ai_model: "anthropic/claude-sonnet-4.5", openrouter_api_key: "sk-or-v1-nova-chave" },
+          headers: auth_headers(admin)
+
+        expect(response).to have_http_status(:ok)
+        expect(json["company"]["ai_model"]).to eq("anthropic/claude-sonnet-4.5")
+        expect(json["company"]["ai_configured"]).to eq(true)
+        expect(json["company"]["ai_key_hint"]).to eq("…have")
+        expect(company.reload.openrouter_api_key).to eq("sk-or-v1-nova-chave")
+      end
+
+      it "a resposta nunca contém a chave" do
+        patch "/api/company",
+          params: { ai_model: "anthropic/claude-sonnet-4.5", openrouter_api_key: "sk-or-v1-segredo-super-secreto" },
+          headers: auth_headers(admin)
+
+        expect(response.body).not_to include("sk-or-v1-segredo-super-secreto")
+      end
+
+      it "openrouter_api_key ausente ou vazio mantém a chave atual" do
+        company.update!(openrouter_api_key: "sk-or-v1-antiga", ai_model: "anthropic/claude-sonnet-4.5")
+
+        patch "/api/company", params: { openrouter_api_key: "" }, headers: auth_headers(admin)
+
+        expect(response).to have_http_status(:ok)
+        expect(company.reload.openrouter_api_key).to eq("sk-or-v1-antiga")
+      end
+
+      it "remove_openrouter_api_key: true apaga a chave" do
+        company.update!(openrouter_api_key: "sk-or-v1-antiga", ai_model: "anthropic/claude-sonnet-4.5")
+
+        patch "/api/company", params: { remove_openrouter_api_key: true }, headers: auth_headers(admin)
+
+        expect(response).to have_http_status(:ok)
+        expect(json["company"]["ai_configured"]).to eq(false)
+        expect(json["company"]["ai_key_hint"]).to be_nil
+        expect(company.reload.openrouter_api_key).to be_nil
+      end
+    end
   end
 end

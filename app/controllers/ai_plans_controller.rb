@@ -25,7 +25,7 @@ class AiPlansController < ApplicationController
     response.headers["X-Accel-Buffering"] = "no"
 
     begin
-      Ai::ActionPlan.stream(prompt) { |text| response.stream.write("data: #{text.to_json}\n\n") }
+      Ai::ActionPlan.stream(Current.company, prompt) { |text| response.stream.write("data: #{text.to_json}\n\n") }
       response.stream.write("event: done\ndata: {}\n\n")
     rescue Ai::ActionPlan::Error => e
       response.stream.write("event: error\ndata: #{ { message: e.message }.to_json }\n\n")

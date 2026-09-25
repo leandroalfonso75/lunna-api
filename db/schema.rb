@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_400001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -24,6 +24,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_400001) do
     t.decimal "group_down_pct", precision: 6, scale: 2, default: "-15.0", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "openrouter_api_key"
+    t.string "ai_model"
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
