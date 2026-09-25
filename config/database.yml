@@ -1,0 +1,23 @@
+# Um banco só por ambiente: domínio + Solid Queue + Solid Cache (sem Redis).
+# Dev/test usam DB_* (DATABASE_URL sobrescreveria o nome do banco de teste);
+# produção usa DATABASE_URL vindo do Secret.
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  host: <%= ENV.fetch("DB_HOST", "localhost") %>
+  username: <%= ENV.fetch("DB_USER", "postgres") %>
+  password: <%= ENV["DB_PASSWORD"] %>
+  # Puma threads / worker threads + folga para polling e heartbeat do Solid Queue.
+  max_connections: <%= ENV.fetch("DB_POOL", 10) %>
+
+development:
+  <<: *default
+  database: lunna_api_development
+
+test:
+  <<: *default
+  database: lunna_api_test
+
+production:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"] %>

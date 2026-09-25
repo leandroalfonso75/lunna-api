@@ -1,3 +1,22 @@
 .env
 .env.*
 !.env.example
+
+# Ignore key files for decrypting credentials and more.
+/config/*.key
+
+
+# Secret real do k8s (só o .example é versionado)
+/cd/prod/secrets.yml
+
+# Rails
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/
+!/tmp/pids/.keep
+/storage/*
+!/storage/.keep
+/coverage
