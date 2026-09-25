@@ -24,5 +24,12 @@ Rails.application.routes.draw do
 
     post "sync", to: "sync#create"
     get "sync/runs", to: "sync#runs"
+
+    # Leituras do painel (SPEC 10), sempre com ?account_id= (concern CurrentAccount).
+    get "painel", to: "painel#show"
+    get "items", to: "items#index"
+    post "items/:id/ai-plan", to: "ai_plans#create", as: :item_ai_plan
+    get "abc", to: "abc#index"
+    get "abc/items/:id", to: "abc#show", as: :abc_item
   end
 end
