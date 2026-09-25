@@ -15,7 +15,7 @@
 
 - `companies` 1—N `users` (um usuário pertence a exatamente uma empresa). Papéis: `admin` | `member`. O usuário do cadastro é `admin`. Não é permitido remover nem rebaixar o último admin, nem o usuário remover a si mesmo.
 - `companies` 1—N `ml_accounts` (contas do Mercado Livre). **Nada fixo de seller**: `allowed_seller_id` não existe. Qualquer empresa conecta qualquer conta ML. `ml_accounts.seller_id` é **único global**: uma conta ML pertence a uma só empresa. Reconectar a mesma conta na mesma empresa atualiza tokens; tentar conectar numa segunda empresa é recusado (`outra_empresa`).
-- Configuração global (env) é só o app do ML (`ML_CLIENT_ID`, `ML_CLIENT_SECRET`) e a chave da Claude API.
+- Configuração global (env) é só o app do ML (`ML_CLIENT_ID`, `ML_CLIENT_SECRET`). A IA (OpenRouter) é configurada por empresa (§10).
 - **Escopo obrigatório**: toda leitura parte de `Current.company`. Conta: `Current.company.ml_accounts.find(params[:account_id])`. Anúncio: `account.ml_items` / `account.item_metrics` — nunca `MlItem.find` direto (IDs MLB são públicos; buscar sem escopo vazaria dados entre empresas). `ml_order_items` sempre via `ml_orders` da conta. Nunca aceitar `company_id` de params.
 - O painel mostra **uma conta por vez**. Todo endpoint de leitura/sync/IA recebe `account_id` (UUID da `ml_accounts`) como query param; conta de outra empresa ou inexistente → 404.
 - Desconectar conta apaga todos os dados dela (FKs `on_delete: :cascade`).
@@ -117,3 +117,24 @@ Endpoints da SPEC 10.3–10.6 seguem **exatamente** o formato da SPEC, com `acco
 ## 9. Fora da v1
 
 Escrita no ML, webhook processando tópicos, custos do ERP (tabela existe, sem carga/UI), frete exato por pedido, migração dos dados do Supabase, esqueci-senha.
+
+## 10. Plano de ação com IA via OpenRouter (por empresa) — decisão de 2026-09-25
+
+Substitui a chamada direta à Claude API da SPEC 9: o plano com IA usa a **OpenRouter** (API compatível com OpenAI) e cada empresa configura a própria chave e o próprio modelo. Não existe chave global nem `ANTHROPIC_*` no ambiente.
+
+- **Colunas em `companies`**: `openrouter_api_key` (text, `encrypts`, nunca sai da API) e `ai_model` (string, id da OpenRouter no formato `fornecedor/modelo`, ex.: `anthropic/claude-sonnet-4.5`; validação `\A[^\s\/]+\/\S+\z`, até 120 caracteres; vazio = nil).
+- **Payload `company`** ganha: `ai_model` (string|null), `ai_configured` (boolean: tem chave **e** modelo) e `ai_key_hint` (string|null: `"…"` + 4 últimos caracteres da chave). A chave em si nunca aparece em resposta nem em log.
+- **`PATCH /api/company`** (admin) aceita também `ai_model`, `openrouter_api_key` (string; ausente ou vazio = mantém a atual) e `remove_openrouter_api_key` (boolean `true` = apaga a chave). Atualizar só a chave ou só o modelo não recalcula `item_metrics`.
+- **Chamada**: `POST https://openrouter.ai/api/v1/chat/completions` com `Authorization: Bearer <chave da empresa>`, `HTTP-Referer: FRONT_URL`, `X-Title: Lunna`, corpo `{model: ai_model, stream: true, max_tokens: 4096, messages: [{role: "system", content: prompt[:system]}, {role: "user", content: prompt[:user]}]}`. Resposta em SSE: linhas `data: {json}` com o texto em `choices[0].delta.content`; `data: [DONE]` encerra; linhas que começam com `:` são comentários (keep-alive) e são ignoradas; um `data:` com `{"error": {...}}` no meio do stream vira erro.
+- **Erros** (viram `event: error` no SSE do `POST /api/items/:id/ai-plan`, mensagens exatas):
+
+| Situação | Mensagem |
+|---|---|
+| empresa sem chave ou sem modelo | Configure a chave e o modelo da OpenRouter em Configurações › Empresa. |
+| HTTP 401/403 | A OpenRouter recusou a chave. Confira em Configurações › Empresa. |
+| HTTP 402 | Sem créditos na OpenRouter. |
+| HTTP 429 | Limite de uso atingido, tente em instantes. |
+| HTTP 400/404 | A OpenRouter não aceitou o modelo "<ai_model>". Confira o nome em Configurações › Empresa. |
+| outros / rede / erro no meio do stream | Não foi possível gerar o plano agora. Tente de novo. |
+
+- O prompt (`Ai::ActionPlanPrompt`) não muda. A gem `anthropic` sai do projeto; o HTTP é Faraday com leitura em streaming (`on_data`).
