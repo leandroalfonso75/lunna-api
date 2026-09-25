@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lunna-postgres-backup
+  namespace: lunna
+  labels: { app: lunna-postgres, role: backup }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lunna-postgres-backup
+  namespace: lunna
+  labels: { app: lunna-postgres, role: backup }
+spec:
+  # 03:00 America/Sao_Paulo (o cron do k8s conta em UTC).
+  schedule: "0 6 * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels: { app: lunna-postgres, role: backup }
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          # local-path cria o diretório do PVC como root 0777; corrige antes do dump rodar como 999.
+          initContainers:
+            - name: fix-perms
+              image: postgres:16
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+              command: ["/bin/sh", "-c", "chown -R 999:999 /backups && chmod 0700 /backups"]
+              volumeMounts:
+                - { name: backup, mountPath: /backups }
+          containers:
+            - name: pg-dump
+              image: postgres:16
+              securityContext:
+                runAsUser: 999
+                runAsGroup: 999
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: lunna-api-secrets, key: DATABASE_PASSWORD }
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  umask 077
+                  FILE="/backups/lunna_api-$(date +%Y%m%d-%H%M%S).sql.gz"
+                  pg_dump -h lunna-postgres -U lunna_api -d lunna_api_production | gzip > "${FILE}"
+                  find /backups -name 'lunna_api-*.sql.gz' -mtime +30 -delete
+                  ls -lh /backups
+              volumeMounts:
+                - { name: backup, mountPath: /backups }
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: lunna-postgres-backup

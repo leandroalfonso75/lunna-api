@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lunna-api-ingress
+  namespace: lunna
+  labels: { app: lunna-api, role: web }
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    # Plano com IA responde em streaming (SSE): sem buffer e com leitura longa.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.change-me.invalid]
+      secretName: lunna-api-tls
+  rules:
+    - host: api.change-me.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: lunna-api, port: { number: 80 } }

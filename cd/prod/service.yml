@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lunna-api
+  namespace: lunna
+  labels: { app: lunna-api, role: web }
+spec:
+  type: ClusterIP
+  selector: { app: lunna-api, role: web }
+  ports:
+    - { name: web, protocol: TCP, port: 80, targetPort: 3000 }

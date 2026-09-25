@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunna-api
+  namespace: lunna
+  labels: { app: lunna-api, role: web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: lunna-api, role: web }
+  template:
+    metadata:
+      labels: { app: lunna-api, role: web }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      imagePullSecrets:
+        - name: dockerhub
+      containers:
+        - name: lunna-api
+          image: vinnialfonso/lunna-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef: { name: lunna-api-config }
+            - secretRef: { name: lunna-api-secrets }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /up, port: 3000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /up, port: 3000 }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 3

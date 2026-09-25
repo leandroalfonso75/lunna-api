@@ -1,0 +1,37 @@
+# Worker do Solid Queue (sincronização com o Mercado Livre a cada 5 min + limpeza diária).
+# Mesma imagem e env da API; uma réplica basta (o lock é por conta no próprio Solid Queue).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lunna-jobs
+  namespace: lunna
+  labels: { app: lunna-jobs, role: jobs }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: lunna-jobs, role: jobs }
+  template:
+    metadata:
+      labels: { app: lunna-jobs, role: jobs }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      imagePullSecrets:
+        - name: dockerhub
+      containers:
+        - name: lunna-jobs
+          image: vinnialfonso/lunna-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          command: ["bin/jobs"]
+          envFrom:
+            - configMapRef: { name: lunna-api-config }
+            - secretRef: { name: lunna-api-secrets }
+          resources:
+            requests: { cpu: 150m, memory: 256Mi }
+            limits: { cpu: "1", memory: 768Mi }

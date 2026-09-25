@@ -1,0 +1,11 @@
+# Mesmo Namespace em lunna-api/cd/prod e lunna-web/cd/prod — manter idênticos.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lunna
+  labels:
+    app: lunna
+    env: prod
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
