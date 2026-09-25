@@ -65,6 +65,20 @@ RSpec.describe Ml::Sync::Run do
     end
   end
 
+  describe "qualidade e anúncios de catálogo" do
+    it "não consulta a qualidade de anúncio de catálogo (o ML responde 400 para product items)" do
+      create(:ml_item, ml_account: account, item_id: "MLB1", status: "active", catalog_listing: true)
+      create(:ml_item, ml_account: account, item_id: "MLB2", status: "active", catalog_listing: false)
+      stub_empty_scan_and_orders
+
+      described_class.call(account, sleeper: sleeper)
+
+      expect(WebMock).not_to have_requested(:get, "https://api.mercadolibre.com/item/MLB1/performance")
+      expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/item/MLB2/performance")
+      expect(MlSyncRun.last.detail.to_s).not_to include("Product items")
+    end
+  end
+
   describe "regra dos 6 minutos" do
     it "rodada anterior com 5 min 59 s bloqueia: não faz nada" do
       blocking = create(:ml_sync_run, ml_account: account, started_at: 5.minutes.ago - 59.seconds, finished_at: nil)

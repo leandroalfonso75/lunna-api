@@ -106,8 +106,10 @@ module Ml
         result
       end
 
+      # Anúncios de catálogo ficam de fora: /item/{id}/performance responde 400
+      # "Product items are not supported" para todos eles (sem nota = "não calculou").
       def sync_quality(client)
-        ids = @account.ml_items.where(status: "active")
+        ids = @account.ml_items.where(status: "active", catalog_listing: [ false, nil ])
           .where("quality_checked_at IS NULL OR quality_checked_at <= ?", QUALITY_EVERY.ago)
           .order(Arel.sql("quality_checked_at ASC NULLS FIRST"))
           .limit(QUALITY_BATCH)
