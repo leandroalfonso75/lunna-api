@@ -141,40 +141,52 @@ RSpec.describe "Olist ERP", type: :request do
     end
   end
 
-  describe "GET /api/olist/products" do
-    it "admin lê produtos do Olist (limit limitado a 100)" do
-      create(:olist_connection, company: company)
-      stub = stub_request(:get, "https://api.tiny.com.br/public-api/v3/produtos")
-        .with(query: { limit: "100", offset: "0", nome: "camisa" })
-        .to_return(status: 200, body: { itens: [ { id: 1 } ], paginacao: { total: 1 } }.to_json)
+  describe "POST /api/olist/sync" do
+    include ActiveJob::TestHelper
 
-      get "/api/olist/products", params: { nome: "camisa", limit: 5000 }, headers: auth_headers(admin)
+    before { ActiveJob::Base.queue_adapter = :test }
+
+    it "qualquer usuário pede a atualização: cria a rodada manual e enfileira o job" do
+      create(:olist_connection, company: company)
+
+      expect { post "/api/olist/sync", headers: auth_headers(member) }.to have_enqueued_job(Olist::SyncJob)
+
+      expect(response).to have_http_status(:accepted)
+      run = company.olist_sync_runs.last
+      expect(run).to have_attributes(trigger: "manual", status: "running", requested_by_user_id: member.id)
+      expect(json["sync_run"]["id"]).to eq(run.id)
+    end
+
+    it "se já há uma em andamento, devolve essa em vez de abrir outra" do
+      create(:olist_connection, company: company)
+      running = create(:olist_sync_run, company: company, started_at: 1.minute.ago)
+
+      expect { post "/api/olist/sync", headers: auth_headers(member) }.not_to have_enqueued_job(Olist::SyncJob)
 
       expect(response).to have_http_status(:ok)
-      expect(json["itens"].first["id"]).to eq(1)
-      expect(stub).to have_been_requested
+      expect(json).to include("already_running" => true)
+      expect(json["sync_run"]["id"]).to eq(running.id)
+      expect(OlistSyncRun.count).to eq(1)
     end
 
     it "422 sem conexão" do
-      get "/api/olist/products", headers: auth_headers(admin)
+      post "/api/olist/sync", headers: auth_headers(member)
 
       expect(response).to have_http_status(:unprocessable_content)
     end
+  end
 
-    it "502 quando o Olist falha" do
-      create(:olist_connection, company: company)
-      stub_request(:get, "https://api.tiny.com.br/public-api/v3/produtos").with(query: hash_including({})).to_return(status: 500, body: "x")
-      allow_any_instance_of(Olist::Client).to receive(:sleep)
+  describe "GET /api/olist/sync_runs" do
+    it "lista só as rodadas da empresa, da mais nova para a mais antiga" do
+      older = create(:olist_sync_run, company: company, started_at: 2.hours.ago, status: "success")
+      newer = create(:olist_sync_run, company: company, started_at: 1.hour.ago, status: "failed")
+      other = create(:olist_sync_run)
 
-      get "/api/olist/products", headers: auth_headers(admin)
+      get "/api/olist/sync_runs", headers: auth_headers(member)
 
-      expect(response).to have_http_status(:bad_gateway)
-    end
-
-    it "member não pode (403)" do
-      get "/api/olist/products", headers: auth_headers(member)
-
-      expect(response).to have_http_status(:forbidden)
+      ids = json["sync_runs"].map { |r| r["id"] }
+      expect(ids).to eq([ newer.id, older.id ])
+      expect(ids).not_to include(other.id)
     end
   end
 end

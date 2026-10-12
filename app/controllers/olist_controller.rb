@@ -1,13 +1,11 @@
-# Conexão do Olist ERP da empresa (somente leitura; nada aparece no painel ainda).
+# Conexão do Olist ERP da empresa e sincronização dos produtos (nada aparece no painel ainda).
 #   GET    /api/olist           → estado da conexão (logado)
 #   POST   /api/olist/authorize → {url} para o admin autorizar no Olist
 #   DELETE /api/olist           → desconecta (admin)
-#   GET    /api/olist/products  → leitura de teste da integração (admin)
+#   POST   /api/olist/sync      → pede a atualização dos produtos agora (logado)
+#   GET    /api/olist/sync_runs → últimas sincronizações (logado)
 class OlistController < ApplicationController
-  before_action :require_admin!, only: [ :authorize, :destroy, :products ]
-
-  PRODUCT_FILTERS = %i[nome codigo gtin situacao dataCriacao dataAlteracao].freeze
-  MAX_LIMIT = 100
+  before_action :require_admin!, only: [ :authorize, :destroy ]
 
   def show
     render json: { olist: payload(Current.company.olist_connection) }
@@ -29,18 +27,23 @@ class OlistController < ApplicationController
     head :no_content
   end
 
-  def products
+  # Atualização pedida pelo usuário. Se já houver uma em andamento (a automática
+  # roda a cada 3 min), devolve a que está rodando em vez de abrir outra.
+  def sync
     connection = Current.company.olist_connection
-    return render_errors([ "Olist ERP não conectado." ], status: :unprocessable_content) if connection.nil? || connection.reauth_required?
+    if connection.nil? || connection.reauth_required?
+      return render_errors([ "Olist ERP não conectado." ], status: :unprocessable_content)
+    end
 
-    query = params.permit(*PRODUCT_FILTERS).to_h.symbolize_keys
-    query[:limit] = [ params.fetch(:limit, 20).to_i, MAX_LIMIT ].min.clamp(1, MAX_LIMIT)
-    query[:offset] = params.fetch(:offset, 0).to_i.clamp(0, 1_000_000)
+    run, created = Olist::SyncProducts.start_run(connection, trigger: "manual", user: Current.user)
+    Olist::SyncJob.perform_later(connection.id, run.id) if created
 
-    render json: Olist::Client.new(connection).products(query)
-  rescue Olist::OAuth::Error, Olist::Client::Error => e
-    Rails.logger.error("Olist products: #{e.class}")
-    render_errors([ "Não foi possível consultar o Olist ERP agora." ], status: :bad_gateway)
+    render json: { sync_run: run_payload(run), already_running: !created }, status: created ? :accepted : :ok
+  end
+
+  def sync_runs
+    runs = Current.company.olist_sync_runs.recent.limit(20)
+    render json: { sync_runs: runs.map { |run| run_payload(run) } }
   end
 
   private
@@ -56,7 +59,16 @@ class OlistController < ApplicationController
       connected_at: connection.created_at,
       connected_by: connection.connected_by_user&.name,
       access_expires_at: connection.expires_at,
-      refresh_expires_at: connection.refresh_expires_at
+      refresh_expires_at: connection.refresh_expires_at,
+      products_count: Current.company.olist_products.count,
+      last_sync: (run = Current.company.olist_sync_runs.recent.first) && run_payload(run)
+    }
+  end
+
+  def run_payload(run)
+    {
+      id: run.id, trigger: run.trigger, status: run.status, products_count: run.products_count,
+      error: run.error, started_at: run.started_at, finished_at: run.finished_at
     }
   end
 end

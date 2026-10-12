@@ -2,6 +2,9 @@ production: &default
   ml_sync_all:
     class: Ml::SyncAllJob
     schedule: every 5 minutes
+  olist_sync:
+    class: Olist::SyncAllJob
+    schedule: every 3 minutes
   olist_refresh:
     class: Olist::RefreshAllJob
     schedule: every 6 hours

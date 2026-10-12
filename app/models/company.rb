@@ -9,6 +9,9 @@ class Company < ApplicationRecord
   has_many :radar_collections
   has_many :radar_searches
   has_one :olist_connection
+  has_many :olist_products
+  has_many :olist_sync_runs
+  has_many :olist_changes
 
   encrypts :openrouter_api_key
 

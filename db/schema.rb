@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_300001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_400001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -210,6 +210,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_300001) do
     t.index ["ml_account_id"], name: "index_ml_sync_runs_on_ml_account_id"
   end
 
+  create_table "olist_changes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "user_id"
+    t.bigint "olist_product_id", null: false
+    t.string "kind", null: false
+    t.jsonb "before", default: {}, null: false
+    t.jsonb "request", default: {}, null: false
+    t.jsonb "response", default: {}, null: false
+    t.string "status", default: "pending", null: false
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "created_at"], name: "index_olist_changes_on_company_id_and_created_at"
+    t.index ["user_id"], name: "index_olist_changes_on_user_id"
+  end
+
   create_table "olist_connections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "company_id", null: false
     t.uuid "connected_by_user_id"
@@ -232,6 +248,50 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_300001) do
     t.datetime "updated_at", null: false
     t.index ["company_id"], name: "index_olist_oauth_states_on_company_id"
     t.index ["user_id"], name: "index_olist_oauth_states_on_user_id"
+  end
+
+  create_table "olist_products", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.bigint "olist_id", null: false
+    t.string "sku"
+    t.string "description"
+    t.string "kind"
+    t.string "status"
+    t.string "variation_kind"
+    t.string "unit"
+    t.string "gtin"
+    t.decimal "price", precision: 14, scale: 2
+    t.decimal "promo_price", precision: 14, scale: 2
+    t.decimal "cost_price", precision: 14, scale: 2
+    t.decimal "avg_cost_price", precision: 14, scale: 2
+    t.decimal "stock_balance", precision: 14, scale: 3
+    t.decimal "stock_reserved", precision: 14, scale: 3
+    t.decimal "stock_available", precision: 14, scale: 3
+    t.string "stock_location"
+    t.jsonb "stock_deposits", default: [], null: false
+    t.datetime "olist_created_at"
+    t.datetime "olist_updated_at"
+    t.datetime "synced_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "olist_id"], name: "index_olist_products_on_company_id_and_olist_id", unique: true
+    t.index ["company_id", "sku"], name: "index_olist_products_on_company_id_and_sku"
+    t.index ["company_id", "status"], name: "index_olist_products_on_company_id_and_status"
+  end
+
+  create_table "olist_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "requested_by_user_id"
+    t.string "trigger", default: "auto", null: false
+    t.string "status", default: "running", null: false
+    t.integer "products_count"
+    t.string "error"
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "started_at"], name: "index_olist_sync_runs_on_company_id_and_started_at"
+    t.index ["requested_by_user_id"], name: "index_olist_sync_runs_on_requested_by_user_id"
   end
 
   create_table "radar_collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -463,10 +523,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_300001) do
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "olist_changes", "companies", on_delete: :cascade
+  add_foreign_key "olist_changes", "users", on_delete: :nullify
   add_foreign_key "olist_connections", "companies", on_delete: :cascade
   add_foreign_key "olist_connections", "users", column: "connected_by_user_id", on_delete: :nullify
   add_foreign_key "olist_oauth_states", "companies", on_delete: :cascade
   add_foreign_key "olist_oauth_states", "users", on_delete: :cascade
+  add_foreign_key "olist_products", "companies", on_delete: :cascade
+  add_foreign_key "olist_sync_runs", "companies", on_delete: :cascade
+  add_foreign_key "olist_sync_runs", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "radar_collections", "companies", on_delete: :cascade
   add_foreign_key "radar_collections", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "radar_searches", "companies", on_delete: :cascade

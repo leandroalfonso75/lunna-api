@@ -66,4 +66,55 @@ RSpec.describe Olist::Client do
     expect { client.product(1) }.to raise_error(described_class::Error, /refeita/)
     expect(WebMock).not_to have_requested(:get, /api.tiny.com.br/)
   end
+
+  describe "estoque, paginação e escritas" do
+    it "lê o estoque de todos os produtos e de um produto" do
+      stub_request(:get, "#{base}/estoque").with(query: { limit: "2", offset: "0" }).to_return(status: 200, body: { itens: [] }.to_json)
+      stub_request(:get, "#{base}/estoque/9").to_return(status: 200, body: { saldo: 3 }.to_json)
+
+      expect(client.stock(limit: 2, offset: 0)).to eq("itens" => [])
+      expect(client.product_stock(9)).to eq("saldo" => 3)
+    end
+
+    it "all percorre as páginas até o total" do
+      stub_request(:get, "#{base}/produtos").with(query: hash_including({ "offset" => "0" }))
+        .to_return(status: 200, body: { itens: Array.new(100) { |i| { id: i } }, paginacao: { total: 150 } }.to_json)
+      stub_request(:get, "#{base}/produtos").with(query: hash_including({ "offset" => "100" }))
+        .to_return(status: 200, body: { itens: Array.new(50) { |i| { id: 100 + i } }, paginacao: { total: 150 } }.to_json)
+
+      expect(client.all(:products).size).to eq(150)
+    end
+
+    it "update_price faz PUT com preço e promocional" do
+      stub = stub_request(:put, "#{base}/produtos/3/preco")
+        .with(body: { preco: 10.5, precoPromocional: 9.0 }.to_json, headers: { "Content-Type" => "application/json" })
+        .to_return(status: 204, body: "")
+
+      expect(client.update_price(3, price: 10.5, promo_price: 9.0)).to eq({})
+      expect(stub).to have_been_requested
+    end
+
+    it "post_stock monta o corpo com depósito e observação" do
+      stub = stub_request(:post, "#{base}/estoque/3")
+        .with(body: { tipo: "S", quantidade: 2.0, precoUnitario: 5.0, observacoes: "avaria", deposito: { id: 7 } }.to_json)
+        .to_return(status: 200, body: { idLancamento: 1 }.to_json)
+
+      client.post_stock(3, type: "S", quantity: 2.0, unit_price: 5.0, note: "avaria", deposit_id: 7)
+
+      expect(stub).to have_been_requested
+    end
+
+    it "post_stock rejeita tipo desconhecido antes de chamar" do
+      expect { client.post_stock(3, type: "Z", quantity: 1, unit_price: 1) }.to raise_error(ArgumentError)
+      expect(WebMock).not_to have_requested(:post, /api.tiny.com.br/)
+    end
+
+    it "escrita não repete em 5xx" do
+      stub_request(:put, "#{base}/produtos/3/preco").to_return(status: 503, body: "x")
+
+      expect { client.update_price(3, price: 1) }.to raise_error(described_class::Error, /503/)
+      expect(WebMock).to have_requested(:put, "#{base}/produtos/3/preco").once
+      expect(sleeps).to be_empty
+    end
+  end
 end
