@@ -8,6 +8,7 @@ class Company < ApplicationRecord
   has_many :ml_costs
   has_many :radar_collections
   has_many :radar_searches
+  has_one :olist_connection
 
   encrypts :openrouter_api_key
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_200001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_300001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -208,6 +208,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_200001) do
     t.text "detail"
     t.index ["ml_account_id", "started_at"], name: "index_ml_sync_runs_on_ml_account_id_and_started_at"
     t.index ["ml_account_id"], name: "index_ml_sync_runs_on_ml_account_id"
+  end
+
+  create_table "olist_connections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "connected_by_user_id"
+    t.text "access_token", null: false
+    t.text "refresh_token", null: false
+    t.datetime "expires_at"
+    t.datetime "refresh_expires_at"
+    t.string "status", default: "active", null: false
+    t.string "last_error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_olist_connections_on_company_id", unique: true
+    t.index ["connected_by_user_id"], name: "index_olist_connections_on_connected_by_user_id"
+  end
+
+  create_table "olist_oauth_states", primary_key: "state", id: :string, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "user_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_olist_oauth_states_on_company_id"
+    t.index ["user_id"], name: "index_olist_oauth_states_on_user_id"
   end
 
   create_table "radar_collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -439,6 +463,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_200001) do
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "olist_connections", "companies", on_delete: :cascade
+  add_foreign_key "olist_connections", "users", column: "connected_by_user_id", on_delete: :nullify
+  add_foreign_key "olist_oauth_states", "companies", on_delete: :cascade
+  add_foreign_key "olist_oauth_states", "users", on_delete: :cascade
   add_foreign_key "radar_collections", "companies", on_delete: :cascade
   add_foreign_key "radar_collections", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "radar_searches", "companies", on_delete: :cascade

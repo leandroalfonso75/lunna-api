@@ -6,6 +6,7 @@ Rails.application.routes.draw do
     post "sign_in", to: "sessions#create"
     delete "sign_out", to: "sessions#destroy"
     get "ml/callback", to: "ml_callbacks#show"
+    get "olist/callback", to: "olist_callbacks#show"
   end
 
   namespace :webhooks do
@@ -24,6 +25,11 @@ Rails.application.routes.draw do
 
     resources :radar_collections, path: "radar/collections", only: [ :index, :create, :destroy ]
     resources :radar_searches, path: "radar/searches", only: [ :index, :show, :create ]
+
+    get "olist", to: "olist#show"
+    post "olist/authorize", to: "olist#authorize"
+    delete "olist", to: "olist#destroy"
+    get "olist/products", to: "olist#products"
 
     post "sync", to: "sync#create"
     get "sync/runs", to: "sync#runs"

@@ -5,6 +5,7 @@ class CleanupJob < ApplicationJob
 
   def perform
     MlOauthState.expired.delete_all
+    OlistOauthState.expired.delete_all
     Session.where("expires_at <= ?", Time.current).delete_all
     MlSyncRun.where("started_at <= ?", SYNC_RUNS_MAX_AGE.ago).delete_all
   end
