@@ -1,0 +1,102 @@
+# Lê as movimentações de estoque do Olist (Suprimentos > Controle de Estoque) e calcula
+# o custo PEPS de cada produto. Roda em lotes: produtos nunca lidos primeiro, depois os
+# cujo saldo mudou desde o último cálculo ou que não são relidos há mais de 1 dia.
+# Sem permissão no Olist (403), registra isso na conexão e tenta de novo só a cada 30 min.
+module Olist
+  class SyncCosts
+    BATCH = 40
+    RECHECK = 1.day
+    FORBIDDEN_RETRY = 30.minutes
+
+    def initialize(connection, client: Olist::Client.new(connection))
+      @connection = connection
+      @client = client
+    end
+
+    def call
+      return if throttled?
+
+      products = candidates.to_a
+      failed = false
+
+      products.each do |product|
+        sync_product(product)
+      rescue Olist::Client::Forbidden
+        return @connection.update!(costs_status: "forbidden", costs_checked_at: Time.current)
+      rescue Olist::Client::Error, Olist::OAuth::Error => e
+        Rails.logger.warn("Olist::SyncCosts: produto #{product.olist_id} (#{e.class})")
+        failed = true
+      end
+
+      @connection.update!(costs_status: failed ? "error" : "ok", costs_checked_at: Time.current)
+    end
+
+    private
+
+    def throttled?
+      @connection.costs_status == "forbidden" && @connection.costs_checked_at.present? &&
+        @connection.costs_checked_at > FORBIDDEN_RETRY.ago
+    end
+
+    def candidates
+      OlistProduct.where(company_id: @connection.company_id).where.not(variation_kind: "P").where.not(status: "E")
+        .where("movements_synced_at IS NULL OR movements_synced_at < ? OR fifo_balance_at_calc IS DISTINCT FROM stock_balance", RECHECK.ago)
+        .order(Arel.sql("movements_synced_at ASC NULLS FIRST")).limit(BATCH)
+    end
+
+    def sync_product(product)
+      items = @client.all_stock_movements(product.olist_id)
+      now = Time.current
+      rows = items.filter_map { |item| row_for(product, item, now) }
+
+      OlistStockMovement.transaction do
+        OlistStockMovement.where(company_id: product.company_id, olist_product_id: product.olist_id).delete_all
+        OlistStockMovement.insert_all(rows) if rows.any?
+      end
+
+      result = Olist::Fifo.call(rows.map { |row| fifo_input(row) }, ignored_deposit_ids: ignored_deposits(product))
+      store(product, result, now)
+    end
+
+    def row_for(product, item, now)
+      return nil if item["id"].blank? || OlistStockMovement::KINDS.exclude?(item["tipo"])
+
+      {
+        company_id: product.company_id, olist_product_id: product.olist_id, movement_id: item["id"], deposit_id: item["idDeposito"],
+        kind: item["tipo"], quantity: item["quantidade"] || 0, price: item["preco"], moved_at: parse_time(item["data"]),
+        origin: item["origem"], note: item["observacao"].to_s.truncate(255), created_at: now, updated_at: now
+      }
+    end
+
+    def fifo_input(row)
+      { id: row[:movement_id], deposit_id: row[:deposit_id], kind: row[:kind], quantity: row[:quantity], price: row[:price],
+        moved_at: row[:moved_at], origin: row[:origin] }
+    end
+
+    # Depósitos que o Olist não conta no saldo (Full ML): ficam fora do PEPS.
+    def ignored_deposits(product)
+      (product.stock_deposits || []).select { |deposit| deposit["desconsiderar"] }.filter_map { |deposit| deposit["id"] }
+    end
+
+    def store(product, result, now)
+      product.update!(
+        fifo_unit_cost: result.unit_cost, fifo_stock_value: result.stock_value, fifo_units: result.units,
+        fifo_units_without_cost: result.units_without_cost, fifo_shortfall: result.shortfall,
+        fifo_layers: result.layers.map { |layer| layer_json(layer) },
+        fifo_balance_at_calc: product.stock_balance, fifo_calculated_at: now, movements_synced_at: now
+      )
+    end
+
+    def layer_json(layer)
+      { moved_at: layer.moved_at, quantity: layer.quantity.to_f, remaining: layer.remaining.to_f,
+        unit_cost: layer.unit_cost&.to_f, origin: layer.origin }
+    end
+
+    # O Olist devolve "aaaa-mm-dd hh:mm:ss" no horário de Brasília.
+    def parse_time(value)
+      return nil if value.blank?
+
+      ActiveSupport::TimeZone["America/Sao_Paulo"].parse(value)
+    end
+  end
+end

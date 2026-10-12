@@ -11,6 +11,7 @@ module Olist
       return if run.nil? || !run.running?
 
       Olist::SyncProducts.new(connection, run).call
+      Olist::SyncCostsJob.perform_later(connection.id) if run.reload.status == "success"
     end
 
     private

@@ -22,7 +22,7 @@ module Olist
         next node.merge(variations_count: 0, variations: []) if kids.empty?
 
         variations = kids.map { |kid| base(kid, full) }
-        node.merge(stock: aggregate(variations), variations_count: variations.size, variations: variations)
+        node.merge(stock: aggregate(variations), cost: aggregate_cost(variations), variations_count: variations.size, variations: variations)
       end
     end
 
@@ -45,8 +45,35 @@ module Olist
         price: product.price, promo_price: product.promo_price, cost_price: product.cost_price,
         avg_cost_price: product.avg_cost_price,
         stock: stock_for(product, info),
+        cost: cost_for(product),
         olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
         synced_at: product.synced_at
+      }
+    end
+
+    # Custo PEPS (Primeiro que Entra, Primeiro que Sai) calculado das entradas do Controle de Estoque do Olist.
+    # `warning`: há unidades em estoque cuja entrada não tem custo informado.
+    def cost_for(product)
+      {
+        available: product.fifo_calculated_at.present?,
+        fifo_unit: product.fifo_unit_cost, stock_value: product.fifo_stock_value, units: product.fifo_units,
+        warning: product.fifo_units_without_cost.to_f.positive?, warning_units: product.fifo_units_without_cost,
+        shortfall: product.fifo_shortfall, layers: product.fifo_layers, calculated_at: product.fifo_calculated_at,
+        registered: product.cost_price
+      }
+    end
+
+    # Pai: faixa de custo das variações (menor e maior) e o aviso se alguma tiver.
+    def aggregate_cost(variations)
+      costs = variations.map { |variation| variation[:cost] }
+      units = costs.filter_map { |cost| cost[:fifo_unit]&.to_f }
+
+      {
+        available: costs.any? { |cost| cost[:available] },
+        fifo_unit: nil, range: units.empty? ? nil : [ units.min, units.max ],
+        stock_value: costs.filter_map { |cost| cost[:stock_value] }.sum, units: costs.filter_map { |cost| cost[:units] }.sum,
+        warning: costs.any? { |cost| cost[:warning] }, warning_units: costs.filter_map { |cost| cost[:warning_units] }.sum,
+        shortfall: nil, layers: [], calculated_at: costs.filter_map { |cost| cost[:calculated_at] }.min, registered: nil
       }
     end
 

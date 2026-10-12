@@ -61,6 +61,7 @@ class OlistController < ApplicationController
       access_expires_at: connection.expires_at,
       refresh_expires_at: connection.refresh_expires_at,
       products_count: Current.company.olist_products.count,
+      costs: { status: connection.costs_status, checked_at: connection.costs_checked_at },
       last_sync: (run = Current.company.olist_sync_runs.recent.first) && run_payload(run)
     }
   end

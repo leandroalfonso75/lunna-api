@@ -12,6 +12,7 @@ class Company < ApplicationRecord
   has_many :olist_products
   has_many :olist_sync_runs
   has_many :olist_changes
+  has_many :olist_stock_movements
 
   encrypts :openrouter_api_key
 

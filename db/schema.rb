@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_600001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_700001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -251,6 +251,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_600001) do
     t.string "last_error"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "costs_status"
+    t.datetime "costs_checked_at"
     t.index ["company_id"], name: "index_olist_connections_on_company_id", unique: true
     t.index ["connected_by_user_id"], name: "index_olist_connections_on_connected_by_user_id"
   end
@@ -291,10 +293,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_600001) do
     t.bigint "parent_olist_id"
     t.jsonb "variation_ids", default: [], null: false
     t.datetime "variations_source_updated_at"
+    t.decimal "fifo_unit_cost", precision: 14, scale: 4
+    t.decimal "fifo_stock_value", precision: 16, scale: 2
+    t.decimal "fifo_units", precision: 14, scale: 3
+    t.decimal "fifo_units_without_cost", precision: 14, scale: 3
+    t.jsonb "fifo_layers", default: [], null: false
+    t.decimal "fifo_shortfall", precision: 14, scale: 3
+    t.decimal "fifo_balance_at_calc", precision: 14, scale: 3
+    t.datetime "fifo_calculated_at"
+    t.datetime "movements_synced_at"
     t.index ["company_id", "olist_id"], name: "index_olist_products_on_company_id_and_olist_id", unique: true
     t.index ["company_id", "parent_olist_id"], name: "index_olist_products_on_company_id_and_parent_olist_id"
     t.index ["company_id", "sku"], name: "index_olist_products_on_company_id_and_sku"
     t.index ["company_id", "status"], name: "index_olist_products_on_company_id_and_status"
+  end
+
+  create_table "olist_stock_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.bigint "olist_product_id", null: false
+    t.bigint "movement_id", null: false
+    t.bigint "deposit_id"
+    t.string "kind", null: false
+    t.decimal "quantity", precision: 14, scale: 3, default: "0.0", null: false
+    t.decimal "price", precision: 14, scale: 4
+    t.datetime "moved_at"
+    t.string "origin"
+    t.string "note"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "olist_product_id", "moved_at"], name: "index_olist_movements_by_product_date"
+    t.index ["company_id", "olist_product_id", "movement_id"], name: "index_olist_movements_unique", unique: true
   end
 
   create_table "olist_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -549,6 +577,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_600001) do
   add_foreign_key "olist_oauth_states", "companies", on_delete: :cascade
   add_foreign_key "olist_oauth_states", "users", on_delete: :cascade
   add_foreign_key "olist_products", "companies", on_delete: :cascade
+  add_foreign_key "olist_stock_movements", "companies", on_delete: :cascade
   add_foreign_key "olist_sync_runs", "companies", on_delete: :cascade
   add_foreign_key "olist_sync_runs", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "radar_collections", "companies", on_delete: :cascade

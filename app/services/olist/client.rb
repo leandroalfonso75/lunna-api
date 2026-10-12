@@ -16,6 +16,8 @@ module Olist
     end
 
     class NotFound < Error; end
+    # 403: o app do Olist não tem permissão para este recurso (liberar no painel e reautorizar).
+    class Forbidden < Error; end
 
     BASE_URL = "https://api.tiny.com.br/public-api/v3".freeze
     OPEN_TIMEOUT = 5
@@ -56,6 +58,24 @@ module Olist
 
     def product_stock(id)
       get("/estoque/#{Integer(id)}")
+    end
+
+    # Movimentações de estoque do produto (GET /estoque/{id}/logs-movimentacao).
+    def stock_movements(id, params = {})
+      get("/estoque/#{Integer(id)}/logs-movimentacao", params)
+    end
+
+    # Todas as movimentações do produto (todas as páginas).
+    def all_stock_movements(id)
+      items = []
+      MAX_PAGES.times do |page|
+        result = stock_movements(id, limit: PAGE_SIZE, offset: page * PAGE_SIZE)
+        batch = result["itens"] || []
+        items.concat(batch)
+        total = result.dig("paginacao", "total")
+        break if batch.empty? || (total && items.size >= total)
+      end
+      items
     end
 
     # Percorre todas as páginas de uma listagem (`:products` ou `:stock`) e
@@ -154,7 +174,7 @@ module Olist
     def retryable?(status) = status == 429 || status >= 500
 
     def raise_for(response, path)
-      klass = response.status == 404 ? NotFound : Error
+      klass = { 404 => NotFound, 403 => Forbidden }.fetch(response.status, Error)
       raise klass.new(status: response.status, path: path, body: response.body.to_s.byteslice(0, BODY_EXCERPT_SIZE))
     end
 
