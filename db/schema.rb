@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_200001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -210,6 +210,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200001) do
     t.index ["ml_account_id"], name: "index_ml_sync_runs_on_ml_account_id"
   end
 
+  create_table "radar_collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "requested_by_user_id"
+    t.string "category_path", null: false
+    t.string "status", default: "requested", null: false
+    t.string "error"
+    t.integer "items_count"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'collecting'::character varying])::text[]))"
+    t.index ["company_id"], name: "index_radar_collections_on_company_id"
+    t.index ["requested_by_user_id"], name: "index_radar_collections_on_requested_by_user_id"
+  end
+
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.string "token_digest", null: false
@@ -407,6 +423,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_200001) do
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "radar_collections", "companies", on_delete: :cascade
+  add_foreign_key "radar_collections", "users", column: "requested_by_user_id", on_delete: :nullify
   add_foreign_key "sessions", "users", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_batches", column: "batch_id", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

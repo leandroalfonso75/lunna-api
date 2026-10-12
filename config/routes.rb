@@ -22,6 +22,8 @@ Rails.application.routes.draw do
       post :connect, on: :collection
     end
 
+    resources :radar_collections, path: "radar/collections", only: [ :index, :create, :destroy ]
+
     post "sync", to: "sync#create"
     get "sync/runs", to: "sync#runs"
 
