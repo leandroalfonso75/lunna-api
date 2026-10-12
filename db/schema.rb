@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_200001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -221,9 +221,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100001) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'collecting'::character varying])::text[]))"
+    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('collecting'::character varying)::text]))"
     t.index ["company_id"], name: "index_radar_collections_on_company_id"
     t.index ["requested_by_user_id"], name: "index_radar_collections_on_requested_by_user_id"
+  end
+
+  create_table "radar_searches", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "user_id"
+    t.string "category_path", null: false
+    t.jsonb "filters", default: {}, null: false
+    t.date "data_ref"
+    t.integer "total_items", default: 0, null: false
+    t.bigint "total_sold", default: 0, null: false
+    t.decimal "total_revenue", precision: 16, scale: 2, default: "0.0", null: false
+    t.decimal "median_price", precision: 12, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "created_at"], name: "index_radar_searches_on_company_id_and_created_at"
+    t.index ["user_id"], name: "index_radar_searches_on_user_id"
   end
 
   create_table "sessions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -425,6 +441,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100001) do
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
   add_foreign_key "radar_collections", "companies", on_delete: :cascade
   add_foreign_key "radar_collections", "users", column: "requested_by_user_id", on_delete: :nullify
+  add_foreign_key "radar_searches", "companies", on_delete: :cascade
+  add_foreign_key "radar_searches", "users", on_delete: :nullify
   add_foreign_key "sessions", "users", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_batches", column: "batch_id", on_delete: :cascade
   add_foreign_key "solid_queue_batch_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

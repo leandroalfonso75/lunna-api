@@ -23,6 +23,7 @@ Rails.application.routes.draw do
     end
 
     resources :radar_collections, path: "radar/collections", only: [ :index, :create, :destroy ]
+    resources :radar_searches, path: "radar/searches", only: [ :index, :show, :create ]
 
     post "sync", to: "sync#create"
     get "sync/runs", to: "sync#runs"
