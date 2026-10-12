@@ -44,6 +44,8 @@ module Olist
         OlistProduct.where(company_id: @connection.company_id).where(synced_at: ...now).delete_all
       end
 
+      link_variations
+
       @run.update!(status: "success", products_count: rows.size, finished_at: Time.current, error: nil)
     rescue Olist::Client::Error, Olist::OAuth::Error => e
       Rails.logger.error("Olist::SyncProducts: #{e.class}")
@@ -54,6 +56,52 @@ module Olist
     end
 
     private
+
+    # Liga cada variação ao seu produto pai. A listagem do Olist não diz quem é o pai;
+    # quem sabe é o próprio pai (GET /produtos/{id} traz `variacoes`). Só relê o pai
+    # quando ele mudou desde a última leitura (ou ainda não foi lido), e, se sobrar
+    # variação sem pai, relê os demais. Falha ao ler um pai mantém o vínculo anterior.
+    def link_variations
+      company_id = @connection.company_id
+      parents = OlistProduct.where(company_id: company_id, variation_kind: "P").to_a
+      refreshed = refresh_parents(parents.select { |parent| variations_stale?(parent) })
+      assign_parents(company_id)
+
+      # Variação excluída sem pai é normal (o pai foi apagado); só as ativas/inativas sem pai justificam reler os outros.
+      return unless OlistProduct.where(company_id: company_id, variation_kind: "V", parent_olist_id: nil).where.not(status: "E").exists?
+
+      refresh_parents(parents - refreshed)
+      assign_parents(company_id)
+    end
+
+    def variations_stale?(parent)
+      parent.variations_source_updated_at != source_marker(parent)
+    end
+
+    def source_marker(parent)
+      parent.olist_updated_at || Time.zone.at(0)
+    end
+
+    def refresh_parents(parents)
+      parents.each do |parent|
+        detail = @client.product(parent.olist_id)
+        ids = (detail["variacoes"] || []).filter_map { |variation| variation["id"] }
+        parent.update!(variation_ids: ids, variations_source_updated_at: source_marker(parent))
+      rescue Olist::Client::Error, Olist::OAuth::Error => e
+        Rails.logger.warn("Olist::SyncProducts: não foi possível ler as variações do produto #{parent.olist_id} (#{e.class})")
+      end
+      parents
+    end
+
+    def assign_parents(company_id)
+      by_parent = OlistProduct.where(company_id: company_id, variation_kind: "P").to_h { |parent| [ parent.olist_id, parent.variation_ids.map(&:to_i) ] }
+      linked = by_parent.values.flatten
+
+      by_parent.each do |parent_id, child_ids|
+        OlistProduct.where(company_id: company_id, olist_id: child_ids).update_all(parent_olist_id: parent_id)
+      end
+      OlistProduct.where(company_id: company_id).where.not(olist_id: linked).where.not(parent_olist_id: nil).update_all(parent_olist_id: nil)
+    end
 
     def row_for(item, stock, now)
       prices = item["precos"] || {}

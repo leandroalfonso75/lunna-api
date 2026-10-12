@@ -1,6 +1,6 @@
 # Produtos do Olist guardados no Lunna (cópia local atualizada a cada 3 min) e
 # alterações no Olist. Tudo escopado em Current.company.
-#   GET   /api/olist/products            → lista (q, status, limit, offset)
+#   GET   /api/olist/products            → lista agrupada: pais com variações dentro (q, status, limit, offset)
 #   GET   /api/olist/products/:id        → um produto (id = id do Olist)
 #   PATCH /api/olist/products/:id/price  → altera preço no Olist (admin, confirm: true)
 #   POST  /api/olist/products/:id/stock  → lança estoque no Olist (admin, confirm: true)
@@ -17,9 +17,10 @@ class OlistProductsController < ApplicationController
     render_errors([ "Olist ERP não conectado." ], status: :unprocessable_content)
   end
 
+  # Lista só os produtos "de cima": normais e pais. Variação aparece dentro do pai
+  # (`variations`); a busca acha o pai quando casa com uma variação dele.
   def index
-    scope = Current.company.olist_products.search(params[:q])
-    scope = scope.where(status: params[:status]) if params[:status].present?
+    scope = listing_scope
     total = scope.count
     limit = params.fetch(:limit, 20).to_i.clamp(1, MAX_LIMIT)
     offset = params.fetch(:offset, 0).to_i.clamp(0, 10_000_000)
@@ -88,40 +89,28 @@ class OlistProductsController < ApplicationController
     render_errors([ "O Olist não aceitou a alteração. Nada foi alterado no Lunna. Veja o registro de alterações." ], status: :bad_gateway)
   end
 
-  # Junta o estoque do Full (lido do ML, ligado pelo SKU) a cada produto.
   def payloads(products)
-    full = Olist::FullStock.for_skus(Current.company, products.map(&:sku))
-    # Produto excluído no Olist não recebe o Full: o SKU costuma ter sido reaproveitado por outro cadastro.
-    products.map { |product| payload(product, product.status == "E" ? nil : full[product.sku]) }
+    Olist::ProductPayloads.call(Current.company, products)
   end
 
-  # Estoque total = disponível no Olist + disponível no Full (sem anúncio Full, só o do Olist).
-  def total_available(product, full)
-    return product.stock_available if full.nil?
+  # Variação cujo pai existe fica fora da lista de cima (aparece dentro do pai).
+  TOP_LEVEL_SQL = <<~SQL.squish.freeze
+    NOT (olist_products.variation_kind = 'V' AND EXISTS (
+      SELECT 1 FROM olist_products parent
+      WHERE parent.company_id = olist_products.company_id AND parent.olist_id = olist_products.parent_olist_id))
+  SQL
 
-    (product.stock_available || 0) + full.available
-  end
+  def listing_scope
+    all = Current.company.olist_products
+    top = all.where(TOP_LEVEL_SQL)
 
-  def full_payload(full)
-    return { linked: false, available: nil, not_available: nil, total: nil, listings: 0, synced_at: nil } if full.nil?
+    if params[:q].present?
+      matching = all.search(params[:q])
+      parents_of_matches = matching.where.not(parent_olist_id: nil).select(:parent_olist_id)
+      top = top.where(id: matching.select(:id)).or(top.where(olist_id: parents_of_matches))
+    end
 
-    { linked: true, available: full.available, not_available: full.not_available, total: full.total,
-      listings: full.listings, synced_at: full.synced_at }
-  end
-
-  def payload(product, full = nil)
-    {
-      id: product.olist_id,
-      sku: product.sku, description: product.description, kind: product.kind, status: product.status,
-      variation_kind: product.variation_kind, unit: product.unit, gtin: product.gtin,
-      price: product.price, promo_price: product.promo_price, cost_price: product.cost_price,
-      avg_cost_price: product.avg_cost_price,
-      stock: { balance: product.stock_balance, reserved: product.stock_reserved, available: product.stock_available,
-               location: product.stock_location, deposits: product.stock_deposits,
-               full: full_payload(full), total_available: total_available(product, full) },
-      olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
-      synced_at: product.synced_at
-    }
+    params[:status].present? ? top.where(status: params[:status]) : top
   end
 
   def change_payload(change)

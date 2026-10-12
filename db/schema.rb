@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_500001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_600001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -288,7 +288,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_500001) do
     t.datetime "synced_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "parent_olist_id"
+    t.jsonb "variation_ids", default: [], null: false
+    t.datetime "variations_source_updated_at"
     t.index ["company_id", "olist_id"], name: "index_olist_products_on_company_id_and_olist_id", unique: true
+    t.index ["company_id", "parent_olist_id"], name: "index_olist_products_on_company_id_and_parent_olist_id"
     t.index ["company_id", "sku"], name: "index_olist_products_on_company_id_and_sku"
     t.index ["company_id", "status"], name: "index_olist_products_on_company_id_and_status"
   end
