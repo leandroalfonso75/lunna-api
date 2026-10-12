@@ -32,6 +32,7 @@ module Ml
         permalink: @body["permalink"],
         thumbnail: @body["thumbnail"],
         sku: sku,
+        inventory_refs: inventory_refs,
         variations_count: variations.size,
         pictures_count: pictures.size,
         has_video: @body["video_id"].present?,
@@ -73,6 +74,21 @@ module Ml
       @body["seller_custom_field"].presence ||
         attribute_value("SELLER_SKU").presence ||
         first_variation_sku
+    end
+
+    # Pares {sku, inventory_id} do item e de cada variação (Full: o estoque é por inventory_id).
+    def inventory_refs
+      refs = []
+      refs << { "sku" => sku, "inventory_id" => @body["inventory_id"] } if @body["inventory_id"].present?
+
+      variations.each do |variation|
+        next if variation["inventory_id"].blank?
+
+        variation_sku = variation["seller_custom_field"].presence || attribute_value_in(variation["attributes"], "SELLER_SKU") || sku
+        refs << { "sku" => variation_sku, "inventory_id" => variation["inventory_id"] }
+      end
+
+      refs.uniq
     end
 
     def first_variation_sku

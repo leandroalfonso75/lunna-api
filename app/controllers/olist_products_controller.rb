@@ -25,20 +25,20 @@ class OlistProductsController < ApplicationController
     offset = params.fetch(:offset, 0).to_i.clamp(0, 10_000_000)
 
     render json: {
-      products: scope.order(:description, :olist_id).limit(limit).offset(offset).map { |p| payload(p) },
+      products: payloads(scope.order(:description, :olist_id).limit(limit).offset(offset).to_a),
       total: total, limit: limit, offset: offset,
       last_synced_at: Current.company.olist_products.maximum(:synced_at)
     }
   end
 
   def show
-    render json: { product: payload(find_product) }
+    render json: { product: payloads([ find_product ]).first }
   end
 
   def update_price
     product = find_product
     change = changer(product).change_price(price: params[:price], promo_price: params[:promo_price])
-    render json: { change: change_payload(change), product: payload(product.reload) }
+    render json: { change: change_payload(change), product: payloads([ product.reload ]).first }
   rescue Olist::ChangeProduct::Invalid => e
     render_errors([ e.message ], status: :unprocessable_content)
   rescue Olist::Client::Error, Olist::OAuth::Error => e
@@ -51,7 +51,7 @@ class OlistProductsController < ApplicationController
       type: params[:type], quantity: params[:quantity], unit_price: params[:unit_price],
       note: params[:note], deposit_id: params[:deposit_id]
     )
-    render json: { change: change_payload(change), product: payload(product.reload) }
+    render json: { change: change_payload(change), product: payloads([ product.reload ]).first }
   rescue Olist::ChangeProduct::Invalid => e
     render_errors([ e.message ], status: :unprocessable_content)
   rescue Olist::Client::Error, Olist::OAuth::Error => e
@@ -88,7 +88,28 @@ class OlistProductsController < ApplicationController
     render_errors([ "O Olist não aceitou a alteração. Nada foi alterado no Lunna. Veja o registro de alterações." ], status: :bad_gateway)
   end
 
-  def payload(product)
+  # Junta o estoque do Full (lido do ML, ligado pelo SKU) a cada produto.
+  def payloads(products)
+    full = Olist::FullStock.for_skus(Current.company, products.map(&:sku))
+    # Produto excluído no Olist não recebe o Full: o SKU costuma ter sido reaproveitado por outro cadastro.
+    products.map { |product| payload(product, product.status == "E" ? nil : full[product.sku]) }
+  end
+
+  # Estoque total = disponível no Olist + disponível no Full (sem anúncio Full, só o do Olist).
+  def total_available(product, full)
+    return product.stock_available if full.nil?
+
+    (product.stock_available || 0) + full.available
+  end
+
+  def full_payload(full)
+    return { linked: false, available: nil, not_available: nil, total: nil, listings: 0, synced_at: nil } if full.nil?
+
+    { linked: true, available: full.available, not_available: full.not_available, total: full.total,
+      listings: full.listings, synced_at: full.synced_at }
+  end
+
+  def payload(product, full = nil)
     {
       id: product.olist_id,
       sku: product.sku, description: product.description, kind: product.kind, status: product.status,
@@ -96,7 +117,8 @@ class OlistProductsController < ApplicationController
       price: product.price, promo_price: product.promo_price, cost_price: product.cost_price,
       avg_cost_price: product.avg_cost_price,
       stock: { balance: product.stock_balance, reserved: product.stock_reserved, available: product.stock_available,
-               location: product.stock_location, deposits: product.stock_deposits },
+               location: product.stock_location, deposits: product.stock_deposits,
+               full: full_payload(full), total_available: total_available(product, full) },
       olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
       synced_at: product.synced_at
     }

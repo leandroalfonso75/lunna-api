@@ -47,6 +47,7 @@ module Ml
         items_result = Ml::Sync::Items.call(client, @account, scan_result.ids)
         @notes.concat(items_result.notes)
 
+        sync_full_stock(client)
         sync_visits(client)
         orders_result = sync_orders(client)
         sync_quality(client)
@@ -84,6 +85,12 @@ module Ml
         return nil if blocking.exists?
 
         @run_id ? MlSyncRun.find(@run_id) : MlSyncRun.create!(ml_account: @account, started_at: Time.current)
+      end
+
+      # Estoque do Full direto do ML, a cada rodada (5 min).
+      def sync_full_stock(client)
+        result = Ml::Sync::FullStock.call(client, @account)
+        @notes.concat(result.notes)
       end
 
       def sync_visits(client)

@@ -1,0 +1,13 @@
+{
+  "inventory_id": "ABCD1234",
+  "total": 12,
+  "available_units": 9,
+  "not_available_units": 3,
+  "not_available_detail": [
+    { "status": "damaged", "quantity": 1 },
+    { "status": "transfer", "quantity": 2 }
+  ],
+  "external_references": [
+    { "type": "seller_custom_field", "id": "LUN-001" }
+  ]
+}

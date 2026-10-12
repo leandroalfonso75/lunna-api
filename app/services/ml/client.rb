@@ -26,7 +26,7 @@ module Ml
     ITEM_ATTRIBUTES = %w[
       id title status sub_status price original_price available_quantity sold_quantity
       listing_type_id category_id shipping catalog_listing permalink thumbnail
-      seller_custom_field attributes variations pictures video_id health date_created last_updated
+      seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
     ].join(",")
 
     def initialize(access_token:, sleeper: ->(seconds) { sleep(seconds) })
@@ -46,6 +46,11 @@ module Ml
 
     def items_multiget(ids)
       get("/items", ids: ids.join(","), attributes: ITEM_ATTRIBUTES)
+    end
+
+    # Estoque do Full (Fulfillment) de um inventory_id.
+    def fulfillment_stock(inventory_id)
+      get("/inventories/#{inventory_id}/stock/fulfillment")
     end
 
     def item_visits(item_id)

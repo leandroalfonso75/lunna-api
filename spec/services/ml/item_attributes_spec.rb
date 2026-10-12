@@ -79,4 +79,29 @@ RSpec.describe Ml::ItemAttributes do
     expect(attrs[:ml_account_id]).to eq(account.id)
     expect(attrs[:seller_id]).to eq(430_014_725)
   end
+
+  describe "inventory_refs (estoque Full)" do
+    it "pega o inventory_id do item com o SKU dele" do
+      body = { "id" => "MLB1", "seller_custom_field" => "SKU-1", "inventory_id" => "INV1" }
+      expect(described_class.from(body, account)[:inventory_refs]).to eq([ { "sku" => "SKU-1", "inventory_id" => "INV1" } ])
+    end
+
+    it "pega o inventory_id de cada variação com o SKU dela (ou o do item)" do
+      body = {
+        "id" => "MLB2", "seller_custom_field" => "BASE",
+        "variations" => [
+          { "inventory_id" => "V1", "seller_custom_field" => "BASE-P" },
+          { "inventory_id" => "V2" },
+          { "seller_custom_field" => "SEM-INVENTORY" }
+        ]
+      }
+      expect(described_class.from(body, account)[:inventory_refs]).to eq([
+        { "sku" => "BASE-P", "inventory_id" => "V1" }, { "sku" => "BASE", "inventory_id" => "V2" }
+      ])
+    end
+
+    it "vazio quando não é Full" do
+      expect(described_class.from({ "id" => "MLB3" }, account)[:inventory_refs]).to eq([])
+    end
+  end
 end

@@ -47,7 +47,7 @@ RSpec.describe Ml::Client do
       expected_attributes = %w[
         id title status sub_status price original_price available_quantity sold_quantity
         listing_type_id category_id shipping catalog_listing permalink thumbnail
-        seller_custom_field attributes variations pictures video_id health date_created last_updated
+        seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
       ].join(",")
 
       stub_request(:get, "https://api.mercadolibre.com/items")
@@ -178,6 +178,18 @@ RSpec.describe Ml::Client do
       expect { client.me }.to raise_error(Ml::Client::Error) do |error|
         expect(error.message).not_to include("APP_USR-token-123")
       end
+    end
+  end
+
+  describe "#fulfillment_stock" do
+    it "lê o estoque Full de um inventory_id" do
+      stub = stub_request(:get, "https://api.mercadolibre.com/inventories/ABCD1234/stock/fulfillment")
+        .to_return(status: 200, body: ml_fixture("fulfillment_stock"))
+
+      result = client.fulfillment_stock("ABCD1234")
+
+      expect(result).to include("available_units" => 9, "not_available_units" => 3)
+      expect(stub).to have_been_requested
     end
   end
 end

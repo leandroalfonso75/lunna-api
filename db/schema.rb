@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_400001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_500001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -114,6 +114,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_400001) do
     t.index ["company_id"], name: "index_ml_costs_on_company_id"
   end
 
+  create_table "ml_full_stocks", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "inventory_id", null: false
+    t.integer "available_units", default: 0, null: false
+    t.integer "not_available_units", default: 0, null: false
+    t.integer "total_units", default: 0, null: false
+    t.jsonb "not_available_detail", default: [], null: false
+    t.datetime "synced_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "inventory_id"], name: "index_ml_full_stocks_on_ml_account_id_and_inventory_id", unique: true
+  end
+
   create_table "ml_item_visits", primary_key: ["item_id", "day"], force: :cascade do |t|
     t.string "item_id", null: false
     t.uuid "ml_account_id", null: false
@@ -166,6 +179,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_400001) do
     t.datetime "details_checked_at"
     t.datetime "quality_checked_at"
     t.datetime "synced_at"
+    t.jsonb "inventory_refs", default: [], null: false
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
   end
@@ -516,6 +530,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_400001) do
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
+  add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_oauth_states", "companies", on_delete: :cascade
