@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_700001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_15_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -37,6 +37,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_700001) do
     t.datetime "updated_at", null: false
     t.text "openrouter_api_key"
     t.string "ai_model"
+    t.decimal "fixed_expenses_pct", precision: 6, scale: 2, default: "3.0", null: false
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -180,6 +181,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_700001) do
     t.datetime "quality_checked_at"
     t.datetime "synced_at"
     t.jsonb "inventory_refs", default: [], null: false
+    t.jsonb "fee_details"
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
   end
@@ -351,7 +353,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_700001) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('collecting'::character varying)::text]))"
+    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'collecting'::character varying])::text[]))"
     t.index ["company_id"], name: "index_radar_collections_on_company_id"
     t.index ["requested_by_user_id"], name: "index_radar_collections_on_requested_by_user_id"
   end

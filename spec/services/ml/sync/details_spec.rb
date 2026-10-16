@@ -62,6 +62,7 @@ RSpec.describe Ml::Sync::Details do
     expect(item.sale_price.to_f).to eq(139.9)
     expect(item.regular_price.to_f).to eq(149.9)
     expect(item.fee_now.to_f).to eq(23.08)
+    expect(item.fee_details).to include("fixed_fee" => 0, "percentage_fee" => 16.5, "gross_amount" => 23.08)
     expect(item.ship_cost.to_f).to eq(21.45)
     # BRAND/MODEL preenchidos, GTIN não → só GTIN falta como obrigatório;
     # COLOR preenchido, MATERIAL/POWER não → faltam como principais.

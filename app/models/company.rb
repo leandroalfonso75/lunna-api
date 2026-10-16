@@ -25,6 +25,7 @@ class Company < ApplicationRecord
   validates :abc_cut_b, numericality: { less_than_or_equal_to: 100 }
   validates :group_up_pct, numericality: { greater_than_or_equal_to: 0 }
   validates :group_down_pct, numericality: { less_than_or_equal_to: 0 }
+  validates :fixed_expenses_pct, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
   validate :abc_cut_a_below_abc_cut_b
 

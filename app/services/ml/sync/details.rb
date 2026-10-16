@@ -65,8 +65,11 @@ module Ml
         attrs[:regular_price] = regular_price unless regular_price == FAILED
         effective_price = (sale_price != FAILED && sale_price.present? && sale_price > 0) ? sale_price : item.price
 
-        fee_now = safe(notes, item.item_id, "tarifa") { fetch_fee(client, item, effective_price) }
-        attrs[:fee_now] = fee_now unless fee_now == FAILED
+        fee = safe(notes, item.item_id, "tarifa") { fetch_fee(client, item, effective_price) }
+        unless fee == FAILED
+          attrs[:fee_now] = fee["sale_fee_amount"]
+          attrs[:fee_details] = fee["sale_fee_details"]
+        end
 
         ship_cost = safe(notes, item.item_id, "frete") { fetch_ship_cost(client, account, item, effective_price, item.free_shipping) }
         attrs[:ship_cost] = ship_cost unless ship_cost == FAILED
@@ -109,7 +112,7 @@ module Ml
       private_class_method :fetch_sale_price
 
       def self.fetch_fee(client, item, price)
-        client.listing_prices(price: price, listing_type_id: item.listing_type_id, category_id: item.category_id)["sale_fee_amount"]
+        client.listing_prices(price: price, listing_type_id: item.listing_type_id, category_id: item.category_id)
       end
       private_class_method :fetch_fee
 
@@ -154,7 +157,7 @@ module Ml
         suggested = price_ref && price_ref[:suggested]
         return [ nil, nil ] unless suggested.present? && suggested > 0 && (suggested.to_f - effective_price.to_f).abs > PRICE_EPSILON
 
-        fee = safe(notes, item.item_id, "tarifa_ref") { fetch_fee(client, item, suggested) }
+        fee = safe(notes, item.item_id, "tarifa_ref") { fetch_fee(client, item, suggested)["sale_fee_amount"] }
         free_shipping_ref = suggested >= FREE_SHIPPING_FLOOR ? true : item.free_shipping
         ship = safe(notes, item.item_id, "frete_ref") { fetch_ship_cost(client, account, item, suggested, free_shipping_ref) }
 

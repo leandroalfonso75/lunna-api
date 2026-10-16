@@ -199,11 +199,12 @@ module Painel
       details = @account.ml_items.where(item_id: ids).pluck(:item_id, :quality_level, :quality_pending)
         .to_h { |item_id, level, pending| [ item_id, [ level, pending ] ] }
       alert_keys = Painel::Alerts.keys_by_item(@account.item_metrics.where(item_id: ids))
+      economics = Painel::ItemEconomics.for_page(@account, metrics)
 
-      metrics.map { |metric| build_item(metric, details[metric.item_id], alert_keys[metric.item_id] || []) }
+      metrics.map { |metric| build_item(metric, details[metric.item_id], alert_keys[metric.item_id] || [], economics[metric.item_id]) }
     end
 
-    def build_item(metric, details, alert_keys)
+    def build_item(metric, details, alert_keys, economics)
       quality_level, quality_pending = details || [ nil, [] ]
       price = metric.price
       original_price = metric.original_price
@@ -221,6 +222,7 @@ module Painel
         conversion_7d: metric.conversion_7d&.to_f, prev_conversion_7d: metric.prev_conversion_7d&.to_f,
         units_delta: metric.units_delta, units_delta_direction: units_delta_direction(metric.units_delta),
         revenue_7d: metric.revenue_7d.to_f, net_after_fee_7d: metric.net_after_fee_7d.to_f,
+        economics: economics,
         coverage_days: metric.coverage_days&.to_f, coverage_state: coverage_state(metric.coverage_days),
         quality_score: metric.quality_score, quality_state: quality_state(metric.quality_score),
         quality_level: quality_level, quality_actions: quality_actions(quality_pending),
