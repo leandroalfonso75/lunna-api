@@ -130,18 +130,18 @@ RSpec.describe Ml::Sync::Run do
       expect(account.reload.visits_synced_at).to be_within(5.seconds).of(10.minutes.ago)
     end
 
-    it "pedidos: busca 62 dias quando orders_backfilled_at é nulo, e marca o carimbo ao terminar sem erro" do
+    it "pedidos: busca 95 dias quando orders_backfilled_at é nulo, e marca o carimbo ao terminar sem erro" do
       account.update!(orders_backfilled_at: nil)
       stub_empty_scan_and_orders
 
       described_class.call(account, sleeper: sleeper)
 
       expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/orders/search")
-        .with(query: hash_including("order.date_created.from" => 62.days.ago.beginning_of_day.iso8601))
+        .with(query: hash_including("order.date_created.from" => 95.days.ago.beginning_of_day.iso8601))
       expect(account.reload.orders_backfilled_at).to be_present
     end
 
-    it "pedidos: busca só 4 dias quando já fez o backfill de 62 dias" do
+    it "pedidos: busca só 4 dias quando já fez o backfill de 95 dias" do
       account.update!(orders_backfilled_at: 1.day.ago)
       stub_empty_scan_and_orders
 
@@ -151,7 +151,7 @@ RSpec.describe Ml::Sync::Run do
         .with(query: hash_including("order.date_created.from" => 4.days.ago.beginning_of_day.iso8601))
     end
 
-    it "pedidos: não marca orders_backfilled_at quando a carga de 62 dias teve erro" do
+    it "pedidos: não marca orders_backfilled_at quando a carga de 95 dias teve erro" do
       account.update!(orders_backfilled_at: nil)
       stub_request(:get, "https://api.mercadolibre.com/users/430014725/items/search")
         .with(query: hash_including(search_type: "scan"))

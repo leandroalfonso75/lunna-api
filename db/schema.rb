@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_100001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_200001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -200,6 +200,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_100001) do
     t.integer "quantity"
     t.decimal "unit_price", precision: 12, scale: 2
     t.decimal "sale_fee", precision: 12, scale: 2
+    t.string "title"
+    t.string "sku"
+    t.string "listing_type_id"
+    t.bigint "variation_id"
     t.index ["item_id"], name: "index_ml_order_items_on_item_id"
   end
 
@@ -210,8 +214,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_100001) do
     t.datetime "date_closed"
     t.decimal "total_amount", precision: 12, scale: 2
     t.datetime "synced_at"
+    t.jsonb "payload"
+    t.bigint "shipping_id"
+    t.bigint "pack_id"
+    t.bigint "buyer_id"
+    t.string "buyer_nickname"
+    t.decimal "paid_amount", precision: 12, scale: 2
+    t.jsonb "shipment"
+    t.datetime "shipment_synced_at"
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
+    t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"
   end
 
   create_table "ml_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -355,7 +368,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_100001) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('collecting'::character varying)::text]))"
+    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'collecting'::character varying])::text[]))"
     t.index ["company_id"], name: "index_radar_collections_on_company_id"
     t.index ["requested_by_user_id"], name: "index_radar_collections_on_requested_by_user_id"
   end

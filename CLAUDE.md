@@ -9,7 +9,7 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 
 ## Mapa de pastas
 - `app/controllers/`: finos; só autenticam, escopam pela empresa e renderizam.
-- `app/services/`: regras de negócio. `painel/` (visão geral, anúncios), `abc/`, `ml/` (leitura do Mercado Livre),
+- `app/services/`: regras de negócio. `painel/` (visão geral, anúncios), `abc/`, `ml/` (leitura do Mercado Livre, incl. pedidos e envios da seção Vendas),
   `olist/` (ERP, custo PEPS, kits), `ai/`.
 - `app/jobs/`: segundo plano (Solid Queue). Agenda em `config/recurring.yml`.
 - `app/models/`: dados e validações.
@@ -26,7 +26,8 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 
 ## Comandos
 - Subir: `docker compose up` (api na 3000, `jobs`, postgres). No Windows, a porta é publicada só em IPv4.
-- Testes: `docker compose run --rm api bundle exec rspec` (ou `bin/rspec` fora do Docker).
+- Testes: `docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"`.
+  Nunca rode o rspec sem `RAILS_ENV=test`: ele cairia no banco de desenvolvimento.
 - Estilo: `bundle exec rubocop`.
 - Olist: `rake olist:conectar[email]`, `rake olist:sync`.
 

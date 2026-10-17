@@ -46,6 +46,9 @@ Rails.application.routes.draw do
     get "items/:id/ai-plan", to: "ai_plans#show"
     post "items/:id/ai-plan", to: "ai_plans#create", as: :item_ai_plan
     delete "items/:id/ai-plan", to: "ai_plans#destroy"
+    get "sales", to: "sales#index"
+    post "sales/sync", to: "sales#sync"
+    get "sales/:id", to: "sales#show", as: :sale
     get "abc", to: "abc#index"
     get "abc/items/:id", to: "abc#show", as: :abc_item
   end

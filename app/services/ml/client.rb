@@ -66,6 +66,14 @@ module Ml
         offset: offset)
     end
 
+    def shipment(shipment_id)
+      get("/shipments/#{shipment_id}")
+    end
+
+    def shipment_costs(shipment_id)
+      get("/shipments/#{shipment_id}/costs")
+    end
+
     # Rota no singular (`/item/`, não `/items/`), como na SPEC.
     def item_performance(item_id)
       get("/item/#{item_id}/performance")

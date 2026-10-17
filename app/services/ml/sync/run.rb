@@ -12,6 +12,7 @@ module Ml
       DETAILS_EVERY = 12.hours
       QUALITY_BATCH = 200
       DETAILS_BATCH = 60
+      SHIPMENTS_BATCH = 60
       DETAIL_MAX_LENGTH = 2_000
 
       # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
@@ -50,6 +51,7 @@ module Ml
         sync_full_stock(client)
         sync_visits(client)
         orders_result = sync_orders(client)
+        sync_shipments(client)
         sync_quality(client)
         sync_details(client)
 
@@ -104,13 +106,19 @@ module Ml
 
       def sync_orders(client)
         backfilling = @account.orders_backfilled_at.nil?
-        from = backfilling ? 62.days.ago.beginning_of_day : 4.days.ago.beginning_of_day
+        from = backfilling ? 95.days.ago.beginning_of_day : 4.days.ago.beginning_of_day
 
         result = Ml::Sync::Orders.call(client, @account, from: from)
         @notes.concat(result.notes)
         @account.update_columns(orders_backfilled_at: Time.current) if backfilling && result.ok
 
         result
+      end
+
+      # Envio dos pedidos recentes (seção Vendas), 60 por rodada.
+      def sync_shipments(client)
+        result = Ml::Sync::Shipments.call(client, @account, limit: SHIPMENTS_BATCH, since: 95.days.ago)
+        @notes.concat(result.notes)
       end
 
       # Anúncios de catálogo ficam de fora: /item/{id}/performance responde 400

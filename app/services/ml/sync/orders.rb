@@ -52,7 +52,13 @@ module Ml
         item_id = line.dig("item", "id")
         return if item_id.blank?
 
-        entry = order_items[[ order_id, item_id ]] ||= { quantity: 0, amount: 0.0, fee_amount: 0.0 }
+        entry = order_items[[ order_id, item_id ]] ||= {
+          quantity: 0, amount: 0.0, fee_amount: 0.0,
+          title: line.dig("item", "title"),
+          sku: line.dig("item", "seller_sku").presence || line.dig("item", "seller_custom_field").presence,
+          listing_type_id: line["listing_type_id"],
+          variation_id: line.dig("item", "variation_id")
+        }
         quantity = line["quantity"].to_i
         entry[:quantity] += quantity
         entry[:amount] += line["unit_price"].to_f * quantity
@@ -69,6 +75,12 @@ module Ml
             date_created: order["date_created"],
             date_closed: order["date_closed"],
             total_amount: order["total_amount"],
+            paid_amount: order["paid_amount"],
+            payload: order,
+            shipping_id: order.dig("shipping", "id"),
+            pack_id: order["pack_id"],
+            buyer_id: order.dig("buyer", "id"),
+            buyer_nickname: order.dig("buyer", "nickname"),
             synced_at: Time.current
           }
         end
@@ -81,7 +93,11 @@ module Ml
             item_id: item_id,
             quantity: entry[:quantity],
             unit_price: (entry[:amount] / entry[:quantity]).round(2),
-            sale_fee: (entry[:fee_amount] / entry[:quantity]).round(2)
+            sale_fee: (entry[:fee_amount] / entry[:quantity]).round(2),
+            title: entry[:title],
+            sku: entry[:sku],
+            listing_type_id: entry[:listing_type_id],
+            variation_id: entry[:variation_id]
           }
         end
 
