@@ -3,6 +3,9 @@
 #
 # Lucro líquido do pedido (mesma conta de Anúncios, ver Painel::ItemEconomics):
 #   receita − custo − tarifa de venda − frete pago pelo vendedor − despesas fixas − imposto
+# Frete do carrinho: vendas do mesmo carrinho (pack) viajam no MESMO envio e o ML informa o frete do
+# envio inteiro em cada uma. O frete do vendedor é dividido entre as vendas do envio, proporcional às
+# unidades de cada uma (as canceladas ficam de fora).
 # Pedido cancelado não entra nos totais. Sem custo de algum item, o lucro do pedido não é calculado.
 module Painel
   class SalesQuery
@@ -109,12 +112,31 @@ module Painel
       olist = Olist::UnitCost.for_skus(@company, skus)
       manual = @company.ml_costs.where(sku: skus).index_by(&:sku)
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
+      groups = shipment_groups(orders)
 
-      orders.map { |order| row(order, items[order.order_id] || [], olist, manual, thumbs) }
+      orders.map { |order| row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id]) }
     end
 
-    def row(order, lines, olist, manual, thumbs)
+    # shipping_id => { units: total de unidades das vendas ativas do envio, orders: [order_id, ...] }
+    def shipment_groups(orders)
+      ids = orders.filter_map(&:shipping_id).uniq
+      return {} if ids.empty?
+
+      rows = @account.ml_orders.where(shipping_id: ids).where.not(status: %w[cancelled invalid])
+        .joins("JOIN ml_order_items i ON i.order_id = ml_orders.order_id")
+        .group("ml_orders.shipping_id", "ml_orders.order_id").sum("i.quantity")
+
+      rows.each_with_object({}) do |((shipping_id, order_id), quantity), groups|
+        group = groups[shipping_id] ||= { units: 0, orders: [] }
+        group[:units] += quantity.to_i
+        group[:orders] << order_id
+      end
+    end
+
+    def row(order, lines, olist, manual, thumbs, group)
       shipment = order.shipment
+      units = lines.sum { |line| line.quantity.to_i }
+      share = shipping_share(shipment, units, group)
       items = lines.map do |line|
         { item_id: line.item_id, title: line.title, sku: line.sku, quantity: line.quantity,
           unit_price: line.unit_price&.to_f, sale_fee: line.sale_fee&.to_f,
@@ -127,12 +149,21 @@ module Painel
         status: status_label(ORDER_STATUS, order.status), buyer_nickname: order.buyer_nickname,
         items: items, units: items.sum { |i| i[:quantity].to_i },
         total_amount: order.total_amount&.to_f, paid_amount: order.paid_amount&.to_f,
-        shipping: shipping(order, shipment),
-        economics: economics(order, lines, shipment, olist, manual)
+        shipping: shipping(order, shipment, share, group, order.order_id),
+        economics: economics(order, lines, shipment, olist, manual, share)
       }
     end
 
-    def shipping(order, shipment)
+    # Parte desta venda no frete do vendedor do envio: frete × unidades da venda ÷ unidades do envio.
+    def shipping_share(shipment, units, group)
+      cost = shipment&.dig("seller_cost")
+      return nil if cost.nil?
+      return cost.to_f if group.nil? || group[:orders].size < 2 || group[:units].zero?
+
+      cost.to_f * units / group[:units]
+    end
+
+    def shipping(order, shipment, share = nil, group = nil, order_id = nil)
       return { status: nil, label: order.shipping_id ? "Carregando…" : "Sem envio", tone: "neutral", loaded: false } if shipment.blank?
 
       status, tone = SHIPMENT_STATUS.fetch(shipment["status"], [ shipment["status"].to_s, "neutral" ])
@@ -142,7 +173,9 @@ module Painel
         substatus: shipment["substatus"], logistic_type: shipment["logistic_type"],
         logistic_label: LOGISTICS.fetch(shipment["logistic_type"], shipment["logistic_type"]),
         method_name: shipment["method_name"], tracking_number: shipment["tracking_number"],
-        seller_cost: shipment["seller_cost"]&.to_f, buyer_cost: shipment["buyer_cost"]&.to_f,
+        seller_cost: shipment["seller_cost"]&.to_f, seller_cost_share: share,
+        shared_with: group ? (group[:orders] - [ order_id ]) : [],
+        buyer_cost: shipment["buyer_cost"]&.to_f,
         list_cost: shipment["list_cost"]&.to_f,
         destination: [ shipment["destination_city"], shipment["destination_state"] ].compact.join(" / ").presence,
         estimated_delivery: shipment["estimated_delivery"],
@@ -155,12 +188,12 @@ module Painel
       }
     end
 
-    def economics(order, lines, shipment, olist, manual)
+    def economics(order, lines, shipment, olist, manual, shipping_cost_share)
       return nil if %w[cancelled invalid].include?(order.status) || lines.empty?
 
       revenue = lines.sum { |l| l.unit_price.to_f * l.quantity.to_i }
       fee = lines.sum { |l| l.sale_fee.to_f * l.quantity.to_i }
-      shipping_cost = shipment&.dig("seller_cost").to_f
+      shipping_cost = shipping_cost_share.to_f
       tax = revenue * @company.tax_pct.to_f / 100.0
       fixed = revenue * @company.fixed_expenses_pct.to_f / 100.0
       cost = total_cost(lines, olist, manual)

@@ -38,6 +38,34 @@ RSpec.describe "/api/sales", type: :request do
     expect(numeric_strings(json)).to be_empty
   end
 
+  it "carrinho: o frete do vendedor do envio é dividido entre as vendas do mesmo envio, por unidade" do
+    with_cost("SKU-A", 10)
+    with_cost("SKU-B", 10)
+    shipment = { "status" => "delivered", "logistic_type" => "self_service", "seller_cost" => 30.0 }
+    sale(1, shipment: shipment, lines: [ [ "MLB1", "SKU-A", 1, 100.0, 10.0 ] ])
+    sale(3, shipment: shipment.merge("id" => 1), lines: [ [ "MLB2", "SKU-B", 2, 50.0, 5.0 ] ])
+    MlOrder.where(order_id: [ 1, 3 ]).update_all(shipping_id: 777, pack_id: 555)
+    sale(5, status: "cancelled", shipment: shipment, lines: [ [ "MLB3", "SKU-A", 5, 10.0, 1.0 ] ])
+    MlOrder.where(order_id: 5).update_all(shipping_id: 777)
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    by_id = json["sales"].to_h { |s| [ s["order_id"], s ] }
+    expect(by_id[1]["economics"]["shipping_cost"]).to eq(10.0) # 1 de 3 unidades
+    expect(by_id[3]["economics"]["shipping_cost"]).to eq(20.0) # 2 de 3 unidades
+    expect(by_id[1]["shipping"]).to include("seller_cost" => 30.0, "seller_cost_share" => 10.0, "shared_with" => [ 3 ])
+    expect(json["summary"]["shipping_cost"]).to eq(30.0) # o frete do envio conta uma vez só
+  end
+
+  it "envio sem carrinho mantém o frete inteiro na venda" do
+    sale(1, shipment: { "status" => "delivered", "seller_cost" => 21.1 })
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(json["sales"].first["economics"]["shipping_cost"]).to eq(21.1)
+    expect(json["sales"].first["shipping"]["shared_with"]).to eq([])
+  end
+
   it "sem custo em algum item, o lucro da venda não é calculado e ela é contada à parte" do
     sale(1)
 
