@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe Painel::ItemEconomics do
-  let(:company) { create(:company, fixed_expenses_pct: 3) }
+  let(:company) { create(:company, fixed_expenses_pct: 3, tax_pct: 11.3) }
   let(:account) { create(:ml_account, company: company) }
 
   def metric(item_id: "MLB1", sku: "SKU-1", price: 100.0)
@@ -18,7 +18,7 @@ RSpec.describe Painel::ItemEconomics do
 
   def call(*metrics) = described_class.for_page(account, metrics)
 
-  it "lucro líquido = preço − custo − comissão − frete/taxas − despesas fixas (3%)" do
+  it "lucro líquido = preço − custo − comissão − frete/taxas − despesas fixas (3%) − imposto (da empresa)" do
     m = metric
     item(fee_now: 16.5, ship_cost: 8.0)
     olist_cost("SKU-1", 40)
@@ -26,9 +26,10 @@ RSpec.describe Painel::ItemEconomics do
     result = call(m)[m.item_id]
 
     expect(result).to include(price: 100.0, cost: 40.0, cost_source: "cadastro", commission: 16.5, shipping_fees: 8.0,
-      fixed_expenses: 3.0, fixed_expenses_pct: 3.0)
-    expect(result[:net_profit]).to be_within(0.001).of(100 - 40 - 16.5 - 8 - 3)
-    expect(result[:net_profit_pct]).to be_within(0.001).of(32.5)
+      fixed_expenses: 3.0, fixed_expenses_pct: 3.0, tax_pct: 11.3)
+    expect(result[:tax]).to be_within(0.001).of(11.3)
+    expect(result[:net_profit]).to be_within(0.001).of(100 - 40 - 16.5 - 8 - 3 - 11.3)
+    expect(result[:net_profit_pct]).to be_within(0.001).of(21.2)
   end
 
   it "separa comissão de taxa fixa e financiamento usando o detalhe da tarifa" do
@@ -41,7 +42,7 @@ RSpec.describe Painel::ItemEconomics do
     expect(result[:commission]).to be_within(0.001).of(16.5)
     expect(result[:shipping_fees]).to be_within(0.001).of(10 + 6 + 0.5)
     expect(result).to include(fees_split: true, fixed_fee: 6.0, financing: 0.5)
-    expect(result[:net_profit]).to be_within(0.001).of(100 - 30 - 16.5 - 16.5 - 3)
+    expect(result[:net_profit]).to be_within(0.001).of(100 - 30 - 16.5 - 16.5 - 3 - 11.3)
   end
 
   it "sem o detalhe da tarifa, a tarifa inteira vale como comissão (e avisa que não foi separada)" do
@@ -89,6 +90,21 @@ RSpec.describe Painel::ItemEconomics do
     olist_cost("SKU-1", 0.01)
 
     expect(call(m)[m.item_id]).to include(fixed_expenses: 5.0, fixed_expenses_pct: 5.0)
+  end
+
+  it "usa o imposto configurado na empresa (e zero quando é 0%)" do
+    company.update!(tax_pct: 6)
+    m = metric
+    item(fee_now: 0, ship_cost: 0)
+    olist_cost("SKU-1", 10)
+
+    result = call(m)[m.item_id]
+
+    expect(result).to include(tax: 6.0, tax_pct: 6.0)
+    expect(result[:net_profit]).to be_within(0.001).of(100 - 10 - 3 - 6)
+
+    company.update!(tax_pct: 0)
+    expect(call(m)[m.item_id]).to include(tax: 0.0)
   end
 
   it "prejuízo aparece negativo" do

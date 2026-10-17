@@ -1,6 +1,6 @@
 # Resultado por unidade de cada anúncio da tabela de Anúncios:
 #
-#   Lucro líquido = preço de venda − custo − comissão − frete/taxas − despesas fixas
+#   Lucro líquido = preço de venda − custo − comissão − frete/taxas − despesas fixas − imposto
 #
 # - Custo: do Olist/Tiny pelo SKU (Olist::UnitCost); sem ele, o custo manual do SKU
 #   (ml_costs: cost + extra); sem nenhum, o anúncio fica "sem custo" e o lucro não é calculado.
@@ -8,6 +8,7 @@
 #   e financiamento). Sem o detalhe da tarifa, a tarifa inteira entra como comissão.
 # - Frete/taxas: frete que o vendedor paga (ship_cost) + taxa fixa + financiamento.
 # - Despesas fixas: % do preço de venda definida na empresa (padrão 3%).
+# - Imposto: % do preço de venda cadastrada em Configurações > Impostos e margem (tax_pct da empresa).
 module Painel
   class ItemEconomics
     # => { item_id => economics hash } para os anúncios (metrics) da página.
@@ -43,8 +44,10 @@ module Painel
       fixed_pct = @company.fixed_expenses_pct.to_f
       fixed_expenses = price * fixed_pct / 100.0
       shipping_fees = fees[:shipping] + fees[:fixed_fee] + fees[:financing]
+      tax_pct = @company.tax_pct.to_f
+      tax = price * tax_pct / 100.0
 
-      profit = cost.nil? ? nil : price - cost - fees[:commission] - shipping_fees - fixed_expenses
+      profit = cost.nil? ? nil : price - cost - fees[:commission] - shipping_fees - fixed_expenses - tax
 
       {
         price: price,
@@ -52,6 +55,7 @@ module Painel
         commission: fees[:commission], shipping_fees: shipping_fees,
         shipping: fees[:shipping], fixed_fee: fees[:fixed_fee], financing: fees[:financing],
         fixed_expenses: fixed_expenses, fixed_expenses_pct: fixed_pct,
+        tax: tax, tax_pct: tax_pct,
         net_profit: profit, net_profit_pct: profit.nil? ? nil : profit / price * 100.0,
         fees_known: fees[:known], fees_split: fees[:split]
       }
