@@ -70,8 +70,14 @@ module Olist
         { id: m.movement_id, deposit_id: m.deposit_id, kind: m.kind, quantity: m.quantity, price: m.price,
           moved_at: m.moved_at, origin: m.origin, note: m.note }
       end
-      result = Olist::Fifo.call(movements, ledger_deposit_ids: ledger_deposits(product))
+      result = Olist::Fifo.call(movements, ledger_deposit_ids: ledger_deposits(product), current_stock: current_stock(product))
       store(product, result, now)
+    end
+
+    # Estoque real da empresa: saldo do Olist + Full do Mercado Livre (mesma soma da tela Produtos).
+    def current_stock(product)
+      full = Olist::FullStock.for_skus(@connection.company, [ product.sku ])[product.sku]
+      product.stock_balance.to_f + full&.total.to_f
     end
 
     def row_for(product, item, now)
@@ -91,7 +97,7 @@ module Olist
 
     def store(product, result, now)
       product.update!(
-        fifo_unit_cost: result.unit_cost, fifo_stock_value: result.stock_value, fifo_units: result.units,
+        fifo_unit_cost: result.unit_cost, fifo_last_entry_cost: result.last_entry_cost, fifo_stock_value: result.stock_value, fifo_units: result.units,
         fifo_units_without_cost: result.units_without_cost, fifo_shortfall: result.shortfall,
         fifo_layers: result.layers.map { |layer| layer_json(layer) },
         fifo_balance_at_calc: product.stock_balance, fifo_calculated_at: now, movements_synced_at: now

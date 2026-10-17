@@ -8,6 +8,10 @@
 # - Custo ausente = preço vazio ou zero. Só gera aviso se a camada AINDA tiver unidades
 #   em estoque: entrada sem custo que já foi toda consumida é ignorada.
 # - O custo do produto é o da camada mais antiga que ainda tem saldo (a próxima a sair).
+# - Histórico que não fecha: se as saídas registradas superam as entradas (ou deixam menos unidades
+#   do que o estoque real), o que está na prateleira só pode ser das compras mais recentes. Com o
+#   estoque atual informado (`current_stock`), as camadas são refeitas a partir da entrada mais nova
+#   para trás até cobrir esse estoque (`reconstructed`).
 #
 # Estoque no Full do Mercado Livre (depósito "Full ML" do Olist, que o Olist deixa fora do saldo):
 # o estoque da empresa é Geral + Full, então tudo entra num único conjunto de camadas.
@@ -22,21 +26,22 @@ module Olist
     end
 
     Result = Struct.new(:layers, :unit_cost, :stock_value, :units, :units_without_cost, :shortfall, :balance, :last_entry_cost,
-      keyword_init: true) do
+      :reconstructed, keyword_init: true) do
       def warning? = units_without_cost.positive?
     end
 
     # movements: [{ id:, deposit_id:, kind: "E|S|B", quantity:, price:, moved_at:, origin: }]
     # ledger_deposit_ids: depósitos "razão" (Full ML), onde só as saídas (vendas) são registradas.
     # ignored_deposit_ids: depósitos a descartar por completo.
-    def self.call(movements, ledger_deposit_ids: [], ignored_deposit_ids: [])
-      new(movements, ledger_deposit_ids, ignored_deposit_ids).call
+    def self.call(movements, ledger_deposit_ids: [], ignored_deposit_ids: [], current_stock: nil)
+      new(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock).call
     end
 
     # Observação que marca a saída do Geral como envio ao Full (transferência), não venda.
     TRANSFER_NOTE = /\A\s*(envio|nft)\b/i
 
-    def initialize(movements, ledger_deposit_ids, ignored_deposit_ids)
+    def initialize(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock = nil)
+      @current_stock = current_stock && decimal(current_stock)
       @ledger = ledger_deposit_ids
       @movements = movements.reject { |m| ignored_deposit_ids.include?(m[:deposit_id]) }
       @layers = []
@@ -109,6 +114,11 @@ module Olist
 
     def build_result
       open = @layers.select { |layer| layer.remaining.positive? }
+      reconstructed = false
+      if @current_stock&.positive? && open.sum(&:remaining) < @current_stock && @layers.any?
+        open = rebuild_from_newest(@current_stock)
+        reconstructed = true
+      end
       costed = open.select(&:costed?)
 
       Result.new(
@@ -119,8 +129,24 @@ module Olist
         units_without_cost: open.reject(&:costed?).sum(&:remaining),
         shortfall: @shortfall,
         balance: @balances.values.sum,
-        last_entry_cost: @last_entry_cost
+        last_entry_cost: @last_entry_cost,
+        reconstructed: reconstructed
       )
+    end
+
+    # Camadas que cobrem o estoque atual, da entrada mais nova para trás (devolvidas da mais antiga à mais nova).
+    def rebuild_from_newest(stock)
+      need = stock
+      picked = []
+      @layers.reverse_each do |layer|
+        break unless need.positive?
+
+        take = [ layer.quantity, need ].min
+        picked << Layer.new(id: layer.id, moved_at: layer.moved_at, quantity: layer.quantity, remaining: take,
+          unit_cost: layer.unit_cost, origin: layer.origin)
+        need -= take
+      end
+      picked.reverse
     end
 
     def decimal(value)

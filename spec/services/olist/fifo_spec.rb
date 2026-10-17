@@ -179,4 +179,38 @@ RSpec.describe Olist::Fifo do
 
     expect(result.stock_value).to eq(BigDecimal("8.0"))
   end
+  describe "histórico que não fecha (current_stock)" do
+    let(:history) do
+      [ move(1, "E", 100, price: 80), move(2, "E", 50, price: 90), move(3, "E", 40, price: 78), move(4, "S", 230) ]
+    end
+
+    it "saídas maiores que as entradas: as camadas são refeitas da entrada mais nova para trás" do
+      result = run(history, current_stock: 30)
+
+      expect(result.shortfall).to eq(40)
+      expect(result.reconstructed).to be true
+      expect(result.units).to eq(30)
+      expect(result.unit_cost).to eq(78)
+      expect(result.stock_value).to eq(30 * 78)
+    end
+
+    it "o estoque atual maior que a última entrada pega também a anterior (a mais antiga delas dá o custo)" do
+      result = run(history, current_stock: 60)
+
+      expect(result.layers.map { |l| [ l.remaining, l.unit_cost ] }).to eq([ [ 20, 90 ], [ 40, 78 ] ])
+      expect(result.unit_cost).to eq(90)
+    end
+
+    it "histórico que fecha com o estoque não é mexido" do
+      result = run([ move(1, "E", 10, price: 5), move(2, "E", 10, price: 8), move(3, "S", 12) ], current_stock: 8)
+
+      expect(result.reconstructed).to be false
+      expect(result.unit_cost).to eq(8)
+    end
+
+    it "sem estoque atual ou sem nenhuma entrada, continua sem custo" do
+      expect(run(history, current_stock: 0).unit_cost).to be_nil
+      expect(run([ move(1, "S", 3) ], current_stock: 5).unit_cost).to be_nil
+    end
+  end
 end

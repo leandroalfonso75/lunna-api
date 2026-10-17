@@ -21,6 +21,12 @@ RSpec.describe Olist::UnitCost do
     expect(described_class.for_skus(company, [ "A" ])["A"]).to have_attributes(value: 9, source: "cadastro")
   end
 
+  it "sem PEPS, sem custo cadastrado e sem custo médio, usa o custo da última entrada com preço" do
+    product("A", fifo_last_entry_cost: 17.89)
+
+    expect(described_class.for_skus(company, [ "A" ])["A"]).to have_attributes(value: 17.89, source: "ultima_entrada")
+  end
+
   it "sem PEPS e sem custo cadastrado, usa o custo médio" do
     product("A", avg_cost_price: 8)
 

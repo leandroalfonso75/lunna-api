@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_200001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_210001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -319,6 +319,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_200001) do
     t.datetime "movements_synced_at"
     t.jsonb "kit_components", default: [], null: false
     t.datetime "kit_checked_at"
+    t.decimal "fifo_last_entry_cost", precision: 12, scale: 4
     t.index ["company_id", "olist_id"], name: "index_olist_products_on_company_id_and_olist_id", unique: true
     t.index ["company_id", "parent_olist_id"], name: "index_olist_products_on_company_id_and_parent_olist_id"
     t.index ["company_id", "sku"], name: "index_olist_products_on_company_id_and_sku"
@@ -368,7 +369,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_200001) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY ((ARRAY['requested'::character varying, 'collecting'::character varying])::text[]))"
+    t.index ["company_id", "category_path"], name: "index_radar_collections_one_active_per_category", unique: true, where: "((status)::text = ANY (ARRAY[('requested'::character varying)::text, ('collecting'::character varying)::text]))"
     t.index ["company_id"], name: "index_radar_collections_on_company_id"
     t.index ["requested_by_user_id"], name: "index_radar_collections_on_requested_by_user_id"
   end

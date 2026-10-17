@@ -1,6 +1,6 @@
 # Custo unitário de um produto, vindo do Olist ERP (Tiny), ligado ao anúncio pelo SKU.
 # Ordem: custo PEPS (entradas do Controle de Estoque) → custo cadastrado no produto →
-# custo médio do produto. Sem nenhum deles, o produto fica "sem custo".
+# custo médio do produto → custo da última entrada com preço (produto sem saldo em camadas). Sem nenhum deles, o produto fica "sem custo".
 module Olist
   class UnitCost
     Result = Struct.new(:value, :source, keyword_init: true)
@@ -34,6 +34,8 @@ module Olist
         Result.new(value: product.cost_price, source: "cadastro")
       elsif product.avg_cost_price.to_f.positive?
         Result.new(value: product.avg_cost_price, source: "custo_medio")
+      elsif product.fifo_last_entry_cost.to_f.positive?
+        Result.new(value: product.fifo_last_entry_cost, source: "ultima_entrada")
       end
     end
   end
