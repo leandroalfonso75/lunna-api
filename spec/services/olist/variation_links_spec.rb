@@ -113,4 +113,72 @@ RSpec.describe Olist::SyncProducts, "vínculo de variações" do
     expect(run.reload.status).to eq("success")
     expect(OlistProduct.find_by(olist_id: 2).parent_olist_id).to eq(1)
   end
+
+  describe "composição dos kits" do
+    def kit_item(id, sku, updated: "2026-10-01 10:00:00")
+      item(id, sku, "N", updated: updated).merge("tipo" => "K")
+    end
+
+    def stub_kit(id, components)
+      stub_request(:get, "#{base}/produtos/#{id}/kit")
+        .to_return(status: 200, body: components.map { |cid, sku, qty| { produto: { id: cid, sku: sku }, quantidade: qty } }.to_json)
+    end
+
+    it "guarda a composição de cada kit" do
+      stub_all([ item(1, "A", "N"), item(2, "B", "N"), kit_item(10, "KIT") ])
+      stub_kit(10, [ [ 1, "A", 1 ], [ 2, "B", 2 ] ])
+
+      sync
+
+      kit = OlistProduct.find_by(olist_id: 10)
+      expect(kit.kit_components).to eq([ { "id" => 1, "sku" => "A", "quantity" => 1 }, { "id" => 2, "sku" => "B", "quantity" => 2 } ])
+      expect(kit.kit_checked_at).to be_present
+    end
+
+    it "não relê o kit enquanto ele não mudou e foi lido há pouco" do
+      stub_all([ item(1, "A", "N"), kit_item(10, "KIT") ])
+      stub_kit(10, [ [ 1, "A", 1 ] ])
+
+      sync
+      sync
+
+      expect(WebMock).to have_requested(:get, "#{base}/produtos/10/kit").once
+    end
+
+    it "relê o kit quando ele foi alterado no Olist" do
+      stub_all([ item(1, "A", "N"), kit_item(10, "KIT") ])
+      stub_kit(10, [ [ 1, "A", 1 ] ])
+      sync
+
+      stub_all([ item(1, "A", "N"), item(3, "C", "N"), kit_item(10, "KIT", updated: (Time.current + 1.day).strftime("%Y-%m-%d %H:%M:%S")) ])
+      stub_kit(10, [ [ 1, "A", 1 ], [ 3, "C", 1 ] ])
+      sync
+
+      expect(WebMock).to have_requested(:get, "#{base}/produtos/10/kit").twice
+      expect(OlistProduct.find_by(olist_id: 10).kit_components.size).to eq(2)
+    end
+
+    it "falha ao ler um kit não derruba a sincronização e mantém a composição anterior" do
+      stub_all([ item(1, "A", "N"), kit_item(10, "KIT") ])
+      stub_kit(10, [ [ 1, "A", 1 ] ])
+      sync
+
+      stub_all([ item(1, "A", "N"), kit_item(10, "KIT", updated: (Time.current + 1.day).strftime("%Y-%m-%d %H:%M:%S")) ])
+      stub_request(:get, "#{base}/produtos/10/kit").to_return(status: 500, body: "erro")
+      allow_any_instance_of(Olist::Client).to receive(:sleep)
+
+      run = sync
+
+      expect(run.reload.status).to eq("success")
+      expect(OlistProduct.find_by(olist_id: 10).kit_components.size).to eq(1)
+    end
+
+    it "kit excluído não é lido" do
+      stub_all([ item(1, "A", "N"), kit_item(10, "KIT").merge("situacao" => "E") ])
+
+      sync
+
+      expect(WebMock).not_to have_requested(:get, "#{base}/produtos/10/kit")
+    end
+  end
 end

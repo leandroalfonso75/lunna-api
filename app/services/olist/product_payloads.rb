@@ -14,7 +14,9 @@ module Olist
 
     def call
       children = load_children
-      full = Olist::FullStock.for_skus(@company, (@products + children.values.flatten).map(&:sku))
+      everyone = @products + children.values.flatten
+      full = Olist::FullStock.for_skus(@company, everyone.map(&:sku))
+      @kits = Olist::KitResolver.for_kits(@company, everyone)
 
       @products.map do |product|
         node = base(product, full)
@@ -46,6 +48,7 @@ module Olist
         avg_cost_price: product.avg_cost_price,
         stock: stock_for(product, info),
         cost: cost_for(product, info),
+        kit: kit_payload(product),
         olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
         synced_at: product.synced_at
       }
@@ -54,6 +57,9 @@ module Olist
     # Custo PEPS (Primeiro que Entra, Primeiro que Sai) calculado das entradas do Controle de Estoque do Olist.
     # `warning`: há unidades em estoque cuja entrada não tem custo informado.
     def cost_for(product, info)
+      kit = @kits[product.olist_id]
+      return kit_cost(kit) if kit
+
       {
         available: product.fifo_calculated_at.present?,
         balance_gap: balance_gap(product, info),
@@ -62,6 +68,28 @@ module Olist
         shortfall: product.fifo_shortfall, layers: product.fifo_layers, calculated_at: product.fifo_calculated_at,
         registered: product.cost_price
       }
+    end
+
+    # Kit: o custo é a soma dos componentes; se algum não tem custo, fica vazio e o aviso lista quais.
+    def kit_cost(kit)
+      {
+        available: true, balance_gap: nil,
+        fifo_unit: kit.unit_cost, stock_value: nil, units: nil,
+        warning: kit.missing_cost.any?, warning_units: nil, warning_skus: kit.missing_cost, shortfall: nil,
+        layers: [], calculated_at: nil, registered: nil, source: "kit"
+      }
+    end
+
+    def kit_available(product)
+      @kits[product.olist_id]&.available
+    end
+
+    # Composição do kit (null para produto que não é kit).
+    def kit_payload(product)
+      kit = @kits[product.olist_id]
+      return nil unless kit
+
+      { components: kit.components, missing_cost: kit.missing_cost, complete: kit.complete }
     end
 
     # Diferença entre as unidades que o histórico de movimentações explica e o estoque de hoje
@@ -90,11 +118,12 @@ module Olist
 
     # Estoque total = disponível no Olist + disponível no Full (sem anúncio Full, só o do Olist).
     def stock_for(product, info)
+      available = kit_available(product) || product.stock_available
       {
-        balance: product.stock_balance, reserved: product.stock_reserved, available: product.stock_available,
+        balance: product.stock_balance, reserved: product.stock_reserved, available: available,
         location: product.stock_location, deposits: product.stock_deposits,
         full: full_payload(info),
-        total_available: info.nil? ? product.stock_available : (product.stock_available || 0) + info.available
+        total_available: info.nil? ? available : (available || 0) + info.available
       }
     end
 

@@ -48,6 +48,24 @@ RSpec.describe Olist::UnitCost do
     expect(described_class.for_skus(company, [ "A" ])["A"].value).to eq(2)
   end
 
+  it "kit: custo = soma do custo dos componentes (fonte kit)" do
+    a = product("A", fifo_unit_cost: 95.3)
+    b = product("B", cost_price: 11)
+    create(:olist_product, company: company, sku: "KIT", kind: "K", variation_kind: "N", status: "A", cost_price: 0, avg_cost_price: 0,
+      kit_components: [ { "id" => a.olist_id, "sku" => "A", "quantity" => 1 }, { "id" => b.olist_id, "sku" => "B", "quantity" => 1 } ])
+
+    expect(described_class.for_skus(company, [ "KIT" ])["KIT"]).to have_attributes(value: 106.3, source: "kit")
+  end
+
+  it "kit com componente sem custo não tem custo" do
+    a = product("A", cost_price: 5)
+    b = product("B")
+    create(:olist_product, company: company, sku: "KIT", kind: "K", variation_kind: "N", status: "A", cost_price: 77,
+      kit_components: [ { "id" => a.olist_id, "sku" => "A", "quantity" => 1 }, { "id" => b.olist_id, "sku" => "B", "quantity" => 1 } ])
+
+    expect(described_class.for_skus(company, [ "KIT" ])).to eq({})
+  end
+
   it "lista vazia ou SKUs em branco" do
     expect(described_class.for_skus(company, [])).to eq({})
     expect(described_class.for_skus(company, [ nil, "" ])).to eq({})

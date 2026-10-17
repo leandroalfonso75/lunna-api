@@ -60,6 +60,34 @@ RSpec.describe "Custo PEPS nos produtos do Olist", type: :request do
     expect(cost["stock_value"].to_f).to eq(68.0)
   end
 
+  it "kit: custo e estoque saem dos componentes, com a composição no payload" do
+    a = create(:olist_product, company: company, olist_id: 1, sku: "A", fifo_unit_cost: 95.3, stock_available: 161, variation_kind: "N")
+    b = create(:olist_product, company: company, olist_id: 2, sku: "B", cost_price: 11, stock_available: 30, variation_kind: "N")
+    create(:olist_product, company: company, olist_id: 10, sku: "KIT", kind: "K", variation_kind: "N", stock_available: 999,
+      kit_components: [ { "id" => a.olist_id, "sku" => "A", "quantity" => 1 }, { "id" => b.olist_id, "sku" => "B", "quantity" => 2 } ])
+
+    get "/api/olist/products", params: { q: "KIT" }, headers: auth_headers(member)
+
+    kit = find(10)
+    expect(kit["cost"]).to include("source" => "kit", "warning" => false)
+    expect(kit["cost"]["fifo_unit"]).to eq(95.3 + 22.0)
+    expect(kit["stock"]["available"].to_f).to eq(15.0) # 30 ÷ 2
+    expect(kit["stock"]["total_available"].to_f).to eq(15.0)
+    expect(kit["kit"]["components"].map { |c| [ c["sku"], c["quantity"], c["subtotal"] ] }).to eq([ [ "A", 1.0, 95.3 ], [ "B", 2.0, 22.0 ] ])
+  end
+
+  it "kit com componente sem custo: aviso e custo vazio" do
+    a = create(:olist_product, company: company, olist_id: 1, sku: "A", cost_price: 5, stock_available: 4, variation_kind: "N")
+    b = create(:olist_product, company: company, olist_id: 2, sku: "B", stock_available: 9, variation_kind: "N", cost_price: 0, avg_cost_price: 0)
+    create(:olist_product, company: company, olist_id: 10, sku: "KIT", kind: "K", variation_kind: "N",
+      kit_components: [ { "id" => a.olist_id, "sku" => "A", "quantity" => 1 }, { "id" => b.olist_id, "sku" => "B", "quantity" => 1 } ])
+
+    get "/api/olist/products", params: { q: "KIT" }, headers: auth_headers(member)
+
+    expect(find(10)["cost"]).to include("fifo_unit" => nil, "warning" => true, "warning_skus" => [ "B" ])
+    expect(find(10)["kit"]["missing_cost"]).to eq([ "B" ])
+  end
+
   it "o estado da leitura de custos aparece em /api/olist (sem permissão no Olist)" do
     create(:olist_connection, company: company, costs_status: "forbidden", costs_checked_at: Time.current)
 

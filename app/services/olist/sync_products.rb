@@ -45,6 +45,7 @@ module Olist
       end
 
       link_variations
+      sync_kits
 
       @run.update!(status: "success", products_count: rows.size, finished_at: Time.current, error: nil)
     rescue Olist::Client::Error, Olist::OAuth::Error => e
@@ -72,6 +73,23 @@ module Olist
 
       refresh_parents(parents - refreshed)
       assign_parents(company_id)
+    end
+
+    # Composição dos kits: relê só quando o kit mudou no Olist, ainda não foi lida ou tem mais de 1 dia.
+    # Falha de um kit mantém a composição anterior.
+    def sync_kits
+      kits = OlistProduct.where(company_id: @connection.company_id, kind: "K").where.not(status: "E")
+        .where("kit_checked_at IS NULL OR kit_checked_at < ? OR kit_checked_at < olist_updated_at", 1.day.ago)
+
+      kits.find_each do |kit|
+        components = (@client.product_kit(kit.olist_id) || []).filter_map do |entry|
+          id = entry.dig("produto", "id")
+          id && { "id" => id, "sku" => entry.dig("produto", "sku"), "quantity" => entry["quantidade"] }
+        end
+        kit.update!(kit_components: components, kit_checked_at: Time.current)
+      rescue Olist::Client::Error, Olist::OAuth::Error => e
+        Rails.logger.warn("Olist::SyncProducts: não foi possível ler o kit #{kit.olist_id} (#{e.class})")
+      end
     end
 
     def variations_stale?(parent)

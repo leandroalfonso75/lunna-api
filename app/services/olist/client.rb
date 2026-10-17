@@ -51,6 +51,11 @@ module Olist
       get("/produtos/#{Integer(id)}/custos", params)
     end
 
+    # Composição de um kit (GET /produtos/{id}/kit): [{ produto: { id, sku }, quantidade }].
+    def product_kit(id)
+      get("/produtos/#{Integer(id)}/kit")
+    end
+
     # Saldos de estoque de todos os produtos (GET /estoque).
     def stock(params = {})
       get("/estoque", params)
