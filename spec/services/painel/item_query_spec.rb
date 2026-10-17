@@ -208,4 +208,81 @@ RSpec.describe Painel::ItemQuery do
       expect(call(status: "all")[:items].first[:lean]).to be false
     end
   end
+
+  describe "ordenar por percentual de lucro líquido (net_profit_pct)" do
+    let(:company) { account.company }
+
+    # Preço 100, sem tarifa/frete: lucro % = 100 − custo − 3 (despesas) − imposto (0).
+    before { company.update!(tax_pct: 0, fixed_expenses_pct: 3) }
+
+    def listing(item_id, sku:, cost:, price: 100.0, visits: 0)
+      create(:item_metric, ml_account: account, item_id: item_id, sku: sku, price: price, visits_7d: visits)
+      create(:ml_item, ml_account: account, item_id: item_id, sku: sku, fee_now: 0, ship_cost: 0)
+      create(:olist_product, company: company, sku: sku, variation_kind: "N", status: "A", cost_price: cost, avg_cost_price: 0) if cost
+    end
+
+    def ids(params) = call({ sort: "net_profit_pct" }.merge(params))[:items].map { |i| i[:id] }
+
+    it "do maior para o menor percentual (padrão desc)" do
+      listing("MLB1", sku: "A", cost: 50)   # 47%
+      listing("MLB2", sku: "B", cost: 20)   # 77%
+      listing("MLB3", sku: "C", cost: 90)   # 7%
+
+      expect(ids({})).to eq(%w[MLB2 MLB1 MLB3])
+      expect(call(sort: "net_profit_pct")[:dir]).to eq("desc")
+    end
+
+    it "do menor para o maior com dir=asc" do
+      listing("MLB1", sku: "A", cost: 50)
+      listing("MLB2", sku: "B", cost: 20)
+      listing("MLB3", sku: "C", cost: 90)
+
+      expect(ids(dir: "asc")).to eq(%w[MLB3 MLB1 MLB2])
+    end
+
+    it "anúncio sem custo (sem lucro calculado) fica sempre no fim, nas duas direções" do
+      listing("MLB1", sku: "A", cost: 50)
+      listing("MLB2", sku: "SEM-CUSTO", cost: nil)
+      listing("MLB3", sku: "C", cost: 20)
+
+      expect(ids(dir: "desc").last).to eq("MLB2")
+      expect(ids(dir: "asc").last).to eq("MLB2")
+    end
+
+    it "prejuízo (percentual negativo) entra na ordem" do
+      listing("MLB1", sku: "A", cost: 50)
+      listing("MLB2", sku: "B", cost: 120)
+
+      expect(ids(dir: "asc")).to eq(%w[MLB2 MLB1])
+    end
+
+    it "pagina depois de ordenar tudo, sem repetir nem perder anúncios" do
+      listing("MLB1", sku: "A", cost: 10)
+      listing("MLB2", sku: "B", cost: 20)
+      listing("MLB3", sku: "C", cost: 30)
+      listing("MLB4", sku: "D", cost: 40)
+      listing("MLB5", sku: "E", cost: 50)
+
+      page1 = call(sort: "net_profit_pct", per_page: 2, page: 1)[:items].map { |i| i[:id] }
+      page2 = call(sort: "net_profit_pct", per_page: 2, page: 2)[:items].map { |i| i[:id] }
+      page3 = call(sort: "net_profit_pct", per_page: 2, page: 3)[:items].map { |i| i[:id] }
+
+      expect(page1 + page2 + page3).to eq(%w[MLB1 MLB2 MLB3 MLB4 MLB5])
+      expect(call(sort: "net_profit_pct", per_page: 2)[:total]).to eq(5)
+    end
+
+    it "empate no percentual desempata por visitas" do
+      listing("MLB1", sku: "A", cost: 50, visits: 5)
+      listing("MLB2", sku: "B", cost: 50, visits: 50)
+
+      expect(ids({})).to eq(%w[MLB2 MLB1])
+    end
+
+    it "respeita os filtros (status) ao ordenar" do
+      listing("MLB1", sku: "A", cost: 20)
+      create(:item_metric, ml_account: account, item_id: "MLB9", status: "paused", sku: "Z", price: 100.0)
+
+      expect(ids({})).to eq(%w[MLB1])
+    end
+  end
 end

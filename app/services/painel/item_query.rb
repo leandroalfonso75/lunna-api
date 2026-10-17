@@ -10,7 +10,10 @@ module Painel
     DEFAULT_SORT = :units_7d
 
     NUMERIC_FILTERS = %i[price stock visits_7d units_7d conversion_7d units_delta revenue_7d coverage_days quality_score].freeze
-    SORTABLE_COLUMNS = (NUMERIC_FILTERS + %i[title status sku]).freeze
+    # Ordenações calculadas em Ruby (não são colunas de item_metrics): o lucro depende do custo do Olist, das
+    # tarifas e dos parâmetros da empresa, então tudo é ordenado antes de montar a página.
+    COMPUTED_SORTS = %i[net_profit_pct].freeze
+    SORTABLE_COLUMNS = (NUMERIC_FILTERS + %i[title status sku] + COMPUTED_SORTS).freeze
     ASC_DEFAULT_COLUMNS = %i[title status sku coverage_days].freeze
 
     # "Finalizados/inativos sem faturamento nos últimos 60 dias" (SPEC 6):
@@ -37,11 +40,10 @@ module Painel
       page = resolve_page
       per_page = resolve_per_page
 
-      page_metrics = relation.order(order_clause(sort_column, dir))
-        .offset((page - 1) * per_page).limit(per_page).to_a
+      page_metrics, economics = page_of(relation, sort_column, dir, page, per_page)
 
       {
-        items: build_items(page_metrics),
+        items: build_items(page_metrics, economics),
         total: total, page: page, per_page: per_page,
         status_counts: counts,
         active_filter: { alert: active_alert_info },
@@ -52,6 +54,30 @@ module Painel
     end
 
     private
+
+    # [metrics da página, economics já calculada ou nil]. Ordenação em SQL, ou em Ruby quando a coluna é calculada.
+    def page_of(relation, sort_column, dir, page, per_page)
+      return sorted_by_economics(relation, dir, page, per_page) if COMPUTED_SORTS.include?(sort_column)
+
+      [ relation.order(order_clause(sort_column, dir)).offset((page - 1) * per_page).limit(per_page).to_a, nil ]
+    end
+
+    def sorted_by_economics(relation, dir, page, per_page)
+      metrics = relation.to_a
+      economics = Painel::ItemEconomics.for_page(@account, metrics)
+      ranked = metrics.sort_by { |metric| economics_sort_key(metric, economics[metric.item_id], dir) }
+
+      [ ranked.slice((page - 1) * per_page, per_page) || [], economics ]
+    end
+
+    # Sem lucro calculado (sem custo ou sem preço) vai sempre para o fim; desempate por visitas e id, como no SQL.
+    def economics_sort_key(metric, economics, dir)
+      tie = [ -metric.visits_7d.to_i, metric.item_id ]
+      value = economics&.dig(:net_profit_pct)
+      return [ 1, 0, *tie ] if value.nil?
+
+      [ 0, dir == "desc" ? -value : value, *tie ]
+    end
 
     # ---- escopo (status/alert/id) ----
 
@@ -192,14 +218,14 @@ module Painel
 
     # ---- montagem das linhas ----
 
-    def build_items(metrics)
+    def build_items(metrics, economics = nil)
       return [] if metrics.empty?
 
       ids = metrics.map(&:item_id)
       details = @account.ml_items.where(item_id: ids).pluck(:item_id, :quality_level, :quality_pending)
         .to_h { |item_id, level, pending| [ item_id, [ level, pending ] ] }
       alert_keys = Painel::Alerts.keys_by_item(@account.item_metrics.where(item_id: ids))
-      economics = Painel::ItemEconomics.for_page(@account, metrics)
+      economics ||= Painel::ItemEconomics.for_page(@account, metrics)
 
       metrics.map { |metric| build_item(metric, details[metric.item_id], alert_keys[metric.item_id] || [], economics[metric.item_id]) }
     end
