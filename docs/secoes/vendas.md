@@ -11,7 +11,7 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   problema), logística (Full, Flex, Coleta, Agência, outras), com contagens, e **busca** por nº da venda, produto, SKU,
   anúncio, comprador ou rastreio.
 - **Tabela:** data, produto (foto, SKU, unidades), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
-  Colunas de valores: valor, tarifa, frete, imposto e custo. Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
+  Colunas de valores: valor, tarifa, frete, imposto, despesas fixas e custo. Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
 - **Detalhe (clique na linha):** resultado da venda linha a linha, produtos (variação, tarifa, tipo de anúncio),
   pagamento (forma, parcelas, cupom, reembolso) e envio (situação, logística, destino cidade/UF, rastreio, frete pago pelo
   vendedor e pelo comprador, datas de cada etapa), com link para a venda no Mercado Livre.
