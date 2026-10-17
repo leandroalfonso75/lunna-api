@@ -18,17 +18,22 @@ RSpec.describe Olist::SyncCosts do
       .to_return(status: 200, body: { itens: items, paginacao: { total: items.size } }.to_json)
   end
 
-  it "guarda as movimentações e o custo PEPS do produto" do
+  it "guarda as movimentações e o custo PEPS do produto (Full: venda consome, envio ao Full não)" do
     p1 = product(1, stock_deposits: [ { "id" => 1, "desconsiderar" => false }, { "id" => 7, "desconsiderar" => true } ])
-    stub_movements(1, [ movement(1, "E", 10, preco: 5), movement(2, "E", 10, preco: 8), movement(3, "S", 10), movement(4, "E", 3, preco: 1, deposito: 7) ])
+    stub_movements(1, [
+      movement(1, "E", 10, preco: 5), movement(2, "E", 10, preco: 8),
+      movement(3, "S", 6, deposito: 1).merge("observacao" => "Envio 2 - 3-4-26"),
+      movement(4, "S", 4, preco: 99, deposito: 7)
+    ])
 
     described_class.new(connection).call
 
     p1.reload
-    expect(p1).to have_attributes(fifo_unit_cost: 8, fifo_units: 10, fifo_units_without_cost: 0, fifo_stock_value: 80)
-    expect(p1.fifo_layers.first).to include("remaining" => 10.0, "unit_cost" => 8.0)
+    expect(p1).to have_attributes(fifo_unit_cost: 5, fifo_units: 16, fifo_units_without_cost: 0, fifo_stock_value: 6 * 5 + 10 * 8)
+    expect(p1.fifo_layers.first).to include("remaining" => 6.0, "unit_cost" => 5.0)
     expect(p1.movements_synced_at).to be_present
     expect(OlistStockMovement.where(olist_product_id: 1).count).to eq(4)
+    expect(OlistStockMovement.find_by(olist_product_id: 1, movement_id: 3).note).to eq("Envio 2 - 3-4-26")
     expect(connection.reload.costs_status).to eq("ok")
   end
 
@@ -120,6 +125,18 @@ RSpec.describe Olist::SyncCosts do
     described_class.new(connection).call
 
     expect(OlistProduct.where(company: company).where.not(movements_synced_at: nil).count).to eq(40)
+  end
+
+  it "recalcula o PEPS das movimentações guardadas sem chamar o Olist" do
+    p1 = product(1)
+    stub = stub_movements(1, [ movement(1, "E", 10, preco: 5) ])
+    described_class.new(connection).call
+    p1.update!(fifo_unit_cost: nil)
+
+    described_class.new(connection).recalculate(p1)
+
+    expect(p1.reload.fifo_unit_cost).to eq(5)
+    expect(stub).to have_been_requested.once
   end
 
   it "o job só roda uma conexão ativa e é enfileirado ao fim do sync de produtos" do

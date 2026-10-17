@@ -8,6 +8,13 @@
 # - Custo ausente = preço vazio ou zero. Só gera aviso se a camada AINDA tiver unidades
 #   em estoque: entrada sem custo que já foi toda consumida é ignorada.
 # - O custo do produto é o da camada mais antiga que ainda tem saldo (a próxima a sair).
+#
+# Estoque no Full do Mercado Livre (depósito "Full ML" do Olist, que o Olist deixa fora do saldo):
+# o estoque da empresa é Geral + Full, então tudo entra num único conjunto de camadas.
+# - Saída do depósito Geral para o Full (observação "Envio ..." ou "NFT ...") é TRANSFERÊNCIA: baixa o saldo
+#   do Geral, mas as unidades continuam da empresa e NÃO consomem camadas.
+# - Venda registrada no depósito do Full (saídas) consome camadas normalmente.
+# - Balanço no depósito do Full só zera o razão (o Olist registra só as saídas ali): não cria camada.
 module Olist
   class Fifo
     Layer = Struct.new(:id, :moved_at, :quantity, :remaining, :unit_cost, :origin, keyword_init: true) do
@@ -20,12 +27,17 @@ module Olist
     end
 
     # movements: [{ id:, deposit_id:, kind: "E|S|B", quantity:, price:, moved_at:, origin: }]
-    # ignored_deposit_ids: depósitos que o Olist não conta no saldo (ex.: Full ML).
-    def self.call(movements, ignored_deposit_ids: [])
-      new(movements, ignored_deposit_ids).call
+    # ledger_deposit_ids: depósitos "razão" (Full ML), onde só as saídas (vendas) são registradas.
+    # ignored_deposit_ids: depósitos a descartar por completo.
+    def self.call(movements, ledger_deposit_ids: [], ignored_deposit_ids: [])
+      new(movements, ledger_deposit_ids, ignored_deposit_ids).call
     end
 
-    def initialize(movements, ignored_deposit_ids)
+    # Observação que marca a saída do Geral como envio ao Full (transferência), não venda.
+    TRANSFER_NOTE = /\A\s*(envio|nft)\b/i
+
+    def initialize(movements, ledger_deposit_ids, ignored_deposit_ids)
+      @ledger = ledger_deposit_ids
       @movements = movements.reject { |m| ignored_deposit_ids.include?(m[:deposit_id]) }
       @layers = []
       @balances = Hash.new(BigDecimal("0"))
@@ -53,14 +65,23 @@ module Olist
         add_layer(movement, quantity)
         @balances[deposit] += quantity
       when "S"
-        consume(quantity)
-        @balances[deposit] -= quantity
+        consume(quantity) unless transfer?(movement)
+        @balances[deposit] -= quantity unless ledger?(deposit)
       when "B"
+        return if ledger?(deposit)
+
         delta = quantity - @balances[deposit]
         add_layer(movement, delta) if delta.positive?
         consume(-delta) if delta.negative?
         @balances[deposit] = quantity
       end
+    end
+
+    def ledger?(deposit) = @ledger.include?(deposit)
+
+    # Envio do Geral ao Full: o estoque só mudou de lugar.
+    def transfer?(movement)
+      !ledger?(movement[:deposit_id]) && movement[:note].to_s.match?(TRANSFER_NOTE)
     end
 
     def add_layer(movement, quantity)

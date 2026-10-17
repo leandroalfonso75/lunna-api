@@ -54,7 +54,23 @@ module Olist
         OlistStockMovement.insert_all(rows) if rows.any?
       end
 
-      result = Olist::Fifo.call(rows.map { |row| fifo_input(row) }, ignored_deposit_ids: ignored_deposits(product))
+      calculate(product, now)
+    end
+
+    # Recalcula o PEPS de um produto a partir das movimentações já guardadas (sem chamar o Olist).
+    # Útil quando a regra de cálculo muda.
+    def recalculate(product)
+      calculate(product, Time.current)
+    end
+
+    public :recalculate
+
+    def calculate(product, now)
+      movements = OlistStockMovement.where(company_id: product.company_id, olist_product_id: product.olist_id).map do |m|
+        { id: m.movement_id, deposit_id: m.deposit_id, kind: m.kind, quantity: m.quantity, price: m.price,
+          moved_at: m.moved_at, origin: m.origin, note: m.note }
+      end
+      result = Olist::Fifo.call(movements, ledger_deposit_ids: ledger_deposits(product))
       store(product, result, now)
     end
 
@@ -68,13 +84,8 @@ module Olist
       }
     end
 
-    def fifo_input(row)
-      { id: row[:movement_id], deposit_id: row[:deposit_id], kind: row[:kind], quantity: row[:quantity], price: row[:price],
-        moved_at: row[:moved_at], origin: row[:origin] }
-    end
-
-    # Depósitos que o Olist não conta no saldo (Full ML): ficam fora do PEPS.
-    def ignored_deposits(product)
+    # Depósitos que o Olist não conta no saldo (Full ML): só as saídas (vendas) são registradas ali.
+    def ledger_deposits(product)
       (product.stock_deposits || []).select { |deposit| deposit["desconsiderar"] }.filter_map { |deposit| deposit["id"] }
     end
 

@@ -45,7 +45,7 @@ module Olist
         price: product.price, promo_price: product.promo_price, cost_price: product.cost_price,
         avg_cost_price: product.avg_cost_price,
         stock: stock_for(product, info),
-        cost: cost_for(product),
+        cost: cost_for(product, info),
         olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
         synced_at: product.synced_at
       }
@@ -53,14 +53,24 @@ module Olist
 
     # Custo PEPS (Primeiro que Entra, Primeiro que Sai) calculado das entradas do Controle de Estoque do Olist.
     # `warning`: há unidades em estoque cuja entrada não tem custo informado.
-    def cost_for(product)
+    def cost_for(product, info)
       {
         available: product.fifo_calculated_at.present?,
+        balance_gap: balance_gap(product, info),
         fifo_unit: product.fifo_unit_cost, stock_value: product.fifo_stock_value, units: product.fifo_units,
         warning: product.fifo_units_without_cost.to_f.positive?, warning_units: product.fifo_units_without_cost,
         shortfall: product.fifo_shortfall, layers: product.fifo_layers, calculated_at: product.fifo_calculated_at,
         registered: product.cost_price
       }
+    end
+
+    # Diferença entre as unidades que o histórico de movimentações explica e o estoque de hoje
+    # (saldo do Olist + Full do ML). Diferente de zero = o histórico não fecha com o saldo.
+    def balance_gap(product, info)
+      return nil if product.fifo_calculated_at.nil?
+
+      gap = product.fifo_units.to_f - (product.stock_balance.to_f + info&.total.to_f)
+      gap.abs <= 0.5 ? 0.0 : gap.round(3)
     end
 
     # Pai: faixa de custo das variações (menor e maior) e o aviso se alguma tiver.
@@ -70,6 +80,7 @@ module Olist
 
       {
         available: costs.any? { |cost| cost[:available] },
+        balance_gap: nil,
         fifo_unit: nil, range: units.empty? ? nil : [ units.min, units.max ],
         stock_value: costs.filter_map { |cost| cost[:stock_value] }.sum, units: costs.filter_map { |cost| cost[:units] }.sum,
         warning: costs.any? { |cost| cost[:warning] }, warning_units: costs.filter_map { |cost| cost[:warning_units] }.sum,

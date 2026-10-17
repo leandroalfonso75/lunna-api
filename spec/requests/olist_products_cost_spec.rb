@@ -27,6 +27,16 @@ RSpec.describe "Custo PEPS nos produtos do Olist", type: :request do
     expect(find(2)["cost"]["warning_units"].to_f).to eq(6.0)
   end
 
+  it "informa a diferença entre o histórico e o estoque de hoje (Olist + Full do ML)" do
+    create(:olist_product, company: company, olist_id: 5, sku: "GAP", stock_balance: 100, fifo_units: 90, fifo_calculated_at: Time.current)
+    create(:olist_product, company: company, olist_id: 6, sku: "OK", stock_balance: 50, fifo_units: 50, fifo_calculated_at: Time.current)
+
+    get "/api/olist/products", headers: auth_headers(member)
+
+    expect(find(5)["cost"]["balance_gap"]).to eq(-10.0)
+    expect(find(6)["cost"]["balance_gap"]).to eq(0.0)
+  end
+
   it "produto ainda não calculado vem como indisponível" do
     create(:olist_product, company: company, olist_id: 3)
 

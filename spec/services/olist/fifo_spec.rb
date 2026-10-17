@@ -117,6 +117,55 @@ RSpec.describe Olist::Fifo do
     expect(result.unit_cost).to eq(5)
   end
 
+  describe "Full do Mercado Livre (depósito razão)" do
+    def mv(id, kind, qty, price: nil, deposit: 1, note: nil, day: id)
+      { id: id, deposit_id: deposit, kind: kind, quantity: qty, price: price, moved_at: Time.utc(2026, 1, 1) + day.days, origin: nil, note: note }
+    end
+
+    it "envio do Geral ao Full (observação 'Envio ...') não consome camadas, só baixa o saldo do Geral" do
+      result = run([ mv(1, "E", 100, price: 5), mv(2, "S", 40, note: "Envio 3 - 2-3-26") ], ledger_deposit_ids: [ 7 ])
+
+      expect(result.units).to eq(100)
+      expect(result.balance).to eq(60)
+      expect(result.layers.first.remaining).to eq(100)
+    end
+
+    it "NFT e 'Envio Full' também são transferência" do
+      result = run([ mv(1, "E", 50, price: 5), mv(2, "S", 10, note: "NFT 2-2"), mv(3, "S", 5, note: "Envio Full 1-2-3") ], ledger_deposit_ids: [ 7 ])
+
+      expect(result.units).to eq(50)
+    end
+
+    it "venda registrada no depósito do Full consome as camadas mais antigas" do
+      result = run(
+        [ mv(1, "E", 10, price: 5), mv(2, "E", 10, price: 8), mv(3, "S", 10, note: "Envio 1", deposit: 1), mv(4, "S", 4, deposit: 7) ],
+        ledger_deposit_ids: [ 7 ]
+      )
+
+      expect(result.units).to eq(16)
+      expect(result.layers.map { |l| [ l.remaining, l.unit_cost ] }).to eq([ [ 6, 5 ], [ 10, 8 ] ])
+      expect(result.unit_cost).to eq(5)
+    end
+
+    it "balanço no depósito do Full só zera o razão: não cria camada" do
+      result = run([ mv(1, "E", 10, price: 5), mv(2, "S", 3, deposit: 7), mv(3, "B", 0, price: 0, deposit: 7) ], ledger_deposit_ids: [ 7 ])
+
+      expect(result.units).to eq(7)
+    end
+
+    it "saída comum do Geral (sem nota de envio) continua sendo venda" do
+      result = run([ mv(1, "E", 10, price: 5), mv(2, "S", 4, note: "Vendas Matriz 3/4") ], ledger_deposit_ids: [ 7 ])
+
+      expect(result.units).to eq(6)
+    end
+
+    it "o mesmo texto no depósito do Full não é tratado como transferência" do
+      result = run([ mv(1, "E", 10, price: 5), mv(2, "S", 4, deposit: 7, note: "Envio") ], ledger_deposit_ids: [ 7 ])
+
+      expect(result.units).to eq(6)
+    end
+  end
+
   it "guarda o custo da última entrada informada, mesmo sem estoque" do
     result = run([ move(1, "E", 5, price: 4), move(2, "E", 5, price: 6), move(3, "S", 10) ])
 
