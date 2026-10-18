@@ -22,9 +22,36 @@ module Ml
         campaigns = campaigns(client, account, advertiser_id, from, to, now, notes)
         days = daily(client, account, advertiser_id, campaigns, from, to, notes)
         items = items(client, account, advertiser_id, today, now, notes)
-        account.update_columns(ads_synced_at: now)
+        account.update_columns(ads_synced_at: now, ads_recent_synced_at: now, ads_advertiser_id: advertiser_id)
 
         Result.new(campaigns: campaigns.size, items: items, days: days, notes: notes.first(5), ok: notes.empty?)
+      end
+
+      # Leitura rápida (a cada 30 min): só ontem e hoje de cada campanha já conhecida, para o "Hoje" da tela.
+      def self.refresh_recent(client, account, today: Date.current)
+        notes = []
+        advertiser_id = account.ads_advertiser_id || advertiser(client, notes)
+        return Result.new(campaigns: 0, items: 0, days: 0, notes: notes, ok: false) unless advertiser_id
+
+        ids = account.ml_ad_campaigns.pluck(:campaign_id)
+        days = daily(client, account, advertiser_id, ids, today - 1, today, notes)
+        account.update_columns(ads_recent_synced_at: Time.current, ads_advertiser_id: advertiser_id)
+        Result.new(campaigns: ids.size, items: 0, days: days, notes: notes.first(5), ok: notes.empty?)
+      end
+
+      # Métricas por anúncio de um período qualquer (hoje, ontem, datas escolhidas), consultadas na hora.
+      # => { item_id => métricas da API } ou nil se o Mercado Livre não respondeu.
+      def self.live_items(client, account, from, to)
+        notes = []
+        advertiser_id = account.ads_advertiser_id || advertiser(client, notes)
+        return nil unless advertiser_id
+
+        rows = paginate(notes, "anúncios", PAGE) do |offset|
+          client.ads_items(advertiser_id, from: from, to: to, offset: offset, limit: PAGE)
+        end
+        return nil if rows.empty? && notes.any?
+
+        rows.to_h { |ad| [ ad["item_id"], ad["metrics"] || {} ] }
       end
 
       def self.advertiser(client, notes)

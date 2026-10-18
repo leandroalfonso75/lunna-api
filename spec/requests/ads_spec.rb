@@ -56,6 +56,77 @@ RSpec.describe "/api/ads", type: :request do
     expect(json["previous"]["cost"]).to eq(7.0)
   end
 
+  it "hoje e ontem mostram só o dia, com comparação com o dia anterior" do
+    campaign(1)
+    day(1, Date.current, cost: 4, amount: 40)
+    day(1, Date.current - 1, cost: 10, amount: 100)
+    day(1, Date.current - 2, cost: 8, amount: 80)
+
+    get "/api/ads", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
+    expect(json["period"]).to include("preset" => "today", "days" => 1)
+    expect(json["summary"]["cost"]).to eq(4.0)
+    expect(json["previous"]["cost"]).to eq(10.0)
+    expect(json["daily"].size).to eq(1)
+
+    get "/api/ads", params: { account_id: account.id, period: "yesterday" }, headers: auth_headers(member)
+    expect(json["period"]).to include("preset" => "yesterday", "days" => 1)
+    expect(json["summary"]["cost"]).to eq(10.0)
+    expect(json["previous"]["cost"]).to eq(8.0)
+  end
+
+  it "datas escolhidas: recorte pelo período e limite de 90 dias" do
+    campaign(1)
+    day(1, Date.current - 5, cost: 10, amount: 100)
+    day(1, Date.current - 6, cost: 3, amount: 30)
+    day(1, Date.current - 20, cost: 50, amount: 500)
+
+    get "/api/ads", params: { account_id: account.id, from: (Date.current - 6).iso8601, to: (Date.current - 5).iso8601 },
+      headers: auth_headers(member)
+    expect(json["period"]).to include("preset" => "custom", "days" => 2)
+    expect(json["summary"]["cost"]).to eq(13.0)
+
+    get "/api/ads", params: { account_id: account.id, from: (Date.current - 300).iso8601, to: Date.current.iso8601 },
+      headers: auth_headers(member)
+    expect(json["period"]["days"]).to eq(90)
+  end
+
+  it "anúncios de um período que não está guardado (hoje, ontem, datas) são consultados no Mercado Livre na hora" do
+    campaign(1)
+    ad("MLB1", 1, { "cost" => 999.0 }, title: "Batom")
+    allow(Ml::OAuth).to receive(:refresh!)
+    allow(Ml::Sync::Ads).to receive(:live_items)
+      .and_return({ "MLB1" => { "cost" => 7.0, "total_amount" => 70.0, "units_quantity" => 1, "clicks" => 3, "prints" => 90 } })
+
+    get "/api/ads/items", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
+
+    expect(json).to include("live" => true, "live_error" => false, "window" => "custom")
+    expect(json["items"].first["metrics"]).to include("cost" => 7.0, "total_amount" => 70.0, "acos" => 10.0)
+    expect(Ml::Sync::Ads).to have_received(:live_items).once
+  end
+
+  it "se o Mercado Livre não responder, os anúncios vêm zerados e a resposta avisa" do
+    campaign(1)
+    ad("MLB1", 1, { "cost" => 999.0 })
+    allow(Ml::OAuth).to receive(:refresh!)
+    allow(Ml::Sync::Ads).to receive(:live_items).and_return(nil)
+
+    get "/api/ads/items", params: { account_id: account.id, period: "yesterday" }, headers: auth_headers(member)
+
+    expect(json).to include("live" => true, "live_error" => true)
+    expect(json["items"].first["metrics"]["cost"]).to eq(0.0)
+  end
+
+  it "7, 30 e 90 dias usam as janelas guardadas, sem chamar o Mercado Livre" do
+    campaign(1)
+    ad("MLB1", 1, { "cost" => 5.0 })
+    allow(Ml::Sync::Ads).to receive(:live_items)
+
+    get "/api/ads/items", params: { account_id: account.id, period: "30d" }, headers: auth_headers(member)
+
+    expect(json).to include("live" => false, "window" => "30d")
+    expect(Ml::Sync::Ads).not_to have_received(:live_items)
+  end
+
   it "campanha sem venda fica com ACOS nulo, sem dividir por zero" do
     campaign(1)
     day(1, Date.current - 1, cost: 10, amount: 0, clicks: 0, units: 0)

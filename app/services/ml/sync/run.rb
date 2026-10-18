@@ -14,6 +14,7 @@ module Ml
       DETAILS_BATCH = 60
       SHIPMENTS_BATCH = 60
       ADS_EVERY = 3.hours
+      ADS_RECENT_EVERY = 30.minutes
       DETAIL_MAX_LENGTH = 2_000
 
       # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
@@ -117,11 +118,13 @@ module Ml
         result
       end
 
-      # Campanhas e métricas de publicidade (seção Ads), a cada 3 horas.
+      # Publicidade (seção Ads): leitura completa a cada 3 horas e, entre elas, ontem e hoje a cada 30 minutos.
       def sync_ads(client)
-        return if @account.ads_synced_at.present? && @account.ads_synced_at > ADS_EVERY.ago
+        full_due = @account.ads_synced_at.nil? || @account.ads_synced_at <= ADS_EVERY.ago
+        recent_due = @account.ads_recent_synced_at.nil? || @account.ads_recent_synced_at <= ADS_RECENT_EVERY.ago
+        return unless full_due || recent_due
 
-        result = Ml::Sync::Ads.call(client, @account)
+        result = full_due ? Ml::Sync::Ads.call(client, @account) : Ml::Sync::Ads.refresh_recent(client, @account)
         @notes.concat(result.notes)
       end
 

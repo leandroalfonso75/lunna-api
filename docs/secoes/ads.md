@@ -3,7 +3,8 @@
 Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últimos **3 meses**, com as métricas que a API entrega.
 
 ## O que mostra
-- **Período:** 7, 30, 60 dias ou 3 meses (a API do Mercado Livre limita a consulta a 90 dias).
+- **Período:** Hoje, Ontem, 7, 30, 60 dias, 3 meses ou datas escolhidas (a API do Mercado Livre limita a consulta a 90
+  dias). Campanhas, resumo e gráfico saem dos dados diários guardados; "Hoje" é atualizado a cada 30 minutos.
 - **Resumo (8 cartões):** investimento, vendas por Ads, ACOS, ROAS, cliques, impressões, conversão e vendas sem Ads
   (orgânicas). Cada cartão compara com o período anterior de mesmo tamanho, quando há dados (▲/▼ verde ou vermelho
   conforme subir seja bom ou ruim).
@@ -11,7 +12,8 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 - **Aba Campanhas:** nome, situação, estratégia, investimento, vendas, ACOS (com a meta da campanha), ROAS, cliques,
   CTR, CPC, conversão e orçamento diário. O ACOS fica verde dentro da meta, amarelo até 20% acima e vermelho acima disso.
   Ao clicar abre a configuração (metas, orçamento, datas), o resultado (vendas diretas, indiretas e orgânicas) e um
-  gráfico por dia, com o atalho "Ver os anúncios desta campanha".
+  gráfico por dia, com o atalho "Ver os anúncios ativos desta campanha" (abre a aba Anúncios já filtrada pela campanha e
+  por "Ativos").
 - **Aba Anúncios:** os anúncios em campanha, com foto, campanha, investimento, vendas, ACOS, ROAS, unidades, cliques e
   impressões. Filtros por campanha, situação (ativo/pausado), desempenho e busca por título/código; ordenação por qualquer
   coluna; totais do filtro no rodapé.
@@ -21,8 +23,9 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 ## Contas (feitas na API, nunca somadas entre campanhas)
 `ACOS = investimento ÷ vendas por Ads × 100`, `ROAS = vendas ÷ investimento`, `CTR = cliques ÷ impressões × 100`,
 `CPC = investimento ÷ cliques`, `conversão = unidades vendidas por Ads ÷ cliques × 100`. Implementado em
-`Painel::AdsQuery`. Os totais de uma campanha e do resumo vêm da soma dos dias; os dos anúncios, das janelas de 7, 30 e
-90 dias (por isso o período de 60 dias usa a janela de 90 dias na aba Anúncios).
+`Painel::AdsQuery`. Os totais de uma campanha e do resumo vêm da soma dos dias. Os dos anúncios vêm das janelas guardadas
+de 7, 30 e 90 dias; os outros períodos (Hoje, Ontem, 60 dias e datas escolhidas) são consultados no Mercado Livre na
+hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre não responder, a tela avisa.
 
 ## Dados e atualização
 - Fonte: API de publicidade do Mercado Livre (`/advertising/...`, somente leitura, `api-version` 1 e 2). A conta de
@@ -30,8 +33,9 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 - `Ml::Sync::Ads` lê campanhas (`campaigns/search`), a série diária de cada campanha (`ads/search` com
   `aggregation_type=DAILY` filtrado por campanha) e os anúncios em campanha com as métricas de 7, 30 e 90 dias. Leva
   cerca de 15 segundos e cerca de 25 chamadas.
-- Roda **a cada 3 horas** dentro da sincronização normal (`ml_accounts.ads_synced_at`) e, para administradores, pelo
-  botão "Atualizar do Mercado Livre agora" (`POST /api/ads/sync`, `Ml::AdsSyncJob`).
+- Leitura completa **a cada 3 horas** dentro da sincronização normal (`ml_accounts.ads_synced_at`); entre elas, uma
+  leitura rápida de ontem e hoje a cada 30 minutos (`ads_recent_synced_at`, `Ml::Sync::Ads.refresh_recent`). Para
+  administradores também há o botão "Atualizar do Mercado Livre agora" (`POST /api/ads/sync`, `Ml::AdsSyncJob`).
 - Tabelas: `ml_ad_campaigns`, `ml_ad_items` (métricas por janela em `metrics`) e `ml_ad_daily_metrics`.
 - Anúncio que sai das campanhas é removido na leitura seguinte; anúncio cuja campanha não aparece mais mostra "Campanha encerrada".
 

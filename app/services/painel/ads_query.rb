@@ -6,10 +6,10 @@
 #   Conversão = unidades vendidas por ads ÷ cliques × 100
 module Painel
   class AdsQuery
-    PRESETS = { "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
+    PRESETS = { "today" => 1, "yesterday" => 1, "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
+    STORED_ITEM_WINDOWS = %w[7d 30d 90d].freeze
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 90
-    ITEM_WINDOWS = [ [ 7, "7d" ], [ 30, "30d" ], [ MAX_DAYS, "90d" ] ].freeze
     PER_PAGES = [ 25, 50, 100 ].freeze
     ITEM_SORTS = %w[cost total_amount acos roas clicks prints units title price].freeze
     MIN_COST_TO_FLAG = 10.0
@@ -62,20 +62,25 @@ module Painel
     end
 
     def items
-      window_key = item_window_key
+      stored_key = preset_key if STORED_ITEM_WINDOWS.include?(preset_key)
+      live = stored_key.nil?
+      live_metrics = live ? live_item_metrics(*window) : nil
       campaigns = @account.ml_ad_campaigns.index_by(&:campaign_id)
       scope = @account.ml_ad_items
       scope = scope.where(campaign_id: @params[:campaign_id]) if @params[:campaign_id].present?
       scope = scope.where(status: @params[:status]) if %w[active paused].include?(@params[:status].to_s)
       scope = apply_search(scope)
 
-      rows = scope.to_a.map { |item| item_payload(item, window_key, campaigns) }
+      rows = scope.to_a.map do |item|
+        raw = live ? (live_metrics&.dig(item.item_id) || {}) : (item.metrics[stored_key] || {})
+        item_payload(item, raw, campaigns)
+      end
       rows = rows.select { |r| r[:flag] && r[:flag][:key] == @params[:flag].to_s } if @params[:flag].present?
       sorted = sort_items(rows)
       page, per = paging
 
       {
-        window: window_key, items: sorted.slice((page - 1) * per, per) || [], total: sorted.size, page: page, per_page: per,
+        window: stored_key || "custom", live: live, live_error: live && live_metrics.nil?, items: sorted.slice((page - 1) * per, per) || [], total: sorted.size, page: page, per_page: per,
         sort: item_sort, dir: item_dir,
         totals: derive(sum_hashes(rows.map { |r| r[:metrics] })),
         flags: rows.filter_map { |r| r[:flag]&.dig(:key) }.tally
@@ -109,6 +114,9 @@ module Painel
         to = [ parse_date(@params[:to]), @today ].min
         return [ from, [ to, from ].max ]
       end
+
+      return [ @today, @today ] if preset_key == "today"
+      return [ @today - 1, @today - 1 ] if preset_key == "yesterday"
 
       [ @today - (PRESETS.fetch(preset_key) - 1), @today ]
     end
@@ -198,13 +206,18 @@ module Painel
 
     # --- anúncios ---
 
-    def item_window_key
-      days = custom_dates? ? MAX_DAYS : PRESETS.fetch(preset_key)
-      ITEM_WINDOWS.find { |limit, _| days <= limit }&.last || "90d"
+    # Períodos que não estão guardados por anúncio (hoje, ontem, 60 dias e datas escolhidas) são
+    # consultados no Mercado Livre na hora e ficam 5 minutos em cache.
+    def live_item_metrics(from, to)
+      Rails.cache.fetch([ "ads-live-items", @account.id, from.iso8601, to.iso8601 ], expires_in: 5.minutes, skip_nil: true) do
+        Ml::OAuth.refresh!(@account)
+        Ml::Sync::Ads.live_items(Ml::Client.new(access_token: @account.access_token), @account, from, to)
+      end
+    rescue Ml::OAuth::Error, Ml::Client::Error
+      nil
     end
 
-    def item_payload(item, window_key, campaigns)
-      raw = item.metrics[window_key] || {}
+    def item_payload(item, raw, campaigns)
       metrics = derive(
         clicks: raw["clicks"].to_i, prints: raw["prints"].to_i, cost: raw["cost"].to_f, total_amount: raw["total_amount"].to_f,
         direct_amount: raw["direct_amount"].to_f, indirect_amount: raw["indirect_amount"].to_f, units: raw["units_quantity"].to_i,
@@ -271,7 +284,7 @@ module Painel
     end
 
     def sync_info
-      { last_sync_at: @account.ads_synced_at, campaigns: @account.ml_ad_campaigns.count, ads: @account.ml_ad_items.count }
+      { last_sync_at: @account.ads_synced_at, recent_sync_at: @account.ads_recent_synced_at, campaigns: @account.ml_ad_campaigns.count, ads: @account.ml_ad_items.count }
     end
   end
 end

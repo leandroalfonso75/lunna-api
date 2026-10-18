@@ -72,6 +72,31 @@ RSpec.describe Ml::Sync::Ads do
     expect(MlAdItem.where(ml_account_id: account.id).pluck(:item_id)).to eq([ "MLB1" ])
   end
 
+  it "leitura rápida: só ontem e hoje das campanhas já conhecidas" do
+    MlAdCampaign.create!(ml_account_id: account.id, campaign_id: 111, name: "Maquiagens", status: "active")
+    account.update_columns(ads_advertiser_id: 29_660)
+    stub_ads({ aggregation_type: "DAILY", "date_from" => "2026-10-16" }, [
+      { date: "2026-10-16", clicks: 4, prints: 400, cost: 2.0, total_amount: 20.0, units_quantity: 1 },
+      { date: "2026-10-17", clicks: 6, prints: 600, cost: 3.0, total_amount: 40.0, units_quantity: 1 }
+    ])
+
+    result = described_class.refresh_recent(client, account, today: today)
+
+    expect(result).to have_attributes(days: 2, ok: true)
+    expect(MlAdDailyMetric.where(ml_account_id: account.id).sum(:cost)).to eq(5.0)
+    expect(account.reload.ads_recent_synced_at).to be_present
+    expect(WebMock).not_to have_requested(:get, %r{/campaigns/search})
+  end
+
+  it "consulta na hora as métricas por anúncio de um período qualquer" do
+    account.update_columns(ads_advertiser_id: 29_660)
+    stub_ads({ "date_from" => "2026-10-17", "date_to" => "2026-10-17" }, [ ad ])
+
+    metrics = described_class.live_items(client, account, today, today)
+
+    expect(metrics).to eq({ "MLB1" => { "clicks" => 10, "prints" => 1000, "cost" => 5.0, "total_amount" => 60.0, "units_quantity" => 2 } })
+  end
+
   it "conta sem publicidade vira nota, sem erro" do
     stub_request(:get, "https://api.mercadolibre.com/advertising/advertisers").with(query: { product_id: "PADS" })
       .to_return(status: 200, body: { advertisers: [] }.to_json)
