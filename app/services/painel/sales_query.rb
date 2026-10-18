@@ -6,6 +6,9 @@
 # Frete do carrinho: vendas do mesmo carrinho (pack) viajam no MESMO envio e o ML informa o frete do
 # envio inteiro em cada uma. O frete do vendedor é dividido entre as vendas do envio, proporcional às
 # unidades de cada uma (as canceladas ficam de fora).
+# Custo de Ads (lucro pós Ads): o gasto de publicidade de cada anúncio em cada dia (ml_ad_item_dailies, da seção
+# Ads) é dividido entre as unidades vendidas desse anúncio nesse dia. Dia ainda não fechado na leitura de Ads
+# (hoje, ou lido antes de acabar) deixa a venda "pendente": o valor é refeito a cada atualização até fechar.
 # Pedido cancelado não entra nos totais. Sem custo de algum item, o lucro do pedido não é calculado.
 module Painel
   class SalesQuery
@@ -13,7 +16,7 @@ module Painel
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 92
     PER_PAGES = [ 25, 50, 100 ].freeze
-    SORTS = %w[date total profit profit_pct units].freeze
+    SORTS = %w[date total profit profit_pct units ads_cost profit_after_ads profit_after_ads_pct].freeze
 
     ORDER_STATUS = {
       "paid" => [ "Paga", "ok" ], "confirmed" => [ "Confirmada", "neutral" ],
@@ -113,8 +116,62 @@ module Painel
       manual = @company.ml_costs.where(sku: skus).index_by(&:sku)
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
       groups = shipment_groups(orders)
+      ads = ads_context(orders, items)
 
-      orders.map { |order| row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id]) }
+      orders.map { |order| row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id], ads) }
+    end
+
+    # --- custo de Ads por venda ---
+
+    def sale_day(order) = order.date_created.in_time_zone(@zone).to_date
+
+    # Tudo o que o rateio precisa, buscado uma vez para a página inteira.
+    def ads_context(orders, items)
+      lines = items.values.flatten
+      item_ids = lines.map(&:item_id).uniq
+      active = orders.reject { |o| %w[cancelled invalid].include?(o.status) }
+      days = active.map { |o| sale_day(o) }.uniq
+      return { empty: true } if days.empty? || item_ids.empty?
+
+      spend = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: days).pluck(:item_id, :date, :cost)
+        .to_h { |item_id, date, cost| [ [ item_id, date ], cost.to_f ] }
+      closed = @account.ml_ad_day_syncs.where(date: days).to_h { |s| [ s.date, s.closed? ] }
+      advertised = MlAdItem.where(ml_account_id: @account.id, item_id: item_ids).pluck(:item_id).to_set
+      advertised.merge(MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids).distinct.pluck(:item_id))
+
+      { spend: spend, closed: closed, advertised: advertised, units: units_sold_by_item_day(item_ids, days) }
+    end
+
+    # Unidades vendidas por anúncio e dia (vendas não canceladas): base do rateio do gasto do dia.
+    def units_sold_by_item_day(item_ids, days)
+      from = @zone.local(days.min.year, days.min.month, days.min.day).beginning_of_day
+      to = @zone.local(days.max.year, days.max.month, days.max.day).end_of_day
+      MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+        .where(o: { ml_account_id: @account.id }).where.not(o: { status: %w[cancelled invalid] })
+        .where(item_id: item_ids).where("o.date_created BETWEEN ? AND ?", from, to)
+        .group("ml_order_items.item_id", Arel.sql("(o.date_created AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::date"))
+        .sum("ml_order_items.quantity")
+    end
+
+    # => { cost:, state: "apurado" | "pendente" | "sem_ads", lines: [...] }
+    def ads_for(order, lines, ads)
+      return { cost: 0.0, state: "sem_ads", lines: [] } if ads[:empty]
+
+      day = sale_day(order)
+      closed = ads[:closed][day]
+      pending = false
+      line_costs = lines.filter_map do |line|
+        next unless ads[:advertised].include?(line.item_id)
+
+        day_cost = ads[:spend][[ line.item_id, day ]].to_f
+        pending ||= !closed
+        sold = ads[:units][[ line.item_id, day ]].to_i
+        share = sold.positive? ? day_cost * line.quantity.to_i / sold : 0.0
+        { item_id: line.item_id, day_cost: day_cost, units_day: sold, cost: share }
+      end
+
+      state = line_costs.empty? ? "sem_ads" : (pending ? "pendente" : "apurado")
+      { cost: line_costs.sum(0.0) { |l| l[:cost] }, state: state, lines: line_costs }
     end
 
     # shipping_id => { units: total de unidades das vendas ativas do envio, orders: [order_id, ...] }
@@ -133,7 +190,7 @@ module Painel
       end
     end
 
-    def row(order, lines, olist, manual, thumbs, group)
+    def row(order, lines, olist, manual, thumbs, group, ads)
       shipment = order.shipment
       units = lines.sum { |line| line.quantity.to_i }
       share = shipping_share(shipment, units, group)
@@ -150,7 +207,7 @@ module Painel
         items: items, units: items.sum { |i| i[:quantity].to_i },
         total_amount: order.total_amount&.to_f, paid_amount: order.paid_amount&.to_f,
         shipping: shipping(order, shipment, share, group, order.order_id),
-        economics: economics(order, lines, shipment, olist, manual, share)
+        economics: economics(order, lines, shipment, olist, manual, share, ads)
       }
     end
 
@@ -188,7 +245,7 @@ module Painel
       }
     end
 
-    def economics(order, lines, shipment, olist, manual, shipping_cost_share)
+    def economics(order, lines, shipment, olist, manual, shipping_cost_share, ads)
       return nil if %w[cancelled invalid].include?(order.status) || lines.empty?
 
       revenue = lines.sum { |l| l.unit_price.to_f * l.quantity.to_i }
@@ -198,12 +255,17 @@ module Painel
       fixed = revenue * @company.fixed_expenses_pct.to_f / 100.0
       cost = total_cost(lines, olist, manual)
       profit = cost.nil? ? nil : revenue - cost - fee - shipping_cost - fixed - tax
+      ads_info = ads_for(order, lines, ads)
+      after_ads = profit.nil? ? nil : profit - ads_info[:cost]
 
       {
         revenue: revenue, cost: cost, fee: fee, shipping_cost: shipping_cost,
         shipping_known: shipment.present? && !shipment["seller_cost"].nil?,
         fixed_expenses: fixed, tax: tax,
-        net_profit: profit, net_profit_pct: profit && revenue.positive? ? profit / revenue * 100.0 : nil
+        net_profit: profit, net_profit_pct: profit && revenue.positive? ? profit / revenue * 100.0 : nil,
+        ads_cost: ads_info[:cost], ads_state: ads_info[:state], ads_lines: ads_info[:lines],
+        net_profit_after_ads: after_ads,
+        net_profit_after_ads_pct: after_ads && revenue.positive? ? after_ads / revenue * 100.0 : nil
       }
     end
 
@@ -325,6 +387,9 @@ module Painel
         when "units" then r[:units].to_f
         when "profit" then r.dig(:economics, :net_profit)
         when "profit_pct" then r.dig(:economics, :net_profit_pct)
+        when "ads_cost" then r.dig(:economics, :ads_cost)
+        when "profit_after_ads" then r.dig(:economics, :net_profit_after_ads)
+        when "profit_after_ads_pct" then r.dig(:economics, :net_profit_after_ads_pct)
         end
         # sem valor vai sempre para o fim, nos dois sentidos
         [ value.nil? ? 1 : 0, sort_dir == "asc" ? (value || 0) : -(value || 0) ]
@@ -357,6 +422,10 @@ module Painel
         fixed_expenses: active.sum { |r| r[:economics][:fixed_expenses] },
         cost: known.sum { |r| r[:economics][:cost] },
         net_profit: profit, net_profit_pct: known_revenue.positive? ? profit / known_revenue * 100.0 : nil,
+        ads_cost: active.sum { |r| r[:economics][:ads_cost] },
+        net_profit_after_ads: known.sum { |r| r[:economics][:net_profit_after_ads] },
+        net_profit_after_ads_pct: known_revenue.positive? ? known.sum { |r| r[:economics][:net_profit_after_ads] } / known_revenue * 100.0 : nil,
+        orders_ads_pending: active.count { |r| r[:economics][:ads_state] == "pendente" },
         orders_without_cost: active.size - known.size,
         orders_without_shipment: active.count { |r| !r[:shipping][:loaded] && r[:shipping][:label] == "Carregando…" }
       }

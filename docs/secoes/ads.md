@@ -37,6 +37,10 @@ hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre nã
   leitura rápida de ontem e hoje a cada 30 minutos (`ads_recent_synced_at`, `Ml::Sync::Ads.refresh_recent`). Para
   administradores também há o botão "Atualizar do Mercado Livre agora" (`POST /api/ads/sync`, `Ml::AdsSyncJob`).
 - Tabelas: `ml_ad_campaigns`, `ml_ad_items` (métricas por janela em `metrics`) e `ml_ad_daily_metrics`.
+- **Gasto por anúncio e por dia** (`ml_ad_item_dailies`, usado no custo de Ads de cada venda): lido dia a dia com
+  `ads/search` (de = até = o dia). Cada leitura relê os últimos 3 dias e baixa até 8 dias antigos que faltam;
+  `ml_ad_day_syncs` guarda quando cada dia foi lido (dia lido depois de acabar = fechado). O botão de atualizar baixa
+  todos os dias que faltam de uma vez (cerca de 3 segundos por dia).
 - Anúncio que sai das campanhas é removido na leitura seguinte; anúncio cuja campanha não aparece mais mostra "Campanha encerrada".
 
 ## Arquivos

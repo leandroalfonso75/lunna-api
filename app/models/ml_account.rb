@@ -10,6 +10,8 @@ class MlAccount < ApplicationRecord
   has_many :ml_ad_campaigns
   has_many :ml_ad_items
   has_many :ml_ad_daily_metrics
+  has_many :ml_ad_item_dailies
+  has_many :ml_ad_day_syncs
   has_many :ml_sync_runs
   has_many :item_metrics
   has_many :ai_plans

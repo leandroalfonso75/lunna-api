@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_110001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -141,6 +141,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_110001) do
     t.integer "organic_units", default: 0, null: false
     t.decimal "organic_amount", precision: 12, scale: 2, default: "0.0", null: false
     t.index ["ml_account_id", "campaign_id", "date"], name: "index_ml_ad_daily_unique", unique: true
+  end
+
+  create_table "ml_ad_day_syncs", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.date "date", null: false
+    t.datetime "fetched_at", null: false
+    t.index ["ml_account_id", "date"], name: "index_ml_ad_day_syncs_unique", unique: true
+  end
+
+  create_table "ml_ad_item_dailies", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.date "date", null: false
+    t.bigint "campaign_id"
+    t.decimal "cost", precision: 12, scale: 2, default: "0.0", null: false
+    t.integer "clicks", default: 0, null: false
+    t.bigint "prints", default: 0, null: false
+    t.decimal "total_amount", precision: 12, scale: 2, default: "0.0", null: false
+    t.integer "units", default: 0, null: false
+    t.index ["ml_account_id", "date"], name: "index_ml_ad_item_dailies_on_ml_account_id_and_date"
+    t.index ["ml_account_id", "item_id", "date"], name: "index_ml_ad_item_dailies_unique", unique: true
   end
 
   create_table "ml_ad_items", primary_key: ["ml_account_id", "item_id"], force: :cascade do |t|
@@ -646,6 +667,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_110001) do
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify
   add_foreign_key "ml_ad_campaigns", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_daily_metrics", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_ad_day_syncs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_ad_item_dailies", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade

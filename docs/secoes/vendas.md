@@ -11,7 +11,8 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   problema), logística (Full, Flex, Coleta, Agência, outras), com contagens, e **busca** por nº da venda, produto, SKU,
   anúncio, comprador ou rastreio.
 - **Tabela:** data, produto (foto, SKU, unidades), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
-  Colunas de valores: valor, tarifa, frete, imposto, despesas fixas e custo. Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
+  Colunas de valores: valor, tarifa, frete, imposto, despesas fixas, custo, **lucro líquido**, **Custo Ads** e **Lucro pós
+  Ads** (% em cima, R$ embaixo). Resumo com os cartões "Custo com Ads" e "Lucro pós Ads". Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
 - **Detalhe (clique na linha):** resultado da venda linha a linha, produtos (variação, tarifa, tipo de anúncio),
   pagamento (forma, parcelas, cupom, reembolso) e envio (situação, logística, destino cidade/UF, rastreio, frete pago pelo
   vendedor e pelo comprador, datas de cada etapa), com link para a venda no Mercado Livre.
@@ -29,6 +30,17 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   outras vendas do carrinho.
 - **Despesas fixas e imposto:** `companies.fixed_expenses_pct` e `tax_pct` × receita.
 Implementado em `Painel::SalesQuery#economics`.
+
+## Custo de Ads e lucro pós Ads
+`lucro pós Ads = lucro líquido − custo Ads`
+- **Custo Ads da venda:** o gasto de publicidade do anúncio **no dia da venda** (seção Ads, `ml_ad_item_dailies`) dividido
+  entre as unidades vendidas desse anúncio nesse dia (vendas não canceladas), vezes as unidades da venda. Anúncio fora de
+  Ads mostra "—" e o lucro pós Ads é o próprio lucro.
+- O gasto de um anúncio em dia sem venda não vai para nenhuma venda (nos 3 meses, cerca de 73% do gasto de Ads caiu em
+  dias com venda do anúncio).
+- **Pendente:** o dia da venda ainda não foi lido depois de acabar (hoje, por exemplo). O valor é refeito a cada leitura de
+  Ads (a cada 30 minutos os últimos 3 dias são relidos) até o dia fechar; o resumo conta as vendas pendentes.
+- O detalhe da venda mostra a conta: gasto do anúncio no dia ÷ unidades vendidas no dia.
 
 ## Dados e atualização
 - Fonte: API do Mercado Livre, somente leitura. Pedido completo em `ml_orders.payload`; linhas em `ml_order_items`
@@ -58,3 +70,5 @@ Implementado em `Painel::SalesQuery#economics`.
 - Sem exportação para planilha.
 - Despesas fixas (3%) ainda sem campo de edição em Configurações.
 - Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.
+- Custo Ads é um rateio por dia: o Mercado Livre não informa qual venda veio de qual clique, e vendas indiretas (até
+  dias depois do clique) não entram no rateio do dia do clique.

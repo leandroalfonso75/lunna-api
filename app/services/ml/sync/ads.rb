@@ -7,6 +7,8 @@ module Ml
       WINDOWS = { "7d" => 7, "30d" => 30, "90d" => 90 }.freeze
       PAGE = 100
       MAX_PAGES = 30
+      RECENT_ITEM_DAYS = 3        # dias relidos a cada leitura rápida (hoje, ontem e anteontem)
+      BACKFILL_DAYS_PER_RUN = 8   # dias antigos ainda não lidos, por leitura
 
       Result = Struct.new(:campaigns, :items, :days, :notes, :ok, keyword_init: true)
 
@@ -23,6 +25,7 @@ module Ml
         days = daily(client, account, advertiser_id, campaigns, from, to, notes)
         items = items(client, account, advertiser_id, today, now, notes)
         account.update_columns(ads_synced_at: now, ads_recent_synced_at: now, ads_advertiser_id: advertiser_id)
+        item_days(client, account, today, advertiser_id)
 
         Result.new(campaigns: campaigns.size, items: items, days: days, notes: notes.first(5), ok: notes.empty?)
       end
@@ -36,7 +39,60 @@ module Ml
         ids = account.ml_ad_campaigns.pluck(:campaign_id)
         days = daily(client, account, advertiser_id, ids, today - 1, today, notes)
         account.update_columns(ads_recent_synced_at: Time.current, ads_advertiser_id: advertiser_id)
+        item_days(client, account, today, advertiser_id)
         Result.new(campaigns: ids.size, items: 0, days: days, notes: notes.first(5), ok: notes.empty?)
+      end
+
+      # Gasto por anúncio e por dia (para ratear o custo de Ads entre as vendas): relê os últimos dias, até
+      # fecharem, e baixa aos poucos os dias antigos que faltam.
+      def self.item_days(client, account, today, advertiser_id, backfill: BACKFILL_DAYS_PER_RUN)
+        recent = ((today - (RECENT_ITEM_DAYS - 1))..today).to_a
+        sync_item_days(client, account, recent, advertiser_id: advertiser_id)
+        backfill_item_days(client, account, today: today, max: backfill, advertiser_id: advertiser_id)
+      end
+
+      # Baixa os dias dos últimos 90 que ainda não foram lidos (os mais novos primeiro).
+      def self.backfill_item_days(client, account, today: Date.current, max: nil, advertiser_id: nil)
+        wanted = ((today - (WINDOWS.fetch("90d") - 1))..today).to_a.reverse
+        missing = wanted - account.ml_ad_day_syncs.pluck(:date)
+        missing = missing.first(max) if max
+        sync_item_days(client, account, missing, advertiser_id: advertiser_id)
+      end
+
+      # Lê, dia a dia, o gasto de cada anúncio. Dia com erro não é marcado como lido (será tentado de novo).
+      def self.sync_item_days(client, account, dates, advertiser_id: nil)
+        advertiser_id ||= account.ads_advertiser_id || advertiser(client, [])
+        return 0 unless advertiser_id
+
+        done = 0
+        dates.each do |date|
+          notes = []
+          rows = paginate(notes, "gasto do dia #{date}", PAGE) do |offset|
+            client.ads_items(advertiser_id, from: date, to: date, offset: offset, limit: PAGE)
+          end
+          next if notes.any?
+
+          save_item_day(account, date, rows)
+          done += 1
+        end
+        done
+      end
+
+      def self.save_item_day(account, date, rows)
+        now = Time.current
+        records = rows.filter_map do |ad|
+          m = ad["metrics"] || {}
+          next unless m["cost"].to_f.positive? || m["clicks"].to_i.positive? || m["units_quantity"].to_i.positive?
+
+          { ml_account_id: account.id, item_id: ad["item_id"], date: date, campaign_id: ad["campaign_id"], cost: m["cost"].to_f,
+            clicks: m["clicks"].to_i, prints: m["prints"].to_i, total_amount: m["total_amount"].to_f, units: m["units_quantity"].to_i }
+        end
+
+        MlAdItemDaily.transaction do
+          MlAdItemDaily.where(ml_account_id: account.id, date: date).delete_all
+          MlAdItemDaily.insert_all(records) if records.any?
+          MlAdDaySync.upsert({ ml_account_id: account.id, date: date, fetched_at: now }, unique_by: :index_ml_ad_day_syncs_unique)
+        end
       end
 
       # Métricas por anúncio de um período qualquer (hoje, ontem, datas escolhidas), consultadas na hora.

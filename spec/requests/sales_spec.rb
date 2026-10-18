@@ -66,6 +66,77 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["sales"].first["shipping"]["shared_with"]).to eq([])
   end
 
+  describe "custo de Ads e lucro pós Ads" do
+    let(:day) { 2.days.ago.to_date }
+    let(:at) { Time.zone.local(day.year, day.month, day.day, 14) }
+
+    def spend(item_id, date, cost)
+      MlAdItemDaily.create!(ml_account: account, item_id: item_id, date: date, cost: cost)
+    end
+
+    def day_read(date, fetched_at)
+      MlAdDaySync.create!(ml_account: account, date: date, fetched_at: fetched_at)
+    end
+
+    before do
+      with_cost("SKU-A", 40)
+      MlAdItem.create!(ml_account_id: account.id, item_id: "MLB1", campaign_id: 1, synced_at: Time.current)
+    end
+
+    it "divide o gasto do anúncio no dia entre as unidades vendidas dele nesse dia" do
+      spend("MLB1", day, 30.0)
+      day_read(day, Time.current)
+      sale(1, at: at)                                                     # 2 unidades
+      sale(2, at: at + 1.hour, lines: [ [ "MLB1", "SKU-A", 1, 100.0, 15.0 ] ]) # 1 unidade
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      by_id = json["sales"].to_h { |s| [ s["order_id"], s["economics"] ] }
+      expect(by_id[1]).to include("ads_cost" => 20.0, "ads_state" => "apurado", "net_profit" => 60.0, "net_profit_after_ads" => 40.0,
+        "net_profit_after_ads_pct" => 20.0)
+      expect(by_id[2]["ads_cost"]).to eq(10.0)
+      expect(json["summary"]).to include("ads_cost" => 30.0, "orders_ads_pending" => 0)
+    end
+
+    it "dia ainda não fechado na leitura de Ads deixa a venda pendente (refeita na próxima leitura)" do
+      spend("MLB1", day, 30.0)
+      day_read(day, at + 2.hours) # lido no mesmo dia: ainda pode mudar
+      sale(1, at: at)
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["sales"].first["economics"]).to include("ads_state" => "pendente", "ads_cost" => 30.0)
+      expect(json["summary"]["orders_ads_pending"]).to eq(1)
+    end
+
+    it "dia ainda não lido também fica pendente" do
+      sale(1, at: at)
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["sales"].first["economics"]).to include("ads_state" => "pendente", "ads_cost" => 0.0)
+    end
+
+    it "anúncio fora de Ads não tem custo de Ads e o lucro pós Ads é o próprio lucro" do
+      sale(1, at: at, lines: [ [ "MLB9", "SKU-A", 2, 100.0, 15.0 ] ])
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["sales"].first["economics"]).to include("ads_state" => "sem_ads", "ads_cost" => 0.0, "net_profit_after_ads" => 60.0)
+    end
+
+    it "ordena pelo lucro pós Ads" do
+      spend("MLB1", day, 30.0)
+      day_read(day, Time.current)
+      sale(1, at: at)
+      sale(2, at: at, lines: [ [ "MLB9", "SKU-A", 2, 100.0, 15.0 ] ])
+
+      get "/api/sales", params: { account_id: account.id, sort: "profit_after_ads", dir: "desc" }, headers: auth_headers(member)
+
+      expect(json["sales"].map { |s| s["order_id"] }).to eq([ 2, 1 ])
+    end
+  end
+
   it "sem custo em algum item, o lucro da venda não é calculado e ela é contada à parte" do
     sale(1)
 

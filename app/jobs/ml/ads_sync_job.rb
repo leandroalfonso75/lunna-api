@@ -8,7 +8,10 @@ module Ml
       return unless account
 
       Ml::OAuth.refresh!(account)
-      Ml::Sync::Ads.call(Ml::Client.new(access_token: account.access_token), account)
+      client = Ml::Client.new(access_token: account.access_token)
+      Ml::Sync::Ads.call(client, account)
+      # pedido do usuário: baixa de uma vez todos os dias que faltam do gasto por anúncio
+      Ml::Sync::Ads.backfill_item_days(client, account)
     rescue Ml::OAuth::Error => e
       Rails.logger.warn("Ml::AdsSyncJob: #{e.message}")
     end

@@ -33,6 +33,7 @@ RSpec.describe Ml::Sync::Ads do
   end
 
   it "grava campanhas, métricas diárias e anúncios com as janelas de 7, 30 e 90 dias" do
+    allow(described_class).to receive(:item_days) # gasto por anúncio e dia tem testes próprios abaixo
     stub_advertiser
     stub_campaigns
     stub_ads({ "date_from" => "2026-10-11" }, [ ad.merge(metrics: ad[:metrics].merge(clicks: 1)) ])
@@ -73,6 +74,7 @@ RSpec.describe Ml::Sync::Ads do
   end
 
   it "leitura rápida: só ontem e hoje das campanhas já conhecidas" do
+    allow(described_class).to receive(:item_days)
     MlAdCampaign.create!(ml_account_id: account.id, campaign_id: 111, name: "Maquiagens", status: "active")
     account.update_columns(ads_advertiser_id: 29_660)
     stub_ads({ aggregation_type: "DAILY", "date_from" => "2026-10-16" }, [
@@ -95,6 +97,37 @@ RSpec.describe Ml::Sync::Ads do
     metrics = described_class.live_items(client, account, today, today)
 
     expect(metrics).to eq({ "MLB1" => { "clicks" => 10, "prints" => 1000, "cost" => 5.0, "total_amount" => 60.0, "units_quantity" => 2 } })
+  end
+
+  it "gasto por anúncio de cada dia: guarda só quem gastou ou vendeu e marca o dia como lido" do
+    account.update_columns(ads_advertiser_id: 29_660)
+    zero = ad.merge(item_id: "MLB0", metrics: { cost: 0, clicks: 0, units_quantity: 0 })
+    stub_ads({ "date_from" => "2026-10-16", "date_to" => "2026-10-16" }, [ ad, zero ])
+
+    done = described_class.sync_item_days(client, account, [ Date.new(2026, 10, 16) ])
+
+    expect(done).to eq(1)
+    expect(MlAdItemDaily.where(ml_account_id: account.id).pluck(:item_id, :cost)).to eq([ [ "MLB1", 5.0 ] ])
+    expect(MlAdDaySync.find_by(ml_account_id: account.id, date: Date.new(2026, 10, 16))).to be_present
+  end
+
+  it "dia com erro do Mercado Livre não é marcado como lido" do
+    account.update_columns(ads_advertiser_id: 29_660)
+    stub_request(:get, "#{base}/ads/search").with(query: hash_including({})).to_return(status: 500, body: "erro")
+
+    expect(described_class.sync_item_days(client, account, [ Date.new(2026, 10, 16) ])).to eq(0)
+    expect(MlAdDaySync.where(ml_account_id: account.id)).to be_empty
+  end
+
+  it "backfill lê só os dias dos últimos 90 que faltam, os mais novos primeiro e no limite pedido" do
+    account.update_columns(ads_advertiser_id: 29_660)
+    MlAdDaySync.create!(ml_account: account, date: today, fetched_at: Time.current)
+    stub_ads({}, [])
+
+    done = described_class.backfill_item_days(client, account, today: today, max: 2)
+
+    expect(done).to eq(2)
+    expect(MlAdDaySync.where(ml_account_id: account.id).pluck(:date)).to match_array([ today, today - 1, today - 2 ])
   end
 
   it "conta sem publicidade vira nota, sem erro" do
