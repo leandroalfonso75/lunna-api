@@ -1,0 +1,139 @@
+# Seção Ads: lê do Mercado Livre (somente leitura) as campanhas de Product Ads, as métricas de cada
+# campanha por dia e os anúncios em campanha com as métricas de 7, 30 e 90 dias. A API limita a
+# consulta a 90 dias.
+module Ml
+  module Sync
+    module Ads
+      WINDOWS = { "7d" => 7, "30d" => 30, "90d" => 90 }.freeze
+      PAGE = 100
+      MAX_PAGES = 30
+
+      Result = Struct.new(:campaigns, :items, :days, :notes, :ok, keyword_init: true)
+
+      def self.call(client, account, today: Date.current)
+        notes = []
+        advertiser_id = advertiser(client, notes)
+        return Result.new(campaigns: 0, items: 0, days: 0, notes: notes, ok: false) unless advertiser_id
+
+        to = today
+        from = today - (WINDOWS.fetch("90d") - 1)
+        now = Time.current
+
+        campaigns = campaigns(client, account, advertiser_id, from, to, now, notes)
+        days = daily(client, account, advertiser_id, campaigns, from, to, notes)
+        items = items(client, account, advertiser_id, today, now, notes)
+        account.update_columns(ads_synced_at: now)
+
+        Result.new(campaigns: campaigns.size, items: items, days: days, notes: notes.first(5), ok: notes.empty?)
+      end
+
+      def self.advertiser(client, notes)
+        response = client.ads_advertisers
+        Array(response["advertisers"]).find { |a| a["site_id"] == "MLB" }&.dig("advertiser_id") ||
+          (notes << "Sem conta de publicidade (Product Ads) no Mercado Livre." and nil)
+      rescue Ml::Client::Error => e
+        notes << "publicidade: #{e.message}"
+        nil
+      end
+      private_class_method :advertiser
+
+      def self.campaigns(client, account, advertiser_id, from, to, now, notes)
+        rows = paginate(notes, "campanhas", 50) { |offset| client.ads_campaigns(advertiser_id, from: from, to: to, offset: offset, limit: 50) }
+        return [] if rows.empty?
+
+        records = rows.map do |c|
+          {
+            ml_account_id: account.id, campaign_id: c["id"], name: c["name"], status: c["status"], strategy: c["strategy"],
+            channel: c["channel"], acos_target: c["acos_target"], roas_target: c["roas_target"], budget: c["budget"],
+            daily_budget: c["daily_budget"], automatic_budget: c["automatic_budget"], date_created: c["date_created"],
+            last_updated: c["last_updated"], synced_at: now, created_at: now, updated_at: now
+          }
+        end
+        MlAdCampaign.upsert_all(records, unique_by: [ :ml_account_id, :campaign_id ])
+        rows.map { |c| c["id"] }
+      end
+      private_class_method :campaigns
+
+      def self.daily(client, account, advertiser_id, campaign_ids, from, to, notes)
+        total = 0
+        campaign_ids.each do |campaign_id|
+          rows = paginate(notes, "dias da campanha #{campaign_id}", PAGE) do |offset|
+            client.ads_items(advertiser_id, from: from, to: to, offset: offset, limit: PAGE, campaign_id: campaign_id, daily: true)
+          end
+          records = rows.filter_map { |r| daily_record(account, campaign_id, r) }
+          next if records.empty?
+
+          MlAdDailyMetric.upsert_all(records, unique_by: :index_ml_ad_daily_unique)
+          total += records.size
+        end
+        total
+      end
+      private_class_method :daily
+
+      def self.daily_record(account, campaign_id, row)
+        return nil if row["date"].blank?
+
+        {
+          ml_account_id: account.id, campaign_id: campaign_id, date: row["date"], clicks: row["clicks"].to_i, prints: row["prints"].to_i,
+          cost: row["cost"].to_f, direct_amount: row["direct_amount"].to_f, indirect_amount: row["indirect_amount"].to_f,
+          total_amount: row["total_amount"].to_f, direct_units: row["direct_units_quantity"].to_i,
+          indirect_units: row["indirect_units_quantity"].to_i, units: row["units_quantity"].to_i,
+          organic_units: row["organic_units_quantity"].to_i, organic_amount: row["organic_units_amount"].to_f
+        }
+      end
+      private_class_method :daily_record
+
+      # Um anúncio por linha, com as métricas de cada janela (7, 30 e 90 dias).
+      def self.items(client, account, advertiser_id, today, now, notes)
+        by_item = {}
+        WINDOWS.each do |key, days|
+          rows = paginate(notes, "anúncios #{key}", PAGE) do |offset|
+            client.ads_items(advertiser_id, from: today - (days - 1), to: today, offset: offset, limit: PAGE)
+          end
+          rows.each do |ad|
+            entry = by_item[ad["item_id"]] ||= { base: ad, metrics: {} }
+            entry[:base] = ad if key == "90d"
+            entry[:metrics][key] = ad["metrics"] || {}
+          end
+        end
+        return 0 if by_item.empty?
+
+        records = by_item.map { |item_id, entry| item_record(account, item_id, entry, now) }
+        MlAdItem.upsert_all(records, unique_by: [ :ml_account_id, :item_id ])
+        MlAdItem.where(ml_account_id: account.id).where("synced_at < ?", now).delete_all
+        records.size
+      end
+      private_class_method :items
+
+      def self.item_record(account, item_id, entry, now)
+        ad = entry[:base]
+        {
+          ml_account_id: account.id, item_id: item_id, campaign_id: ad["campaign_id"], ad_group_id: ad["ad_group_id"],
+          title: ad["title"], status: ad["status"], price: ad["price"], thumbnail: ad["thumbnail"], permalink: ad["permalink"],
+          listing_type_id: ad["listing_type_id"], logistic_type: ad["logistic_type"], catalog_listing: ad["catalog_listing"],
+          buy_box_winner: ad["buy_box_winner"], recommended: ad["recommended"], has_discount: ad["has_discount"],
+          condition: ad["condition"], date_created: ad["date_created"], metrics: entry[:metrics], synced_at: now,
+          created_at: now, updated_at: now
+        }
+      end
+      private_class_method :item_record
+
+      # Lê todas as páginas de uma consulta paginada por offset.
+      def self.paginate(notes, label, step)
+        rows = []
+        MAX_PAGES.times do |page|
+          response = yield(page * step)
+          results = response["results"] || []
+          rows.concat(results)
+          total = response.dig("paging", "total").to_i
+          break if results.empty? || rows.size >= total
+        end
+        rows
+      rescue Ml::Client::Error => e
+        notes << "#{label}: #{e.message}"
+        rows || []
+      end
+      private_class_method :paginate
+    end
+  end
+end

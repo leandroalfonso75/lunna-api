@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_210001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_100001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -98,9 +98,72 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_210001) do
     t.uuid "connected_by_user_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "ads_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
+  end
+
+  create_table "ml_ad_campaigns", primary_key: ["ml_account_id", "campaign_id"], force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "campaign_id", null: false
+    t.string "name"
+    t.string "status"
+    t.string "strategy"
+    t.string "channel"
+    t.decimal "acos_target", precision: 8, scale: 2
+    t.decimal "roas_target", precision: 8, scale: 2
+    t.decimal "budget", precision: 12, scale: 2
+    t.decimal "daily_budget", precision: 12, scale: 2
+    t.boolean "automatic_budget"
+    t.datetime "date_created"
+    t.datetime "last_updated"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "ml_ad_daily_metrics", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "campaign_id", null: false
+    t.date "date", null: false
+    t.integer "clicks", default: 0, null: false
+    t.bigint "prints", default: 0, null: false
+    t.decimal "cost", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "direct_amount", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "indirect_amount", precision: 12, scale: 2, default: "0.0", null: false
+    t.decimal "total_amount", precision: 12, scale: 2, default: "0.0", null: false
+    t.integer "direct_units", default: 0, null: false
+    t.integer "indirect_units", default: 0, null: false
+    t.integer "units", default: 0, null: false
+    t.integer "organic_units", default: 0, null: false
+    t.decimal "organic_amount", precision: 12, scale: 2, default: "0.0", null: false
+    t.index ["ml_account_id", "campaign_id", "date"], name: "index_ml_ad_daily_unique", unique: true
+  end
+
+  create_table "ml_ad_items", primary_key: ["ml_account_id", "item_id"], force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.bigint "campaign_id"
+    t.bigint "ad_group_id"
+    t.string "title"
+    t.string "status"
+    t.decimal "price", precision: 12, scale: 2
+    t.string "thumbnail"
+    t.string "permalink"
+    t.string "listing_type_id"
+    t.string "logistic_type"
+    t.boolean "catalog_listing"
+    t.boolean "buy_box_winner"
+    t.boolean "recommended"
+    t.boolean "has_discount"
+    t.string "condition"
+    t.datetime "date_created"
+    t.jsonb "metrics", default: {}, null: false
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "campaign_id"], name: "index_ml_ad_items_on_ml_account_id_and_campaign_id"
   end
 
   create_table "ml_costs", force: :cascade do |t|
@@ -579,6 +642,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_210001) do
   add_foreign_key "item_metrics", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify
+  add_foreign_key "ml_ad_campaigns", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_ad_daily_metrics", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade

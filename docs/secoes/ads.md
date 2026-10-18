@@ -1,0 +1,51 @@
+# Ads
+
+Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últimos **3 meses**, com as métricas que a API entrega.
+
+## O que mostra
+- **Período:** 7, 30, 60 dias ou 3 meses (a API do Mercado Livre limita a consulta a 90 dias).
+- **Resumo (8 cartões):** investimento, vendas por Ads, ACOS, ROAS, cliques, impressões, conversão e vendas sem Ads
+  (orgânicas). Cada cartão compara com o período anterior de mesmo tamanho, quando há dados (▲/▼ verde ou vermelho
+  conforme subir seja bom ou ruim).
+- **Gráfico:** vendas por Ads e investimento, dia a dia.
+- **Aba Campanhas:** nome, situação, estratégia, investimento, vendas, ACOS (com a meta da campanha), ROAS, cliques,
+  CTR, CPC, conversão e orçamento diário. O ACOS fica verde dentro da meta, amarelo até 20% acima e vermelho acima disso.
+  Ao clicar abre a configuração (metas, orçamento, datas), o resultado (vendas diretas, indiretas e orgânicas) e um
+  gráfico por dia, com o atalho "Ver os anúncios desta campanha".
+- **Aba Anúncios:** os anúncios em campanha, com foto, campanha, investimento, vendas, ACOS, ROAS, unidades, cliques e
+  impressões. Filtros por campanha, situação (ativo/pausado), desempenho e busca por título/código; ordenação por qualquer
+  coluna; totais do filtro no rodapé.
+- **Sinais por anúncio:** "Gastou e não vendeu" (investimento ≥ R$ 10 e nenhuma unidade), "ACOS acima da meta" (mais de
+  20% acima da meta da campanha) e "Dentro da meta".
+
+## Contas (feitas na API, nunca somadas entre campanhas)
+`ACOS = investimento ÷ vendas por Ads × 100`, `ROAS = vendas ÷ investimento`, `CTR = cliques ÷ impressões × 100`,
+`CPC = investimento ÷ cliques`, `conversão = unidades vendidas por Ads ÷ cliques × 100`. Implementado em
+`Painel::AdsQuery`. Os totais de uma campanha e do resumo vêm da soma dos dias; os dos anúncios, das janelas de 7, 30 e
+90 dias (por isso o período de 60 dias usa a janela de 90 dias na aba Anúncios).
+
+## Dados e atualização
+- Fonte: API de publicidade do Mercado Livre (`/advertising/...`, somente leitura, `api-version` 1 e 2). A conta de
+  anunciante vem de `/advertising/advertisers?product_id=PADS`.
+- `Ml::Sync::Ads` lê campanhas (`campaigns/search`), a série diária de cada campanha (`ads/search` com
+  `aggregation_type=DAILY` filtrado por campanha) e os anúncios em campanha com as métricas de 7, 30 e 90 dias. Leva
+  cerca de 15 segundos e cerca de 25 chamadas.
+- Roda **a cada 3 horas** dentro da sincronização normal (`ml_accounts.ads_synced_at`) e, para administradores, pelo
+  botão "Atualizar do Mercado Livre agora" (`POST /api/ads/sync`, `Ml::AdsSyncJob`).
+- Tabelas: `ml_ad_campaigns`, `ml_ad_items` (métricas por janela em `metrics`) e `ml_ad_daily_metrics`.
+- Anúncio que sai das campanhas é removido na leitura seguinte; anúncio cuja campanha não aparece mais mostra "Campanha encerrada".
+
+## Arquivos
+**Front (`lunna-web-radar`)**
+- `app/pages/ads.vue`, `app/components/ads/` (`AdsSummary`, `CampaignsTable`, `AdsItemsTable`)
+- `app/composables/useAds.ts`, `app/lib/adsClient.ts`, `app/types/ads.ts`
+
+**API (`lunna-api`)**
+- `app/controllers/ads_controller.rb` (`GET /api/ads`, `GET /api/ads/items`, `POST /api/ads/sync`)
+- `app/services/painel/ads_query.rb`; `app/services/ml/sync/ads.rb`; `app/jobs/ml/ads_sync_job.rb`; métodos `ads_*` em `app/services/ml/client.rb`
+- Modelos `ml_ad_campaign`, `ml_ad_item`, `ml_ad_daily_metric`; migration `20261018100001_create_ml_ads.rb`
+
+## Pendências
+- Só leitura: o Lunna não altera campanhas, orçamentos nem metas no Mercado Livre.
+- Não cruza o investimento com o lucro líquido do anúncio (margem depois de Ads) nem mostra Brand Ads/Display.
+- A coluna de desempenho por palavra-chave não existe na API de Product Ads.

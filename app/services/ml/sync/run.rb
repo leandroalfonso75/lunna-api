@@ -13,6 +13,7 @@ module Ml
       QUALITY_BATCH = 200
       DETAILS_BATCH = 60
       SHIPMENTS_BATCH = 60
+      ADS_EVERY = 3.hours
       DETAIL_MAX_LENGTH = 2_000
 
       # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
@@ -52,6 +53,7 @@ module Ml
         sync_visits(client)
         orders_result = sync_orders(client)
         sync_shipments(client)
+        sync_ads(client)
         sync_quality(client)
         sync_details(client)
 
@@ -113,6 +115,14 @@ module Ml
         @account.update_columns(orders_backfilled_at: Time.current) if backfilling && result.ok
 
         result
+      end
+
+      # Campanhas e métricas de publicidade (seção Ads), a cada 3 horas.
+      def sync_ads(client)
+        return if @account.ads_synced_at.present? && @account.ads_synced_at > ADS_EVERY.ago
+
+        result = Ml::Sync::Ads.call(client, @account)
+        @notes.concat(result.notes)
       end
 
       # Envio dos pedidos recentes (seção Vendas), 60 por rodada.

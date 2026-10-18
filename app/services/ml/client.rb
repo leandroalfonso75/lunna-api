@@ -104,18 +104,43 @@ module Ml
       get("/suggestions/items/#{item_id}/details")
     end
 
+    # --- Publicidade (Product Ads) ---
+
+    ADS_METRICS = %w[
+      clicks prints ctr cpc cost cvr roas acos sov units_quantity total_amount direct_amount indirect_amount
+      direct_units_quantity indirect_units_quantity organic_units_quantity organic_units_amount advertising_items_quantity
+    ].join(",")
+
+    def ads_advertisers
+      get("/advertising/advertisers", { product_id: "PADS" }, { "api-version" => "1" })
+    end
+
+    def ads_campaigns(advertiser_id, from:, to:, offset: 0, limit: 50)
+      get("/advertising/MLB/advertisers/#{advertiser_id}/product_ads/campaigns/search",
+        { date_from: from.iso8601, date_to: to.iso8601, limit: limit, offset: offset, metrics: ADS_METRICS }, { "api-version" => "2" })
+    end
+
+    # Anúncios em campanha com as métricas do período; `daily: true` devolve uma linha por dia
+    # (agregada, sem item) — usado com `campaign_id` para a série diária de cada campanha.
+    def ads_items(advertiser_id, from:, to:, offset: 0, limit: 100, campaign_id: nil, daily: false)
+      params = { date_from: from.iso8601, date_to: to.iso8601, limit: limit, offset: offset, metrics: ADS_METRICS }
+      params["filters[campaign_id]"] = campaign_id if campaign_id
+      params[:aggregation_type] = "DAILY" if daily
+      get("/advertising/MLB/advertisers/#{advertiser_id}/product_ads/ads/search", params, { "api-version" => "2" })
+    end
+
     private
 
     # `retry` só é válido dentro de um `rescue` — com dois motivos de repetir
     # (erro de conexão e status HTTP), o loop usa `next` pra tentar de novo.
-    def get(path, params = {})
+    def get(path, params = {}, headers = {})
       attempt = 0
 
       loop do
         attempt += 1
 
         begin
-          response = connection.get(path, params)
+          response = connection.get(path, params, headers)
         rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
           raise Error.new(status: nil, path: path, body: e.message) if attempt >= MAX_ATTEMPTS
 
