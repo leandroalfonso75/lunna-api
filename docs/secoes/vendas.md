@@ -56,3 +56,5 @@ Implementado em `Painel::SalesQuery#economics`.
 - A comissão e a tarifa fixa aparecem somadas (`sale_fee`); separar exigiria `/orders/{id}` + `/payments`.
 - Devoluções e reclamações (`/post-purchase`) ainda não entram; venda devolvida segue contada até o ML cancelar.
 - Sem exportação para planilha.
+- Despesas fixas (3%) ainda sem campo de edição em Configurações.
+- Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.

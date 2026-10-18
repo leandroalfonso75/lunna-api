@@ -19,6 +19,10 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 
 - **Mercado Livre:** `Ml::Sync::*` lê a conta a cada 5 minutos (anúncios, pedidos, visitas, qualidade, tarifas, frete e
   estoque Full) e grava no banco do Lunna. Somente leitura.
+- **Vendas e envios:** pedidos dos últimos 3 meses e o envio de cada um (frete, rastreio, etapas) vêm da mesma leitura
+  do Mercado Livre; o envio é completado 60 pedidos por rodada (ver [vendas.md](vendas.md)).
+- **Publicidade (Ads):** campanhas, anúncios em campanha e métricas por dia; leitura completa a cada 3 horas e ontem/hoje
+  a cada 30 minutos (ver [ads.md](ads.md)).
 - **Olist ERP:** `Olist::SyncProducts` lê produtos, preços e estoque a cada 3 minutos; `Olist::SyncCosts` lê as
   movimentações de estoque (para o custo PEPS). Escrita no Olist (preço e estoque) existe na API, só para
   administradores, com confirmação e registro.
@@ -28,7 +32,10 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 ## Como trabalhamos
 
 - Uma branch por assunto (`feature/...`), commits pequenos em português, pull request quando estiver pronto.
-- Nada vai para o GitHub, nem para produção, sem o dono pedir.
+- Nada vai para o GitHub, nem para produção, sem o dono pedir (a branch `feature/anuncios-lucro` já foi enviada, sem pull request).
+- Testes da API sempre com `RAILS_ENV=test` (ver `CLAUDE.md`); rodar sem isso cai no banco de desenvolvimento.
+- Lucro líquido (Anúncios e Vendas): receita − custo − tarifa − frete − despesas fixas (3%) − imposto (11,3%); custo do Olist
+  conforme [produtos.md](produtos.md).
 - Segredos (`.env`, tokens) nunca entram nos commits.
 
 Documentos de base: [SPEC.md](../SPEC.md), [DECISOES.md](../DECISOES.md) (prevalece sobre a SPEC) e

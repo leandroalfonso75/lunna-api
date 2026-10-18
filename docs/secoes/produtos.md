@@ -38,6 +38,11 @@ Calculado pelas movimentações do Controle de Estoque do Olist (`GET /estoque/{
   da última entrada com preço (produto sem saldo, fonte `ultima_entrada`); kit = soma dos componentes.
 - Só continua sem custo quem não tem nenhuma entrada com preço no Controle de Estoque (entrada sem valor ou sem entrada).
 
+## Como corrigir um custo que falta
+Entrada de estoque já lançada **não é editável** no Olist (a tela só oferece "calcular saldo" e "remover lançamento", e a API
+não tem edição). O caminho sem mexer no estoque é preencher o **preço de custo** no cadastro do produto (aba Custos),
+que o Lunna usa quando o PEPS não tem custo. Para produto novo, dar a entrada de estoque já com o valor.
+
 ## Escrita no Olist (API, ainda sem tela)
 `PATCH /api/olist/products/:id/price` e `POST /api/olist/products/:id/stock`: só administradores, exigem `confirm=true`,
 registram quem/quando/antes/depois em `olist_changes` e nunca repetem sozinhas. Testado só com respostas simuladas.

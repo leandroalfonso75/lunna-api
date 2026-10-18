@@ -5,6 +5,8 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 ## Leia antes de mexer
 - `docs/secoes/README.md`: um documento por item do menu (o que faz, dados, regras, arquivos). Ao mudar uma regra,
   atualize o documento da seção no mesmo commit.
+- `.claude/skills/secao-*`: uma skill por seção (visão geral, produtos, anúncios, vendas, ads, curva ABC, radar, configurações)
+  que aponta para o documento certo; use-as ao mexer em uma seção.
 - `docs/DECISOES.md` prevalece sobre `docs/SPEC.md`. `docs/METRICS.md` define as métricas.
 
 ## Mapa de pastas
