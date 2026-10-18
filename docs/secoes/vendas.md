@@ -3,7 +3,7 @@
 Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o que a API entrega e o lucro líquido de cada uma.
 
 ## O que mostra
-- **Período:** 7 dias, 30 dias (padrão), 60 dias, 3 meses ou datas escolhidas (no máximo 92 dias para trás).
+- **Período:** Hoje, Ontem, 7 dias, 30 dias (padrão), 60 dias, 3 meses ou datas escolhidas (no máximo 92 dias para trás).
 - **Resumo:** vendas, faturamento (e ticket médio), lucro líquido (e % do faturamento), tarifas + frete, imposto + despesas
   fixas e custo dos produtos. Vendas canceladas ficam fora dos totais (só aparecem contadas).
 - **Gráfico:** faturamento por dia, com vendas e lucro no balão.

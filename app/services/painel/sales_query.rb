@@ -12,7 +12,7 @@
 # Pedido cancelado não entra nos totais. Sem custo de algum item, o lucro do pedido não é calculado.
 module Painel
   class SalesQuery
-    PRESETS = { "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
+    PRESETS = { "today" => 1, "yesterday" => 1, "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 92
     PER_PAGES = [ 25, 50, 100 ].freeze
@@ -367,6 +367,11 @@ module Painel
         last = [ parse_date(@params[:to]), @zone.today ].min
         last = first if last < first
         return [ @zone.local(first.year, first.month, first.day).beginning_of_day, @zone.local(last.year, last.month, last.day).end_of_day ]
+      end
+
+      if preset_key == "yesterday"
+        day = (@zone.today - 1).in_time_zone(@zone)
+        return [ day.beginning_of_day, day.end_of_day ]
       end
 
       days = PRESETS.fetch(preset_key)

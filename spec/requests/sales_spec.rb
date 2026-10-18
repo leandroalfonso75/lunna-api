@@ -181,6 +181,21 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["sales"].map { |s| s["order_id"] }).to eq([ 1 ])
   end
 
+  it "hoje e ontem mostram só as vendas do dia" do
+    sale(1, at: Time.current.beginning_of_day + 1.minute)
+    sale(2, at: 1.day.ago.beginning_of_day + 2.hours)
+    sale(3, at: 2.days.ago)
+
+    get "/api/sales", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
+    expect(json["sales"].map { |s| s["order_id"] }).to eq([ 1 ])
+    expect(json["period"]["preset"]).to eq("today")
+    expect(json["daily"].size).to eq(1)
+
+    get "/api/sales", params: { account_id: account.id, period: "yesterday" }, headers: auth_headers(member)
+    expect(json["sales"].map { |s| s["order_id"] }).to eq([ 2 ])
+    expect(json["daily"].size).to eq(1)
+  end
+
   it "aceita intervalo de datas e limita a 92 dias" do
     sale(1, at: 10.days.ago)
     sale(2, at: 120.days.ago)
