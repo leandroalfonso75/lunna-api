@@ -8,8 +8,9 @@
 # - Custo ausente = preço vazio ou zero. Só gera aviso se a camada AINDA tiver unidades
 #   em estoque: entrada sem custo que já foi toda consumida é ignorada.
 # - O custo do produto é o da camada mais antiga que ainda tem saldo (a próxima a sair).
-# - Histórico que não fecha: se as saídas registradas superam as entradas (ou deixam menos unidades
-#   do que o estoque real), o que está na prateleira só pode ser das compras mais recentes. Com o
+# - Histórico que não fecha com o estoque real (sobra menos OU mais do que existe — saídas a mais, ou saídas que o
+#   Olist não registrou, como a baixa de componentes vendidos em kit): o que está na prateleira só pode ser das
+#   compras mais recentes. Com o
 #   estoque atual informado (`current_stock`), as camadas são refeitas a partir da entrada mais nova
 #   para trás até cobrir esse estoque (`reconstructed`).
 #
@@ -33,15 +34,20 @@ module Olist
     # movements: [{ id:, deposit_id:, kind: "E|S|B", quantity:, price:, moved_at:, origin: }]
     # ledger_deposit_ids: depósitos "razão" (Full ML), onde só as saídas (vendas) são registradas.
     # ignored_deposit_ids: depósitos a descartar por completo.
-    def self.call(movements, ledger_deposit_ids: [], ignored_deposit_ids: [], current_stock: nil)
-      new(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock).call
+    # stock_complete: false quando parte do estoque real pode estar fora da conta (Full sem leitura): aí só se
+    # refaz quando falta unidade no histórico, nunca quando sobra.
+    def self.call(movements, ledger_deposit_ids: [], ignored_deposit_ids: [], current_stock: nil, stock_complete: true)
+      new(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock, stock_complete).call
     end
 
     # Observação que marca a saída do Geral como envio ao Full (transferência), não venda.
     TRANSFER_NOTE = /\A\s*(envio|nft)\b/i
+    # Diferença (em unidades) entre o histórico e o estoque real que ainda conta como "fecha".
+    STOCK_TOLERANCE = BigDecimal("0.5")
 
-    def initialize(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock = nil)
+    def initialize(movements, ledger_deposit_ids, ignored_deposit_ids, current_stock = nil, stock_complete = true)
       @current_stock = current_stock && decimal(current_stock)
+      @stock_complete = stock_complete
       @ledger = ledger_deposit_ids
       @movements = movements.reject { |m| ignored_deposit_ids.include?(m[:deposit_id]) }
       @layers = []
@@ -115,7 +121,7 @@ module Olist
     def build_result
       open = @layers.select { |layer| layer.remaining.positive? }
       reconstructed = false
-      if @current_stock&.positive? && open.sum(&:remaining) < @current_stock && @layers.any?
+      if rebuild?(open.sum(&:remaining))
         open = rebuild_from_newest(@current_stock)
         reconstructed = true
       end
@@ -132,6 +138,15 @@ module Olist
         last_entry_cost: @last_entry_cost,
         reconstructed: reconstructed
       )
+    end
+
+    def rebuild?(open_units)
+      return false unless @current_stock&.positive? && @layers.any?
+
+      gap = open_units - @current_stock
+      return true if gap < -STOCK_TOLERANCE # o histórico explica menos do que existe
+
+      gap > STOCK_TOLERANCE && @stock_complete # explica mais: só com o estoque real todo conhecido
     end
 
     # Camadas que cobrem o estoque atual, da entrada mais nova para trás (devolvidas da mais antiga à mais nova).

@@ -70,14 +70,18 @@ module Olist
         { id: m.movement_id, deposit_id: m.deposit_id, kind: m.kind, quantity: m.quantity, price: m.price,
           moved_at: m.moved_at, origin: m.origin, note: m.note }
       end
-      result = Olist::Fifo.call(movements, ledger_deposit_ids: ledger_deposits(product), current_stock: current_stock(product))
+      ledger = ledger_deposits(product)
+      stock, complete = current_stock(product, movements, ledger)
+      result = Olist::Fifo.call(movements, ledger_deposit_ids: ledger, current_stock: stock, stock_complete: complete)
       store(product, result, now)
     end
 
     # Estoque real da empresa: saldo do Olist + Full do Mercado Livre (mesma soma da tela Produtos).
-    def current_stock(product)
+    # => [estoque, completo?]. Completo quando o Full foi lido ou o produto não tem movimento no depósito do Full.
+    def current_stock(product, movements, ledger)
       full = Olist::FullStock.for_skus(@connection.company, [ product.sku ])[product.sku]
-      product.stock_balance.to_f + full&.total.to_f
+      uses_full = movements.any? { |m| ledger.include?(m[:deposit_id]) }
+      [ product.stock_balance.to_f + full&.total.to_f, full.present? || !uses_full ]
     end
 
     def row_for(product, item, now)

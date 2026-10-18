@@ -201,6 +201,25 @@ RSpec.describe Olist::Fifo do
       expect(result.unit_cost).to eq(90)
     end
 
+    it "histórico com unidades a mais que o estoque real (saídas não registradas): fica só com as entradas mais novas" do
+      moves = [ move(1, "E", 2800, price: 11), move(2, "E", 3000, price: 7.6), move(3, "E", 1500, price: 7.6), move(4, "S", 1452) ]
+
+      result = run(moves, current_stock: 1827)
+
+      expect(result.reconstructed).to be true
+      expect(result.units).to eq(1827)
+      expect(result.unit_cost).to eq(7.6)
+    end
+
+    it "com o estoque real incompleto (Full sem leitura), sobra no histórico não é cortada" do
+      moves = [ move(1, "E", 2800, price: 11), move(2, "E", 3000, price: 7.6), move(3, "S", 1452) ]
+
+      result = run(moves, current_stock: 1827, stock_complete: false)
+
+      expect(result.reconstructed).to be false
+      expect(result.unit_cost).to eq(11)
+    end
+
     it "histórico que fecha com o estoque não é mexido" do
       result = run([ move(1, "E", 10, price: 5), move(2, "E", 10, price: 8), move(3, "S", 12) ], current_stock: 8)
 

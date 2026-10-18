@@ -31,7 +31,9 @@ Calculado pelas movimentações do Controle de Estoque do Olist (`GET /estoque/{
   venda registrada no depósito do Full consome; balanço no Full só zera o registro.
 - O detalhe mostra a diferença entre o que o histórico explica e o estoque de hoje (kits, variações e SKUs diferentes
   entre Olist e Mercado Livre podem causar diferença).
-- **Histórico que não fecha:** se as saídas registradas superam as entradas (ou deixam menos unidades que o estoque
+- **Histórico que não fecha:** se o histórico explica MENOS ou MAIS unidades do que o estoque real (saídas a mais, ou saídas que o
+  Olist não registrou, como a baixa de componentes vendidos em kit), as camadas são refeitas pelas entradas mais novas. Quando
+  sobra unidade no histórico, isso só vale se o estoque do Full foi lido (senão a sobra pode ser o próprio Full). Antes: se as saídas registradas superam as entradas (ou deixam menos unidades que o estoque
   atual, Olist + Full), as camadas são refeitas da entrada mais recente para trás até cobrir o estoque atual
   (`Olist::Fifo`, parâmetro `current_stock`). Sem isso o produto ficava sem custo mesmo com entradas com preço.
 - Ordem de custo usada em outras telas (`Olist::UnitCost`): PEPS → custo cadastrado no produto → custo médio → custo
