@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_27_150001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -101,6 +101,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_010001) do
     t.datetime "ads_synced_at"
     t.bigint "ads_advertiser_id"
     t.datetime "ads_recent_synced_at"
+    t.datetime "promotions_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -313,6 +314,66 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_010001) do
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
     t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"
+  end
+
+  create_table "ml_promotion_offers", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.string "promotion_id"
+    t.string "promotion_type", null: false
+    t.string "sub_type"
+    t.string "name"
+    t.string "status"
+    t.decimal "price", precision: 12, scale: 2
+    t.decimal "original_price", precision: 12, scale: 2
+    t.decimal "min_price", precision: 12, scale: 2
+    t.decimal "max_price", precision: 12, scale: 2
+    t.decimal "max_top_price", precision: 12, scale: 2
+    t.decimal "suggested_price", precision: 12, scale: 2
+    t.decimal "fixed_amount", precision: 12, scale: 2
+    t.decimal "meli_percentage", precision: 6, scale: 2
+    t.decimal "seller_percentage", precision: 6, scale: 2
+    t.datetime "start_date"
+    t.datetime "finish_date"
+    t.jsonb "fees"
+    t.jsonb "payload"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_offers_on_ml_account_id_and_item_id"
+    t.index ["ml_account_id", "promotion_id"], name: "index_ml_promotion_offers_on_ml_account_id_and_promotion_id"
+  end
+
+  create_table "ml_promotion_settings", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.string "sku"
+    t.decimal "min_margin_pct", precision: 6, scale: 2
+    t.decimal "max_margin_pct", precision: 6, scale: 2
+    t.boolean "apply_to_sku", default: false, null: false
+    t.boolean "automation_enabled", default: true, null: false
+    t.uuid "updated_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_settings_unique", unique: true
+    t.index ["updated_by_id"], name: "index_ml_promotion_settings_on_updated_by_id"
+  end
+
+  create_table "ml_promotions", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "promotion_id", null: false
+    t.string "promotion_type", null: false
+    t.string "sub_type"
+    t.string "name"
+    t.string "status"
+    t.datetime "start_date"
+    t.datetime "finish_date"
+    t.datetime "deadline_date"
+    t.jsonb "payload"
+    t.datetime "synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "promotion_id"], name: "index_ml_promotions_unique", unique: true
   end
 
   create_table "ml_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -680,6 +741,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_010001) do
   add_foreign_key "ml_oauth_states", "users", on_delete: :cascade
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_offers", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_settings", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_settings", "users", column: "updated_by_id", on_delete: :nullify
+  add_foreign_key "ml_promotions", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
   add_foreign_key "olist_changes", "companies", on_delete: :cascade
   add_foreign_key "olist_changes", "users", on_delete: :nullify

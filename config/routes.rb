@@ -49,6 +49,11 @@ Rails.application.routes.draw do
     get "ads", to: "ads#index"
     get "ads/items", to: "ads#items"
     post "ads/sync", to: "ads#sync"
+    get "promotions", to: "promotions#index"
+    get "promotions/export", to: "promotions#export"
+    post "promotions/sync", to: "promotions#sync"
+    get "promotions/items/:item_id", to: "promotions#show", as: :promotion_item
+    patch "promotions/items/:item_id/settings", to: "promotions#update_settings"
     get "sales", to: "sales#index"
     post "sales/sync", to: "sales#sync"
     get "sales/:id", to: "sales#show", as: :sale

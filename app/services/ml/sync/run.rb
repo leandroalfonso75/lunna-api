@@ -16,6 +16,7 @@ module Ml
       CLAIMS_BATCH = 40
       ADS_EVERY = 3.hours
       ADS_RECENT_EVERY = 30.minutes
+      PROMOTIONS_EVERY = 1.hour
       DETAIL_MAX_LENGTH = 2_000
 
       # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
@@ -57,6 +58,7 @@ module Ml
         sync_shipments(client)
         sync_claims(client)
         sync_ads(client)
+        sync_promotions(client)
         sync_quality(client)
         sync_details(client)
 
@@ -138,6 +140,14 @@ module Ml
       # Envio dos pedidos recentes (seção Vendas), 60 por rodada.
       def sync_shipments(client)
         result = Ml::Sync::Shipments.call(client, @account, limit: SHIPMENTS_BATCH, since: 95.days.ago)
+        @notes.concat(result.notes)
+      end
+
+      # Central de Promoções (seção Promoções): promoções da conta e ofertas de cada anúncio, a cada hora.
+      def sync_promotions(client)
+        return if @account.promotions_synced_at.present? && @account.promotions_synced_at > PROMOTIONS_EVERY.ago
+
+        result = Ml::Sync::Promotions.call(client, @account)
         @notes.concat(result.notes)
       end
 

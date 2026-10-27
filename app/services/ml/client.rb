@@ -67,6 +67,15 @@ module Ml
         offset: offset)
     end
 
+    # Central de Promoções: promoções da conta e ofertas de um anúncio (candidato, ativa, pendente).
+    def seller_promotions(user_id)
+      get("/seller-promotions/users/#{user_id}", app_version: "v2")
+    end
+
+    def item_promotions(item_id)
+      get("/seller-promotions/items/#{item_id}", app_version: "v2")
+    end
+
     # Reclamação/mediação de um pedido (cancelamento, reclamação, devolução).
     def claim(claim_id)
       get("/post-purchase/v1/claims/#{claim_id}")
@@ -179,8 +188,9 @@ module Ml
       (200...300).cover?(response.status)
     end
 
+    # 409 em leitura = "internal capacity constraints" (Central de Promoções sob carga): vale tentar de novo.
     def retryable?(status)
-      status == 429 || status >= 500
+      status == 429 || status == 409 || status >= 500
     end
 
     def raise_for(response, path)

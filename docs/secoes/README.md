@@ -11,6 +11,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 | Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
 | Ads | [ads.md](ads.md) | Campanhas e anúncios de publicidade (Product Ads) dos últimos 3 meses, com ACOS, ROAS e investimento |
+| Promoções | [promocoes.md](promocoes.md) | Central de Promoções do ML por anúncio: promoção atual, melhor oferta pela margem, margens por anúncio e exportação |
 | Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA |
 | Radar Mercado Livre | [radar-ml.md](radar-ml.md) | Consulta de anúncios coletados do Mercado Livre, com histórico de pesquisas |
 | Configurações | [configuracoes.md](configuracoes.md) | Empresa, impostos e margem, usuários e contas do Mercado Livre |
