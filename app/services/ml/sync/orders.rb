@@ -15,7 +15,9 @@ module Ml
 
       Result = Struct.new(:order_ids, :notes, :ok, keyword_init: true)
 
-      def self.call(client, account, from:)
+      # field: :created (criados desde `from`) ou :updated (alterados desde `from`: pega cancelamento,
+      # reclamação e devolução de pedidos antigos).
+      def self.call(client, account, from:, field: :created)
         orders = {}
         order_items = {}
         offset = 0
@@ -24,7 +26,7 @@ module Ml
 
         while offset <= MAX_OFFSET
           begin
-            page = client.orders_search(account.seller_id, from: from, offset: offset)
+            page = client.orders_search(account.seller_id, from: from, offset: offset, field: field)
           rescue Ml::Client::Error => e
             notes << "pedidos offset #{offset}: #{e.message}"
             ok = false

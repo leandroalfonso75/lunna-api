@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_27_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -308,6 +308,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_120001) do
     t.decimal "paid_amount", precision: 12, scale: 2
     t.jsonb "shipment"
     t.datetime "shipment_synced_at"
+    t.jsonb "claims"
+    t.datetime "claims_synced_at"
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
     t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"

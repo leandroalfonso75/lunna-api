@@ -66,6 +66,35 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["sales"].first["shipping"]["shared_with"]).to eq([])
   end
 
+  it "venda cancelada mostra quem cancelou e o motivo da reclamação" do
+    order = sale(1, status: "cancelled")
+    order.update_columns(payload: order.payload.merge("cancel_detail" => { "code" => "buyer_cancel_express", "requested_by" => "buyer", "date" => "2026-10-26T20:18:21.000-04:00" }),
+      claims: [ { "id" => 9, "type" => "cancel_purchase", "status" => "closed", "reason" => "Me arrependi da compra", "opened_by" => "buyer",
+                  "resolution" => { "reason" => "coverage_decision", "benefited" => [ "complainant" ], "applied_coverage" => true } } ])
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    issue = json["sales"].first["issue"]
+    expect(issue["label"]).to eq("Comprador cancelou antes do envio · Me arrependi da compra")
+    expect(issue["cancellation"]).to include("requested_by" => "comprador")
+    expect(issue["claims"].first["resolution"]).to include("label" => "decisão do Mercado Livre", "benefited" => "a favor do comprador", "coverage" => true)
+
+    get "/api/sales/1", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["issue"]["label"]).to eq("Comprador cancelou antes do envio · Me arrependi da compra")
+  end
+
+  it "venda paga com reclamação aberta e devolução mostra o andamento" do
+    sale(1).update_columns(claims: [ { "id" => 9, "type" => "mediations", "status" => "opened", "stage" => "claim", "reason" => "Recebi outro tipo de produto",
+                                       "return" => { "status" => "shipped", "status_money" => "retained", "subtype" => "return_total" } } ])
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    issue = json["sales"].first["issue"]
+    expect(issue).to include("tone" => "bad", "label" => "Reclamação aberta · Recebi outro tipo de produto · devolução a caminho do vendedor")
+    expect(issue["claims"].first["return"]).to include("money" => "dinheiro retido")
+    expect(json["sales"].first["economics"]).to be_present
+  end
+
   describe "custo de Ads e lucro pós Ads" do
     let(:day) { 2.days.ago.to_date }
     let(:at) { Time.zone.local(day.year, day.month, day.day, 14) }

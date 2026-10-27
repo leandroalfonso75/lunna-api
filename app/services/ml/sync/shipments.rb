@@ -1,6 +1,7 @@
 # Envio de cada pedido (/shipments/{id} + /shipments/{id}/costs). Guarda só o que a seção
 # Vendas mostra e descarta endereço, telefone e nome do comprador (dados pessoais).
-# Pedidos com envio já entregue/cancelado/devolvido há mais de 2 dias não são relidos.
+# Envio já entregue/cancelado/devolvido não é relido, a não ser que o pedido mude depois da última leitura
+# (cancelamento, reclamação, devolução): aí o envio é relido na próxima rodada.
 module Ml
   module Sync
     module Shipments
@@ -9,13 +10,14 @@ module Ml
 
       Result = Struct.new(:count, :notes, :remaining, keyword_init: true)
 
-      # Pedidos que precisam de envio (sem envio lido ou com envio ainda em andamento), os mais
-      # novos primeiro. `limit` quebra o trabalho em rodadas curtas.
+      # Pedidos que precisam de envio (sem envio lido, envio ainda em andamento ou pedido alterado depois da
+      # leitura do envio), os mais novos primeiro. `limit` quebra o trabalho em rodadas curtas.
       def self.pending(account, since: nil)
         scope = account.ml_orders.where.not(shipping_id: nil)
         scope = scope.where("date_created >= ?", since) if since
         scope.where(
-          "shipment IS NULL OR (COALESCE(shipment->>'status', '') NOT IN (?) AND shipment_synced_at <= ?)",
+          "shipment IS NULL OR (COALESCE(shipment->>'status', '') NOT IN (?) AND shipment_synced_at <= ?) " \
+          "OR (payload->>'last_updated')::timestamptz > shipment_synced_at",
           FINAL_STATUSES, REFRESH_AFTER.ago
         ).order(date_created: :desc)
       end

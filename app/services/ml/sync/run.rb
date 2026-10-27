@@ -13,6 +13,7 @@ module Ml
       QUALITY_BATCH = 200
       DETAILS_BATCH = 60
       SHIPMENTS_BATCH = 60
+      CLAIMS_BATCH = 40
       ADS_EVERY = 3.hours
       ADS_RECENT_EVERY = 30.minutes
       DETAIL_MAX_LENGTH = 2_000
@@ -54,6 +55,7 @@ module Ml
         sync_visits(client)
         orders_result = sync_orders(client)
         sync_shipments(client)
+        sync_claims(client)
         sync_ads(client)
         sync_quality(client)
         sync_details(client)
@@ -113,6 +115,11 @@ module Ml
 
         result = Ml::Sync::Orders.call(client, @account, from: from)
         @notes.concat(result.notes)
+        unless backfilling
+          # vendas antigas alteradas (cancelamento, reclamação, devolução) também são relidas
+          updated = Ml::Sync::Orders.call(client, @account, from: 2.days.ago, field: :updated)
+          @notes.concat(updated.notes)
+        end
         @account.update_columns(orders_backfilled_at: Time.current) if backfilling && result.ok
 
         result
@@ -131,6 +138,12 @@ module Ml
       # Envio dos pedidos recentes (seção Vendas), 60 por rodada.
       def sync_shipments(client)
         result = Ml::Sync::Shipments.call(client, @account, limit: SHIPMENTS_BATCH, since: 95.days.ago)
+        @notes.concat(result.notes)
+      end
+
+      # Reclamações, cancelamentos por mediação e devoluções das vendas (motivo, resultado, devolução).
+      def sync_claims(client)
+        result = Ml::Sync::Claims.call(client, @account, limit: CLAIMS_BATCH, since: 95.days.ago)
         @notes.concat(result.notes)
       end
 

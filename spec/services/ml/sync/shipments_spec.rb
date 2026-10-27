@@ -36,6 +36,15 @@ RSpec.describe Ml::Sync::Shipments do
     expect(MlOrder.find(1).shipment_synced_at).to be_present
   end
 
+  it "relê o envio já final quando a venda muda depois da leitura (cancelamento, reclamação, devolução)" do
+    order(1, shipping_id: 950, shipment: { "status" => "delivered" }, synced: 2.days.ago)
+    MlOrder.find(1).update_columns(payload: { "last_updated" => 1.hour.ago.iso8601 })
+    order(2, shipping_id: 951, shipment: { "status" => "delivered" }, synced: 1.hour.ago)
+    MlOrder.find(2).update_columns(payload: { "last_updated" => 2.days.ago.iso8601 })
+
+    expect(described_class.pending(account).pluck(:order_id)).to eq([ 1 ])
+  end
+
   it "não relê envio já entregue, mas relê o que ainda está em andamento depois de 2 horas" do
     order(1, shipping_id: 901, shipment: { "status" => "delivered" }, synced: 5.hours.ago)
     order(2, shipping_id: 902, shipment: { "status" => "shipped" }, synced: 5.hours.ago)

@@ -149,6 +149,9 @@ RSpec.describe Ml::Sync::Run do
 
       expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/orders/search")
         .with(query: hash_including("order.date_created.from" => 4.days.ago.beginning_of_day.iso8601))
+      # vendas antigas alteradas (cancelamento, reclamação, devolução) também são relidas
+      expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/orders/search")
+        .with(query: hash_including("order.date_last_updated.from"))
     end
 
     it "pedidos: não marca orders_backfilled_at quando a carga de 95 dias teve erro" do

@@ -47,6 +47,18 @@ Implementado em `Painel::SalesQuery#economics`.
 - Dia lido logo depois de fechar cuja soma por anúncio não bate com o gasto das campanhas é relido uma vez
   (`Ml::Sync::Ads.mismatched_item_days`).
 
+## Cancelamento, reclamação e devolução
+- **Motivo na lista e no detalhe:** venda cancelada mostra o tipo de cancelamento (`cancel_detail` do pedido: comprador
+  cancelou antes do envio, cancelada por reclamação, envio não entregue, sem estoque, fraude…) e quem pediu. Reclamações
+  (`payload.mediations`) são lidas em `/post-purchase/v1/claims/{id}` com o motivo em texto
+  (`/claims/reasons/{id}`, ex.: "Me arrependi da compra"), o resultado (a favor de quem, com cobertura do ML) e a
+  devolução (`/post-purchase/v2/claims/{id}/returns`: status e dinheiro retido/reembolsado). Ficam em `ml_orders.claims`
+  (`Ml::Sync::Claims`, 40 por rodada) e em texto em `Painel::SaleIssues`. Vale também para venda paga com reclamação.
+- **Releitura:** além dos pedidos criados nos últimos 4 dias, cada rodada busca os pedidos **alterados** nos últimos 2 dias
+  (`order.date_last_updated.from`), para pegar cancelamento e devolução de vendas antigas. Envio é relido sempre que o
+  pedido muda depois da última leitura do envio (mesmo já entregue/cancelado). Reclamação é relida quando o pedido muda
+  ou a cada 2 horas enquanto estiver aberta.
+
 ## Dados e atualização
 - Fonte: API do Mercado Livre, somente leitura. Pedido completo em `ml_orders.payload`; linhas em `ml_order_items`
   (com título, SKU, tipo de anúncio e variação); envio em `ml_orders.shipment`.

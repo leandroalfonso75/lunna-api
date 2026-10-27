@@ -57,13 +57,28 @@ module Ml
       get("/items/#{item_id}/visits/time_window", last: 60, unit: "day")
     end
 
-    def orders_search(seller_id, from:, offset:)
+    # field: :created (pedidos criados desde `from`) ou :updated (alterados desde `from`, inclusive os antigos).
+    def orders_search(seller_id, from:, offset:, field: :created)
       get("/orders/search",
         seller: seller_id,
-        "order.date_created.from" => from.iso8601,
+        "order.date_#{field == :updated ? "last_updated" : "created"}.from" => from.iso8601,
         sort: "date_desc",
         limit: 50,
         offset: offset)
+    end
+
+    # Reclamação/mediação de um pedido (cancelamento, reclamação, devolução).
+    def claim(claim_id)
+      get("/post-purchase/v1/claims/#{claim_id}")
+    end
+
+    def claim_reason(reason_id)
+      get("/post-purchase/v1/claims/reasons/#{reason_id}")
+    end
+
+    # Devolução ligada à reclamação (404 quando não há).
+    def claim_return(claim_id)
+      get("/post-purchase/v2/claims/#{claim_id}/returns")
     end
 
     def shipment(shipment_id)

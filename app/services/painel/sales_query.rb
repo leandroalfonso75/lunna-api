@@ -24,7 +24,7 @@ module Painel
       "paid" => [ "Paga", "ok" ], "confirmed" => [ "Confirmada", "neutral" ],
       "payment_required" => [ "Aguardando pagamento", "warn" ], "payment_in_process" => [ "Pagamento em análise", "warn" ],
       "partially_paid" => [ "Parcialmente paga", "warn" ], "cancelled" => [ "Cancelada", "bad" ],
-      "invalid" => [ "Inválida", "bad" ]
+      "invalid" => [ "Inválida", "bad" ], "partially_refunded" => [ "Reembolso parcial", "warn" ]
     }.freeze
 
     SHIPMENT_STATUS = {
@@ -53,7 +53,9 @@ module Painel
     }.freeze
 
     LIST_COLUMNS = %i[order_id ml_account_id status date_created date_closed total_amount paid_amount shipping_id pack_id
-                      buyer_id buyer_nickname shipment shipment_synced_at].freeze
+                      buyer_id buyer_nickname shipment shipment_synced_at claims].freeze
+    # motivo do cancelamento sem carregar o payload inteiro do pedido na lista
+    CANCEL_DETAIL = Arel.sql("payload->'cancel_detail' AS cancel_detail")
 
     def self.call(account, params)
       new(account, params).call
@@ -76,7 +78,7 @@ module Painel
       base = @account.ml_orders.where(date_created: from..to)
       scope = apply_filters(base)
 
-      rows = build_rows(scope.select(*LIST_COLUMNS).to_a)
+      rows = build_rows(scope.select(*LIST_COLUMNS, CANCEL_DETAIL).to_a)
       sorted = sort(rows)
       page, per = paging
       slice = sorted.slice((page - 1) * per, per) || []
@@ -220,6 +222,7 @@ module Painel
         items: items, units: items.sum { |i| i[:quantity].to_i },
         total_amount: order.total_amount&.to_f, paid_amount: order.paid_amount&.to_f,
         shipping: shipping(order, shipment, share, group, order.order_id),
+        issue: SaleIssues.for(order),
         economics: economics(order, lines, shipment, olist, manual, share, ads)
       }
     end
