@@ -172,7 +172,13 @@ module Painel
       end
     end
 
-    # Só a mensagem do ML, sem a URL interna.
-    def ml_message(error) = error.message.split(" — ", 2).last.to_s.truncate(200)
+    NO_WRITE_PERMISSION = "o aplicativo do Lunna no Mercado Livre só tem permissão de leitura de promoções (ofertas). "                           "É preciso liberar leitura e escrita de Ofertas e Promoções no DevCenter e autorizar a conta de novo"
+
+    # Só a mensagem do ML, sem a URL interna; 403 do PolicyAgent = falta de permissão de escrita no app.
+    def ml_message(error)
+      return NO_WRITE_PERMISSION if error.status == 403 && error.message.include?("PA_UNAUTHORIZED")
+
+      error.message.split(" — ", 2).last.to_s.truncate(200)
+    end
   end
 end

@@ -65,4 +65,15 @@ RSpec.describe Painel::PromotionActions do
     expect(result.ok).to be true
     expect(MlPromotionAction.last).to have_attributes(kind: "sair", ok: true)
   end
+
+  it "403 do PolicyAgent vira aviso de falta de permissão de escrita no app, sem mexer no anúncio" do
+    stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1"))
+      .to_return(status: 403, body: { status: 403, code: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES" }.to_json)
+
+    result = described_class.apply(account, item.item_id, user: user)
+
+    expect(result.ok).to be false
+    expect(result.message).to include("permissão de leitura de promoções")
+    expect(a_request(:post, /seller-promotions/)).not_to have_been_made
+  end
 end
