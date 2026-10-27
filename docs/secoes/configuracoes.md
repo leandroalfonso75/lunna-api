@@ -3,7 +3,7 @@
 Cadastros da empresa e das contas conectadas.
 
 ## Abas
-- **Empresa:** nome, **Impostos e margem** (`tax_pct`, margem mínima, cortes da Curva ABC, limites de variação) e a IA
+- **Empresa:** nome, **Impostos e margem** (`tax_pct`, margem mínima, margem máxima nas promoções (`max_margin_pct`, opcional), cortes da Curva ABC, limites de variação) e a IA
   (chave e modelo do OpenRouter, por empresa).
 - **Contas:** contas do Mercado Livre conectadas (conectar e remover). A conta é conectada por OAuth.
 - **Usuários:** administradores e membros da empresa.

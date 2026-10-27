@@ -13,6 +13,7 @@ class MlAccount < ApplicationRecord
   has_many :ml_promotions, dependent: :delete_all
   has_many :ml_promotion_offers, dependent: :delete_all
   has_many :ml_promotion_settings, dependent: :delete_all
+  has_many :ml_promotion_actions, dependent: :delete_all
   has_many :ml_ad_item_dailies
   has_many :ml_ad_day_syncs
   has_many :ml_sync_runs

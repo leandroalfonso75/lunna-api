@@ -4,8 +4,9 @@ Promoções da **Central de Promoções do Mercado Livre** por anúncio: a promo
 (maior margem dentro da margem mínima e máxima) e o ganho da troca. Proposta completa e fases:
 [Seção Promoções do Lunna: proposta](https://claude.ai/artifact/524x29CDnNHJy2wo7rrwEg).
 
-Fase 1 (pronta): ver, comparar, configurar margens e exportar. **Não mexe no Mercado Livre.** Fase 2 (aderir, editar
-preço e sair pelo Lunna) e fase 3 (rotina das 03:00) ainda não existem.
+Fase 1 (pronta): ver, comparar, configurar margens e exportar. Fase 2 (pronta): aplicar a melhor oferta, entrar numa
+oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores e sempre com confirmação na tela**. Fase 3
+(rotina das 03:00) ainda não existe.
 
 ## O que a tela mostra
 - **Cartões:** anúncios em promoção, sem promoção, trocas que rendem mais (com o ganho somado por unidade) e abaixo
@@ -17,6 +18,12 @@ preço e sair pelo Lunna) e fase 3 (rotina das 03:00) ainda não existem.
   melhor marcada) e o formulário de margem mínima e máxima, com "aplicar aos outros anúncios do SKU".
 - **Aba Promoções do ML:** cada promoção da Central com tipo, situação, período, anúncios ativos e candidatos;
   "Ver anúncios" filtra a aba Anúncios por ela.
+- **Aplicar (administrador):** no painel do anúncio, "Aplicar a melhor oferta", "Entrar"/"Ajustar" em cada oferta e
+  "Sair da promoção"; cada um mostra antes o que vai acontecer (de onde sai, para onde vai, preço e margem) e só age
+  depois de "Confirmar". Na lista, marcar anúncios (ou "Marcar os desta página que podem melhorar") e "Aplicar a melhor
+  oferta nos marcados": vai para a fila (`Ml::PromotionsApplyJob`), um anúncio de cada vez.
+- **Aba Histórico:** cada ação (pela tela, em lote ou pela rotina) com de/para, preço, margem, ganho, quem e o
+  resultado do ML.
 - **Exportar todas (CSV):** uma linha por anúncio e oferta (ativa ou candidata), com preços, faixa, parte do ML,
   margem e lucro. Separador `;` e vírgula decimal, para abrir direto no Excel.
 
@@ -30,7 +37,8 @@ preço e sair pelo Lunna) e fase 3 (rotina das 03:00) ainda não existem.
 - **Preço da oferta:** fixo (SMART, PRICE_MATCHING, relâmpago com ML, DOD) ou, nas de faixa (campanha do vendedor,
   DEAL, desconto próprio, relâmpago), o maior preço permitido. Com margem máxima, desce o preço até ela.
 - **Margem mínima:** a do anúncio ou, sem ela, a geral de Configurações (`companies.min_margin_pct`). Oferta abaixo
-  dela não serve. Margem máxima é opcional e só por anúncio.
+  dela não serve. **Margem máxima** (opcional): a do anúncio ou, sem ela, a geral de Configurações
+  (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto.
 - **Melhor oferta:** a de maior margem entre as que servem. Empate: a promoção atual (ajustar o preço dela), depois o
   desconto próprio, depois a que termina mais tarde. A promoção ativa entra como está hoje e, se for de faixa,
   também no preço da regra ("ajustar o preço da atual").
@@ -38,6 +46,17 @@ preço e sair pelo Lunna) e fase 3 (rotina das 03:00) ainda não existem.
   sem custo.
 - **Aplicar ao SKU:** grava as mesmas margens nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
 - Mudar margens: só administradores.
+
+## Aplicar no Mercado Livre (`Painel::PromotionActions`)
+- Antes de agir, relê as ofertas do anúncio; só aplica oferta que serve pela regra de margem.
+- **Entrar:** `POST /seller-promotions/items/{id}?app_version=v2` com `promotion_id`, `promotion_type` e `deal_price` (faixa)
+  ou `offer_id` (preço dado pelo ML: SMART, PRICE_MATCHING…); desconto próprio (`PRICE_DISCOUNT`) por 30 dias.
+- **Sair:** `DELETE /seller-promotions/items/{id}?promotion_type=…&promotion_id=…` (ou `offer_id`).
+- **Trocar** = sair da atual e entrar na nova; **ajustar o preço** = sair e entrar de novo na mesma. Se a entrada falhar
+  depois de sair, tenta voltar para a anterior com o preço de antes e avisa se não conseguiu.
+- Escrita sem retentativa automática (`Ml::Client#write`), para não aplicar duas vezes. Relâmpago e oferta do dia (pedem
+  estoque reservado) não são aplicados pelo Lunna.
+- Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 
 ## Dados e atualização
 - `Ml::Sync::Promotions`, dentro da sincronização do ML, a cada **1 hora** (`PROMOTIONS_EVERY`): promoções da conta
@@ -56,13 +75,17 @@ preço e sair pelo Lunna) e fase 3 (rotina das 03:00) ainda não existem.
 **API (`lunna-api`)**
 - `app/controllers/promotions_controller.rb` (`GET /api/promotions`, `GET /api/promotions/items/:item_id`,
   `PATCH /api/promotions/items/:item_id/settings`, `GET /api/promotions/export`, `POST /api/promotions/sync`)
-- `app/services/painel/promotions_query.rb`, `promotion_evaluator.rb`, `promotion_settings.rb`
-- `app/services/ml/sync/promotions.rb`, `app/jobs/ml/promotions_sync_job.rb`; cliente em `app/services/ml/client.rb`
-- Migration `20261027150001_create_ml_promotions.rb`
+- `app/services/painel/promotions_query.rb`, `promotion_evaluator.rb`, `promotion_settings.rb`, `promotion_actions.rb`
+- `app/services/ml/sync/promotions.rb`, `app/jobs/ml/promotions_sync_job.rb`, `promotions_apply_job.rb`; cliente em
+  `app/services/ml/client.rb` (`join_promotion`, `leave_promotion`)
+- Rotas novas: `POST /api/promotions/items/:item_id/apply`, `POST .../leave`, `POST /api/promotions/apply_best`,
+  `GET /api/promotions/actions`
+- Migrations `20261027150001_create_ml_promotions.rb`, `20261027160001_add_max_margin_to_companies.rb`,
+  `20261027160002_create_ml_promotion_actions.rb`
 
 ## Pendências
-- Fase 2: aderir, editar preço, sair e criar desconto próprio (POST/DELETE `/seller-promotions/items/{id}`), com
-  confirmação e histórico.
+- Fase 2: ainda não testada com uma escrita real no Mercado Livre (só com respostas simuladas nos testes); a primeira
+  aplicação real deve ser acompanhada.
 - Fase 3: rotina das 03:00 (recadastrar promoção que acabou ou caiu e trocar por oferta melhor), primeiro em simulação.
 - Redução de tarifa do PRICE_MATCHING: confirmar como o ML informa; hoje a conta usa a tarifa de `listing_prices`.
 - Ofertas relâmpago pedem estoque mínimo; a escolha ainda não confere o estoque.

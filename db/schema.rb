@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_150001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_27_160002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -38,6 +38,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_150001) do
     t.text "openrouter_api_key"
     t.string "ai_model"
     t.decimal "fixed_expenses_pct", precision: 6, scale: 2, default: "3.0", null: false
+    t.decimal "max_margin_pct", precision: 6, scale: 2
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -314,6 +315,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_150001) do
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
     t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"
+  end
+
+  create_table "ml_promotion_actions", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.string "kind", null: false
+    t.string "source", null: false
+    t.string "from_promotion_id"
+    t.string "from_type"
+    t.string "from_name"
+    t.decimal "from_price", precision: 12, scale: 2
+    t.decimal "from_margin_pct", precision: 8, scale: 2
+    t.string "to_promotion_id"
+    t.string "to_type"
+    t.string "to_name"
+    t.decimal "to_price", precision: 12, scale: 2
+    t.decimal "to_margin_pct", precision: 8, scale: 2
+    t.decimal "gain", precision: 12, scale: 2
+    t.boolean "ok", default: false, null: false
+    t.string "error"
+    t.uuid "user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "created_at"], name: "index_ml_promotion_actions_on_ml_account_id_and_created_at"
+    t.index ["user_id"], name: "index_ml_promotion_actions_on_user_id"
   end
 
   create_table "ml_promotion_offers", force: :cascade do |t|
@@ -741,6 +767,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_150001) do
   add_foreign_key "ml_oauth_states", "users", on_delete: :cascade
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_actions", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_actions", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_offers", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_settings", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_settings", "users", column: "updated_by_id", on_delete: :nullify

@@ -17,6 +17,11 @@ module Painel
     def self.call(account, params) = new(account, params).call
     def self.detail(account, item_id) = new(account, {}).detail(item_id)
     def self.export_csv(account) = new(account, {}).export_csv
+    def self.evaluate_item(account, item_id) = new(account, {}).evaluate_item(item_id)
+    def self.actions(account, params) = new(account, params).actions
+
+    KIND_LABELS = { "aderir" => "Entrou", "ajustar_preco" => "Ajustou o preço", "trocar" => "Trocou", "sair" => "Saiu" }.freeze
+    SOURCE_LABELS = { "tela" => "Pela tela", "lote" => "Em lote", "rotina" => "Rotina das 03:00", "simulacao" => "Simulação" }.freeze
 
     def initialize(account, params)
       @account = account
@@ -36,7 +41,7 @@ module Painel
         items: sorted.slice((page - 1) * per, per) || [],
         total: sorted.size, page: page, per_page: per, sort: sort_key, dir: sort_dir,
         promotions: promotions,
-        rules: { min_margin_pct: @company.min_margin_pct.to_f },
+        rules: { min_margin_pct: @company.min_margin_pct.to_f, max_margin_pct: @company.max_margin_pct&.to_f },
         synced_at: @account.promotions_synced_at
       }
     end
@@ -46,6 +51,28 @@ module Painel
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]), with_offers: true)
       row.merge(offers: evaluated.sort_by { |e| [ e[:valid] ? 0 : 1, -(e[:margin_pct] || -999) ] }.map { |e| offer_payload(e) },
                 sku_items: sku_siblings(item))
+    end
+
+    # => { item:, row:, current:, best:, evaluated: } de um anúncio (usado para aplicar a melhor oferta).
+    def evaluate_item(item_id)
+      item = @account.ml_items.find(item_id)
+      row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]))
+      { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best }
+    end
+
+    # Histórico das ações nas promoções, as mais novas primeiro (filtro opcional por anúncio).
+    def actions
+      scope = @account.ml_promotion_actions.order(created_at: :desc).limit(200)
+      scope = scope.where(item_id: @params[:item_id]) if @params[:item_id].present?
+      titles = @account.ml_items.where(item_id: scope.map(&:item_id).uniq).pluck(:item_id, :title).to_h
+      users = User.where(id: scope.map(&:user_id).compact.uniq).pluck(:id, :name).to_h
+      scope.map do |a|
+        { id: a.id, item_id: a.item_id, title: titles[a.item_id], kind: a.kind, kind_label: KIND_LABELS.fetch(a.kind, a.kind),
+          source: a.source, source_label: SOURCE_LABELS.fetch(a.source, a.source), ok: a.ok, error: a.error,
+          from: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f },
+          to: a.to_type && { name: a.to_name, price: a.to_price&.to_f, margin_pct: a.to_margin_pct&.to_f },
+          gain: a.gain&.to_f, user: users[a.user_id], created_at: a.created_at }
+      end
     end
 
     def export_csv
@@ -102,7 +129,7 @@ module Painel
     def evaluator_for(item, ctx)
       setting = ctx[:settings][item.item_id]
       rules = PromotionEvaluator::Rules.new(
-        min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: setting&.max_margin_pct&.to_f,
+        min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f,
         tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f
       )
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
@@ -122,6 +149,8 @@ module Painel
       current = evaluated.select { |e| e[:as_is] && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
         .max_by { |e| e[:offer].status == "started" ? 1 : 0 }
       best = evaluator.best(evaluated)
+      @last_current = current
+      @last_best = best
       full_price = (item.original_price || item.price).to_f
       setting = ctx[:settings][item.item_id]
       cost = unit_cost(item, ctx)
@@ -137,7 +166,8 @@ module Painel
         settings: {
           min_margin_pct: setting&.min_margin_pct&.to_f, max_margin_pct: setting&.max_margin_pct&.to_f,
           apply_to_sku: setting&.apply_to_sku || false, automation_enabled: setting.nil? || setting.automation_enabled,
-          effective_min_pct: (setting&.min_margin_pct || @company.min_margin_pct).to_f
+          effective_min_pct: (setting&.min_margin_pct || @company.min_margin_pct).to_f,
+          effective_max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f
         },
         status: status_label(status_key(cost, current, best))
       }

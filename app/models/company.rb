@@ -27,6 +27,8 @@ class Company < ApplicationRecord
   validates :group_down_pct, numericality: { less_than_or_equal_to: 0 }
   validates :fixed_expenses_pct, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
+  validates :max_margin_pct, numericality: { greater_than: -100, less_than: 100 }, allow_nil: true
+  validate :max_margin_above_min
   validate :abc_cut_a_below_abc_cut_b
 
   def ai_configured? = openrouter_api_key.present? && ai_model.present?
@@ -43,5 +45,11 @@ class Company < ApplicationRecord
     return if abc_cut_a.blank? || abc_cut_b.blank?
 
     errors.add(:abc_cut_a, "deve ser menor que abc_cut_b") if abc_cut_a >= abc_cut_b
+  end
+
+  def max_margin_above_min
+    return if max_margin_pct.nil? || min_margin_pct.nil? || max_margin_pct >= min_margin_pct
+
+    errors.add(:max_margin_pct, "precisa ser maior ou igual à margem mínima")
   end
 end

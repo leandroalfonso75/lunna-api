@@ -4,10 +4,16 @@
 # PATCH /api/promotions/items/:item_id/settings?account_id= (admin) → margem mínima/máxima do anúncio (e do SKU).
 # GET /api/promotions/export?account_id= → CSV com todas as promoções e anúncios (ativos e candidatos).
 # POST /api/promotions/sync?account_id= (admin) → lê de novo a Central de Promoções.
+# POST /api/promotions/items/:item_id/apply?account_id= (admin) → aplica no ML a melhor oferta (ou promotion_id +
+#   promotion_type + action escolhidos); responde o resultado e o anúncio atualizado.
+# POST /api/promotions/items/:item_id/leave?account_id= (admin) → sai da promoção de preço atual.
+# POST /api/promotions/apply_best?account_id= (admin) → aplica a melhor oferta em vários anúncios (item_ids), em fila.
+# GET /api/promotions/actions?account_id= → histórico das ações nas promoções.
 class PromotionsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: %i[update_settings sync]
+  before_action :require_admin!, only: %i[update_settings sync apply leave apply_best]
+  MAX_BATCH = 300
 
   def index
     render json: Painel::PromotionsQuery.call(Current.account, params)
@@ -38,7 +44,40 @@ class PromotionsController < ApplicationController
     render json: { queued: true }, status: :accepted
   end
 
+  def apply
+    target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :action).to_h.symbolize_keys : nil
+    result = Painel::PromotionActions.apply(Current.account, params[:item_id], user: Current.user, target: target)
+    render json: action_response(result)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Anúncio não encontrado." ], status: :not_found)
+  end
+
+  def leave
+    result = Painel::PromotionActions.leave(Current.account, params[:item_id], user: Current.user)
+    render json: action_response(result)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Anúncio não encontrado." ], status: :not_found)
+  end
+
+  def apply_best
+    ids = Array(params[:item_ids]).map(&:to_s).uniq
+    ids = Current.account.ml_items.where(item_id: ids).pluck(:item_id)
+    return render_errors([ "Escolha os anúncios." ], status: :unprocessable_entity) if ids.empty?
+    return render_errors([ "No máximo #{MAX_BATCH} anúncios por vez." ], status: :unprocessable_entity) if ids.size > MAX_BATCH
+
+    Ml::PromotionsApplyJob.perform_later(Current.account.id, ids, Current.user&.id)
+    render json: { queued: ids.size }, status: :accepted
+  end
+
+  def actions
+    render json: { actions: Painel::PromotionsQuery.actions(Current.account, params) }
+  end
+
   private
+
+  def action_response(result)
+    { ok: result.ok, message: result.message, item: Painel::PromotionsQuery.detail(Current.account, params[:item_id]) }
+  end
 
   def settings_params
     params.permit(:min_margin_pct, :max_margin_pct, :apply_to_sku, :automation_enabled).to_h.symbolize_keys

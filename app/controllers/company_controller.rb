@@ -26,7 +26,7 @@ class CompanyController < ApplicationController
   private
 
   def company_params
-    params.permit(:name, :tax_pct, :min_margin_pct, :abc_cut_a, :abc_cut_b, :group_up_pct, :group_down_pct, :fixed_expenses_pct, :ai_model)
+    params.permit(:name, :tax_pct, :min_margin_pct, :abc_cut_a, :abc_cut_b, :group_up_pct, :group_down_pct, :fixed_expenses_pct, :max_margin_pct, :ai_model)
   end
 
   # `openrouter_api_key` ausente ou vazio mantém a atual; `remove_openrouter_api_key: true` apaga.

@@ -1,4 +1,5 @@
-# Cliente HTTP só-leitura da API do Mercado Livre (SPEC 3). Recebe o
+# Cliente HTTP da API do Mercado Livre (SPEC 3), quase todo de leitura; a única escrita é a da seção Promoções
+# (aderir/sair de promoção), sem retentativa automática para não aplicar duas vezes. Recebe o
 # access_token já válido de UMA conta — não renova token nem grava no banco
 # (usado dentro de threads pela sincronização). 401 vira erro normal.
 module Ml
@@ -74,6 +75,17 @@ module Ml
 
     def item_promotions(item_id)
       get("/seller-promotions/items/#{item_id}", app_version: "v2")
+    end
+
+    # Entra numa promoção (corpo conforme o tipo: promotion_id, promotion_type, deal_price ou offer_id…).
+    def join_promotion(item_id, body)
+      write(:post, "/seller-promotions/items/#{item_id}", { app_version: "v2" }, body)
+    end
+
+    # Sai de uma promoção do anúncio.
+    def leave_promotion(item_id, promotion_type:, promotion_id: nil, offer_id: nil)
+      params = { app_version: "v2", promotion_type: promotion_type, promotion_id: promotion_id, offer_id: offer_id }.compact
+      write(:delete, "/seller-promotions/items/#{item_id}", params)
     end
 
     # Reclamação/mediação de um pedido (cancelamento, reclamação, devolução).
@@ -191,6 +203,18 @@ module Ml
     # 409 em leitura = "internal capacity constraints" (Central de Promoções sob carga): vale tentar de novo.
     def retryable?(status)
       status == 429 || status == 409 || status >= 500
+    end
+
+    # Escrita: uma tentativa só (repetir poderia aplicar duas vezes); a resposta vazia vira {}.
+    def write(method, path, params, body = nil)
+      response = connection.run_request(method, path, body&.to_json, body ? { "Content-Type" => "application/json" } : {}) do |req|
+        req.params.update(params.transform_keys(&:to_s))
+      end
+      return (response.body.present? ? JSON.parse(response.body) : {}) if success?(response)
+
+      raise_for(response, path)
+    rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
+      raise Error.new(status: nil, path: path, body: e.message)
     end
 
     def raise_for(response, path)

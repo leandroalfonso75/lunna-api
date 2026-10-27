@@ -1,6 +1,8 @@
 require "rails_helper"
 
 RSpec.describe "/api/promotions", type: :request do
+  include ActiveJob::TestHelper
+
   let(:company) { create(:company, tax_pct: 10, fixed_expenses_pct: 5, min_margin_pct: 9) }
   let(:member) { create(:user, company: company) }
   let(:admin) { create(:user, :admin, company: company) }
@@ -55,5 +57,25 @@ RSpec.describe "/api/promotions", type: :request do
     lines = response.body.lines
     expect(lines.size).to eq(3)
     expect(lines.last).to include("Evento")
+  end
+
+  it "aplicar e aplicar em lote são só para administrador; o lote vai para a fila" do
+    post "/api/promotions/items/#{item.item_id}/apply", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(response).to have_http_status(:forbidden)
+
+    expect {
+      post "/api/promotions/apply_best", params: { account_id: account.id, item_ids: [ item.item_id, "MLB-OUTRA-CONTA" ] }, headers: auth_headers(admin)
+    }.to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], admin.id)
+    expect(json["queued"]).to eq(1)
+  end
+
+  it "margem máxima geral da empresa vale para anúncio sem margem própria" do
+    company.update!(max_margin_pct: 15)
+
+    get "/api/promotions", params: { account_id: account.id }, headers: auth_headers(member)
+
+    row = json["items"].find { |r| r["item_id"] == item.item_id }
+    expect(row["settings"]["effective_max_pct"]).to eq(15.0)
+    expect(row["best"]["margin_pct"]).to be_within(0.01).of(15.0)
   end
 end
