@@ -6,9 +6,11 @@
 # Frete do carrinho: vendas do mesmo carrinho (pack) viajam no MESMO envio e o ML informa o frete do
 # envio inteiro em cada uma. O frete do vendedor é dividido entre as vendas do envio, proporcional às
 # unidades de cada uma (as canceladas ficam de fora).
-# Custo de Ads (lucro pós Ads): o gasto de publicidade de cada anúncio em cada dia (ml_ad_item_dailies, da seção
-# Ads) é dividido entre as unidades vendidas desse anúncio nesse dia. Dia ainda não fechado na leitura de Ads
-# (hoje, ou lido antes de acabar) deixa a venda "pendente": o valor é refeito a cada atualização até fechar.
+# Custo de Ads (lucro pós Ads): o gasto de publicidade de cada anúncio no período escolhido (ml_ad_item_dailies, da
+# seção Ads) é dividido entre as unidades vendidas desse anúncio no mesmo período (cobre também o gasto de dias sem
+# venda, que costuma virar venda indireta dias depois). O gasto de anúncios que não venderam nada no período aparece à
+# parte no resumo ("Ads sem venda") e sai do lucro pós Ads, para o total bater com a seção Ads. Dia da venda ainda
+# não fechado na leitura de Ads (hoje, ou lido antes de acabar) deixa a venda "pendente": refeita até fechar.
 # Pedido cancelado não entra nos totais. Sem custo de algum item, o lucro do pedido não é calculado.
 module Painel
   class SalesQuery
@@ -57,8 +59,9 @@ module Painel
       new(account, params).call
     end
 
-    def self.detail(account, order_id)
-      new(account, {}).detail(order_id)
+    # params: o mesmo período da lista (period ou from/to), que define o rateio do custo de Ads.
+    def self.detail(account, order_id, params = {})
+      new(account, params).detail(order_id)
     end
 
     def initialize(account, params)
@@ -80,7 +83,7 @@ module Painel
 
       {
         period: { from: from.iso8601, to: to.iso8601, preset: preset_key },
-        summary: summary(rows),
+        summary: summary(rows, filtered: filtered?),
         daily: daily(rows, from, to),
         counts: counts(base),
         sales: slice,
@@ -125,49 +128,59 @@ module Painel
 
     def sale_day(order) = order.date_created.in_time_zone(@zone).to_date
 
-    # Tudo o que o rateio precisa, buscado uma vez para a página inteira.
+    def ads_days
+      from, to = window
+      from.in_time_zone(@zone).to_date..to.in_time_zone(@zone).to_date
+    end
+
+    # Tudo o que o rateio precisa, buscado uma vez para a página inteira: gasto e unidades de cada anúncio no período.
     def ads_context(orders, items)
       lines = items.values.flatten
       item_ids = lines.map(&:item_id).uniq
       active = orders.reject { |o| %w[cancelled invalid].include?(o.status) }
-      days = active.map { |o| sale_day(o) }.uniq
-      return { empty: true } if days.empty? || item_ids.empty?
+      return { empty: true } if active.empty? || item_ids.empty?
 
-      spend = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: days).pluck(:item_id, :date, :cost)
-        .to_h { |item_id, date, cost| [ [ item_id, date ], cost.to_f ] }
+      days = active.map { |o| sale_day(o) }.uniq
+      spend = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: ads_days).group(:item_id).sum(:cost)
+        .transform_values(&:to_f)
       closed = @account.ml_ad_day_syncs.where(date: days).to_h { |s| [ s.date, s.closed? ] }
       advertised = MlAdItem.where(ml_account_id: @account.id, item_id: item_ids).pluck(:item_id).to_set
       advertised.merge(MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids).distinct.pluck(:item_id))
 
-      { spend: spend, closed: closed, advertised: advertised, units: units_sold_by_item_day(item_ids, days) }
+      { spend: spend, closed: closed, advertised: advertised, units: units_sold_by_item(item_ids) }
     end
 
-    # Unidades vendidas por anúncio e dia (vendas não canceladas): base do rateio do gasto do dia.
-    def units_sold_by_item_day(item_ids, days)
-      from = @zone.local(days.min.year, days.min.month, days.min.day).beginning_of_day
-      to = @zone.local(days.max.year, days.max.month, days.max.day).end_of_day
-      MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+    # Unidades vendidas por anúncio no período (vendas não canceladas, sem os filtros da tela): base do rateio.
+    def units_sold_by_item(item_ids = nil)
+      from, to = window
+      scope = MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
         .where(o: { ml_account_id: @account.id }).where.not(o: { status: %w[cancelled invalid] })
-        .where(item_id: item_ids).where("o.date_created BETWEEN ? AND ?", from, to)
-        .group("ml_order_items.item_id", Arel.sql("(o.date_created AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::date"))
-        .sum("ml_order_items.quantity")
+        .where("o.date_created BETWEEN ? AND ?", from, to)
+      scope = scope.where(item_id: item_ids) if item_ids
+      scope.group("ml_order_items.item_id").sum("ml_order_items.quantity")
+    end
+
+    # Gasto de Ads no período que não vai para venda nenhuma: anúncios que não venderam nenhuma unidade nele, mais a
+    # diferença entre o gasto das campanhas (o total da seção Ads) e a soma por anúncio, quando o ML não detalha tudo.
+    def ads_unsold
+      sold = units_sold_by_item.select { |_, units| units.to_i.positive? }.keys
+      items = MlAdItemDaily.where(ml_account_id: @account.id, date: ads_days)
+      campaigns = @account.ml_ad_daily_metrics.where(date: ads_days).sum(:cost).to_f
+      items.where.not(item_id: sold).sum(:cost).to_f + [ campaigns - items.sum(:cost).to_f, 0.0 ].max
     end
 
     # => { cost:, state: "apurado" | "pendente" | "sem_ads", lines: [...] }
     def ads_for(order, lines, ads)
       return { cost: 0.0, state: "sem_ads", lines: [] } if ads[:empty]
 
-      day = sale_day(order)
-      closed = ads[:closed][day]
-      pending = false
+      pending = !ads[:closed][sale_day(order)]
       line_costs = lines.filter_map do |line|
         next unless ads[:advertised].include?(line.item_id)
 
-        day_cost = ads[:spend][[ line.item_id, day ]].to_f
-        pending ||= !closed
-        sold = ads[:units][[ line.item_id, day ]].to_i
-        share = sold.positive? ? day_cost * line.quantity.to_i / sold : 0.0
-        { item_id: line.item_id, day_cost: day_cost, units_day: sold, cost: share }
+        period_cost = ads[:spend][line.item_id].to_f
+        sold = ads[:units][line.item_id].to_i
+        share = sold.positive? ? period_cost * line.quantity.to_i / sold : 0.0
+        { item_id: line.item_id, period_cost: period_cost, period_units: sold, cost: share }
       end
 
       state = line_costs.empty? ? "sem_ads" : (pending ? "pendente" : "apurado")
@@ -303,6 +316,8 @@ module Painel
 
     # --- filtros ---
 
+    def filtered? = %i[status shipping logistic q].any? { |key| @params[key].to_s.strip.present? }
+
     def apply_filters(scope)
       scope = scope.where(status: status_filter) if status_filter
 
@@ -410,12 +425,16 @@ module Painel
 
     # --- totais ---
 
-    def summary(rows)
+    # filtered: com filtro ou busca na tela, o gasto de anúncios sem venda não tem como ser atribuído e fica de fora.
+    def summary(rows, filtered: false)
       active = rows.select { |r| r[:economics] }
       known = active.select { |r| r[:economics][:net_profit] }
       revenue = active.sum { |r| r[:economics][:revenue] }
       profit = known.sum { |r| r[:economics][:net_profit] }
       known_revenue = known.sum { |r| r[:economics][:revenue] }
+      ads_cost = active.sum { |r| r[:economics][:ads_cost] }
+      unsold = filtered ? nil : ads_unsold
+      after_ads = known.sum { |r| r[:economics][:net_profit_after_ads] } - unsold.to_f
 
       {
         orders: active.size, units: active.sum { |r| r[:units] },
@@ -427,9 +446,9 @@ module Painel
         fixed_expenses: active.sum { |r| r[:economics][:fixed_expenses] },
         cost: known.sum { |r| r[:economics][:cost] },
         net_profit: profit, net_profit_pct: known_revenue.positive? ? profit / known_revenue * 100.0 : nil,
-        ads_cost: active.sum { |r| r[:economics][:ads_cost] },
-        net_profit_after_ads: known.sum { |r| r[:economics][:net_profit_after_ads] },
-        net_profit_after_ads_pct: known_revenue.positive? ? known.sum { |r| r[:economics][:net_profit_after_ads] } / known_revenue * 100.0 : nil,
+        ads_cost: ads_cost + unsold.to_f, ads_cost_sales: ads_cost, ads_unsold: unsold,
+        net_profit_after_ads: after_ads,
+        net_profit_after_ads_pct: known_revenue.positive? ? after_ads / known_revenue * 100.0 : nil,
         orders_ads_pending: active.count { |r| r[:economics][:ads_state] == "pendente" },
         orders_without_cost: active.size - known.size,
         orders_without_shipment: active.count { |r| !r[:shipping][:loaded] && r[:shipping][:label] == "Carregando…" }

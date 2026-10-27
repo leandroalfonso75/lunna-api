@@ -32,15 +32,20 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
 Implementado em `Painel::SalesQuery#economics`.
 
 ## Custo de Ads e lucro pós Ads
-`lucro pós Ads = lucro líquido − custo Ads`
-- **Custo Ads da venda:** o gasto de publicidade do anúncio **no dia da venda** (seção Ads, `ml_ad_item_dailies`) dividido
-  entre as unidades vendidas desse anúncio nesse dia (vendas não canceladas), vezes as unidades da venda. Anúncio fora de
-  Ads mostra "—" e o lucro pós Ads é o próprio lucro.
-- O gasto de um anúncio em dia sem venda não vai para nenhuma venda (nos 3 meses, cerca de 73% do gasto de Ads caiu em
-  dias com venda do anúncio).
+- **Custo Ads da venda:** o gasto de publicidade do anúncio **no período escolhido** (seção Ads, `ml_ad_item_dailies`)
+  dividido entre as unidades vendidas desse anúncio no mesmo período (vendas não canceladas, sem os filtros da tela),
+  vezes as unidades da venda. Assim o gasto de dias sem venda (que costuma virar venda indireta) também entra. Anúncio
+  fora de Ads mostra "—" e o lucro pós Ads é o próprio lucro.
+- **Ads sem venda:** o gasto de anúncios que não venderam nenhuma unidade no período, mais a diferença entre o gasto
+  das campanhas e a soma por anúncio quando o ML não detalha tudo. Não vai para venda nenhuma: aparece no cartão
+  "Custo com Ads" e sai do lucro pós Ads do resumo. Com isso o Custo com Ads de Vendas é igual ao total da seção Ads
+  no mesmo período. Com filtro ou busca na tela, ele fica de fora (o resumo mostra só o rateado nas vendas filtradas).
 - **Pendente:** o dia da venda ainda não foi lido depois de acabar (hoje, por exemplo). O valor é refeito a cada leitura de
   Ads (a cada 30 minutos os últimos 3 dias são relidos) até o dia fechar; o resumo conta as vendas pendentes.
-- O detalhe da venda mostra a conta: gasto do anúncio no dia ÷ unidades vendidas no dia.
+- O detalhe da venda usa o mesmo período da lista e mostra a conta: gasto do anúncio no período ÷ unidades vendidas no
+  período.
+- Dia lido logo depois de fechar cuja soma por anúncio não bate com o gasto das campanhas é relido uma vez
+  (`Ml::Sync::Ads.mismatched_item_days`).
 
 ## Dados e atualização
 - Fonte: API do Mercado Livre, somente leitura. Pedido completo em `ml_orders.payload`; linhas em `ml_order_items`
@@ -70,5 +75,4 @@ Implementado em `Painel::SalesQuery#economics`.
 - Sem exportação para planilha.
 - Despesas fixas (3%) ainda sem campo de edição em Configurações.
 - Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.
-- Custo Ads é um rateio por dia: o Mercado Livre não informa qual venda veio de qual clique, e vendas indiretas (até
-  dias depois do clique) não entram no rateio do dia do clique.
+- Custo Ads é um rateio pelo período: o Mercado Livre não informa qual venda veio de qual clique.

@@ -130,6 +130,22 @@ RSpec.describe Ml::Sync::Ads do
     expect(MlAdDaySync.where(ml_account_id: account.id).pluck(:date)).to match_array([ today, today - 1, today - 2 ])
   end
 
+  it "dia lido logo depois de fechar cuja soma por anúncio não bate com as campanhas é relido uma vez" do
+    old = today - 9
+    ok = today - 10
+    reread = today - 11 # já relido bem depois de fechar: a diferença é do próprio ML
+    [ old, ok ].each { |d| MlAdDaySync.create!(ml_account: account, date: d, fetched_at: (d + 1).in_time_zone.change(hour: 1)) }
+    MlAdDaySync.create!(ml_account: account, date: reread, fetched_at: today.in_time_zone)
+    MlAdDailyMetric.create!(ml_account_id: account.id, campaign_id: 1, date: reread, cost: 215.53)
+    MlAdItemDaily.create!(ml_account: account, item_id: "MLB1", date: reread, cost: 215.32)
+    MlAdDailyMetric.create!(ml_account_id: account.id, campaign_id: 1, date: old, cost: 210.61)
+    MlAdDailyMetric.create!(ml_account_id: account.id, campaign_id: 1, date: ok, cost: 50.0)
+    MlAdItemDaily.create!(ml_account: account, item_id: "MLB1", date: old, cost: 175.91)
+    MlAdItemDaily.create!(ml_account: account, item_id: "MLB1", date: ok, cost: 50.0)
+
+    expect(described_class.mismatched_item_days(account, today)).to eq([ old ])
+  end
+
   it "conta sem publicidade vira nota, sem erro" do
     stub_request(:get, "https://api.mercadolibre.com/advertising/advertisers").with(query: { product_id: "PADS" })
       .to_return(status: 200, body: { advertisers: [] }.to_json)

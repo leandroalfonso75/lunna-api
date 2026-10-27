@@ -83,8 +83,9 @@ RSpec.describe "/api/sales", type: :request do
       MlAdItem.create!(ml_account_id: account.id, item_id: "MLB1", campaign_id: 1, synced_at: Time.current)
     end
 
-    it "divide o gasto do anúncio no dia entre as unidades vendidas dele nesse dia" do
+    it "divide o gasto do anúncio no período entre as unidades vendidas dele no período" do
       spend("MLB1", day, 30.0)
+      spend("MLB1", day - 3, 15.0) # dia sem venda: entra no rateio do período
       day_read(day, Time.current)
       sale(1, at: at)                                                     # 2 unidades
       sale(2, at: at + 1.hour, lines: [ [ "MLB1", "SKU-A", 1, 100.0, 15.0 ] ]) # 1 unidade
@@ -92,10 +93,58 @@ RSpec.describe "/api/sales", type: :request do
       get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
 
       by_id = json["sales"].to_h { |s| [ s["order_id"], s["economics"] ] }
-      expect(by_id[1]).to include("ads_cost" => 20.0, "ads_state" => "apurado", "net_profit" => 60.0, "net_profit_after_ads" => 40.0,
-        "net_profit_after_ads_pct" => 20.0)
-      expect(by_id[2]["ads_cost"]).to eq(10.0)
-      expect(json["summary"]).to include("ads_cost" => 30.0, "orders_ads_pending" => 0)
+      expect(by_id[1]).to include("ads_cost" => 30.0, "ads_state" => "apurado", "net_profit" => 60.0, "net_profit_after_ads" => 30.0,
+        "net_profit_after_ads_pct" => 15.0)
+      expect(by_id[1]["ads_lines"].first).to include("period_cost" => 45.0, "period_units" => 3)
+      expect(by_id[2]["ads_cost"]).to eq(15.0)
+      expect(json["summary"]).to include("ads_cost" => 45.0, "ads_cost_sales" => 45.0, "ads_unsold" => 0.0, "orders_ads_pending" => 0)
+    end
+
+    it "gasto de anúncio que não vendeu no período fica no resumo como Ads sem venda e sai do lucro pós Ads" do
+      spend("MLB1", day, 30.0)
+      spend("MLB7", day, 12.5) # anúncio sem nenhuma venda no período
+      day_read(day, Time.current)
+      sale(1, at: at)
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["summary"]).to include("ads_cost" => 42.5, "ads_cost_sales" => 30.0, "ads_unsold" => 12.5,
+        "net_profit_after_ads" => 17.5)
+    end
+
+    it "gasto das campanhas que o ML não detalha por anúncio também entra em Ads sem venda (total igual ao da seção Ads)" do
+      spend("MLB1", day, 30.0)
+      MlAdDailyMetric.create!(ml_account_id: account.id, campaign_id: 1, date: day, cost: 30.21)
+      day_read(day, Time.current)
+      sale(1, at: at)
+
+      get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["summary"]["ads_unsold"]).to be_within(0.001).of(0.21)
+      expect(json["summary"]["ads_cost"]).to be_within(0.001).of(30.21)
+    end
+
+    it "com filtro na tela, o gasto sem venda fica de fora do resumo" do
+      spend("MLB7", day, 12.5)
+      day_read(day, Time.current)
+      sale(1, at: at)
+
+      get "/api/sales", params: { account_id: account.id, q: "MLB1" }, headers: auth_headers(member)
+
+      expect(json["summary"]).to include("ads_unsold" => nil, "ads_cost" => 0.0)
+    end
+
+    it "o detalhe usa o mesmo período da lista no rateio" do
+      spend("MLB1", day, 30.0)
+      spend("MLB1", 20.days.ago.to_date, 60.0)
+      day_read(day, Time.current)
+      sale(1, at: at)
+
+      get "/api/sales/1", params: { account_id: account.id, period: "7d" }, headers: auth_headers(member)
+      expect(json["economics"]["ads_cost"]).to eq(30.0)
+
+      get "/api/sales/1", params: { account_id: account.id, period: "30d" }, headers: auth_headers(member)
+      expect(json["economics"]["ads_cost"]).to eq(90.0)
     end
 
     it "dia ainda não fechado na leitura de Ads deixa a venda pendente (refeita na próxima leitura)" do

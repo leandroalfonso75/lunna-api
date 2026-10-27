@@ -1,5 +1,5 @@
 # GET /api/sales?account_id= → vendas (pedidos) do Mercado Livre com filtros, totais e série diária.
-# GET /api/sales/:id?account_id= → um pedido com tudo o que a API entrega (pagamentos, itens, envio).
+# GET /api/sales/:id?account_id=&period= (ou from/to) → um pedido com tudo o que a API entrega (pagamentos, itens, envio).
 # POST /api/sales/sync?account_id= (admin) → baixa de novo os últimos 3 meses (pedidos + envios).
 class SalesController < ApplicationController
   include CurrentAccount
@@ -11,7 +11,7 @@ class SalesController < ApplicationController
   end
 
   def show
-    render json: Painel::SalesQuery.detail(Current.account, params[:id])
+    render json: Painel::SalesQuery.detail(Current.account, params[:id], params)
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Venda não encontrada." ], status: :not_found)
   end

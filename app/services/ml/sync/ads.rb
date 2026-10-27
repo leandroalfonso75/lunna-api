@@ -9,6 +9,7 @@ module Ml
       MAX_PAGES = 30
       RECENT_ITEM_DAYS = 3        # dias relidos a cada leitura rápida (hoje, ontem e anteontem)
       BACKFILL_DAYS_PER_RUN = 8   # dias antigos ainda não lidos, por leitura
+      MISMATCH_DAYS_PER_RUN = 2   # dias com soma por anúncio diferente da das campanhas, relidos por leitura
 
       Result = Struct.new(:campaigns, :items, :days, :notes, :ok, keyword_init: true)
 
@@ -48,7 +49,20 @@ module Ml
       def self.item_days(client, account, today, advertiser_id, backfill: BACKFILL_DAYS_PER_RUN)
         recent = ((today - (RECENT_ITEM_DAYS - 1))..today).to_a
         sync_item_days(client, account, recent, advertiser_id: advertiser_id)
+        sync_item_days(client, account, mismatched_item_days(account, today, recent).first(MISMATCH_DAYS_PER_RUN), advertiser_id: advertiser_id)
         backfill_item_days(client, account, today: today, max: backfill, advertiser_id: advertiser_id)
+      end
+
+      # Dias lidos logo depois de fechar em que a soma por anúncio não bate com o gasto das campanhas (leitura
+      # incompleta): são relidos uma vez. Se a diferença continua, é do próprio ML e Vendas a mostra como Ads sem venda.
+      def self.mismatched_item_days(account, today, skip = [])
+        from = today - (WINDOWS.fetch("90d") - 1)
+        campaigns = account.ml_ad_daily_metrics.where(date: from..today).group(:date).sum(:cost)
+        items = MlAdItemDaily.where(ml_account_id: account.id, date: from..today).group(:date).sum(:cost)
+        early = account.ml_ad_day_syncs.where(date: from..today).select { |s| s.fetched_at.in_time_zone.to_date <= s.date + 1 }
+          .map(&:date).to_set
+        campaigns.filter_map { |date, cost| date if early.include?(date) && !skip.include?(date) && (cost.to_f - items[date].to_f).abs >= 0.01 }
+          .sort.reverse
       end
 
       # Baixa os dias dos últimos 90 que ainda não foram lidos (os mais novos primeiro).
