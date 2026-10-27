@@ -1,7 +1,8 @@
 # Seção Promoções (Central de Promoções do Mercado Livre).
 # GET /api/promotions?account_id= → anúncios com promoção atual, melhor oferta e ganho; promoções da conta.
 # GET /api/promotions/items/:item_id?account_id= → um anúncio com todas as ofertas e a margem de cada uma.
-# PATCH /api/promotions/items/:item_id/settings?account_id= (admin) → margem mínima/máxima do anúncio (e do SKU).
+# PATCH /api/promotions/items/:item_id/settings?account_id= (admin) → limites do anúncio por margem ou por valor (e do
+#   SKU e das variações do produto, se pedido).
 # GET /api/promotions/export?account_id= → CSV com todas as promoções e anúncios (ativos e candidatos).
 # POST /api/promotions/sync?account_id= (admin) → lê de novo a Central de Promoções.
 # POST /api/promotions/items/:item_id/apply?account_id= (admin) → aplica no ML a melhor oferta (ou promotion_id +
@@ -80,6 +81,7 @@ class PromotionsController < ApplicationController
   end
 
   def settings_params
-    params.permit(:min_margin_pct, :max_margin_pct, :apply_to_sku, :automation_enabled).to_h.symbolize_keys
+    params.permit(:limit_mode, :min_margin_pct, :max_margin_pct, :min_price, :max_price, :apply_to_sku, :apply_to_variations,
+                  :automation_enabled).to_h.symbolize_keys
   end
 end

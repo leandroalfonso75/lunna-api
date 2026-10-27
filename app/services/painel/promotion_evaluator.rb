@@ -1,14 +1,17 @@
 # Margem de cada oferta de promoção de um anúncio e a melhor delas (seção Promoções).
 #
-#   lucro = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas
+#   lucro (pós Ads) = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas − Ads
 #   margem = lucro ÷ preço
 #
+# - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias (gasto ÷ unidades vendidas); sem histórico, zero.
+# - Limites: por margem (mínima/máxima, %) ou por valor (preço mínimo/máximo, R$), um ou outro.
 # - Parte do ML: nas ofertas com desconto dividido (meli_percentage), o ML banca esse % do preço original.
 # - Tarifa: a do ML no preço da oferta (Ml::Sync::Promotions guarda em `fees`); fora desse preço,
 #   % da tarifa × preço + taxa fixa.
 # - Frete: o mesmo da seção Anúncios (ship_cost do anúncio).
-# - Faixa de preço (campanha do vendedor, DEAL, desconto próprio, relâmpago): usa o maior preço permitido;
-#   se a margem passar da máxima, desce o preço até ela. Abaixo da margem mínima, a oferta não serve.
+# - Faixa de preço (campanha do vendedor, DEAL, desconto próprio, relâmpago): usa o maior preço permitido (até o
+#   valor máximo, se houver); se a margem passar da máxima, desce o preço até ela. Abaixo da margem mínima ou do
+#   valor mínimo, a oferta não serve.
 # - Cupom e desconto no Pix (BANK) somam ao preço e não entram na escolha.
 module Painel
   class PromotionEvaluator
@@ -23,7 +26,7 @@ module Painel
       "BANK" => "Desconto no Pix", "VOLUME" => "Desconto por quantidade"
     }.freeze
 
-    Rules = Struct.new(:min_pct, :max_pct, :tax_pct, :fixed_pct, keyword_init: true)
+    Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, keyword_init: true)
 
     def initialize(item:, cost:, rules:)
       @item = item
@@ -79,6 +82,8 @@ module Painel
       eco = economics(price, offer)
       out = out.merge(eco)
       return out.merge(reason: "abaixo da margem mínima") if @rules.min_pct && eco[:margin_pct] < @rules.min_pct - 0.005
+      return out.merge(reason: "abaixo do valor mínimo") if @rules.min_price && price < @rules.min_price.to_f - 0.005
+      return out.merge(reason: "acima do valor máximo") if @rules.max_price && price > @rules.max_price.to_f + 0.005
 
       out.merge(valid: true)
     end
@@ -90,7 +95,8 @@ module Painel
 
       high = offer.max_price.to_f
       low = offer.min_price.to_f
-      return nil unless high.positive?
+      high = [ high, @rules.max_price.to_f ].min if @rules.max_price
+      return nil unless high.positive? && high >= low
       return high if @rules.max_pct.nil? || economics(high, offer)[:margin_pct] <= @rules.max_pct
 
       target = price_for_margin(@rules.max_pct, offer)
@@ -107,7 +113,7 @@ module Painel
       denominator = 1 - pct_fee - (@rules.tax_pct + @rules.fixed_pct + pct) / 100.0
       return nil if denominator <= 0
 
-      (@cost + fixed + @ship - meli_amount(offer)) / denominator
+      (@cost + fixed + @ship + ads - meli_amount(offer)) / denominator
     end
 
     def economics(price, offer)
@@ -115,10 +121,14 @@ module Painel
       fee = fee_at(price, offer)
       tax = price * @rules.tax_pct / 100.0
       fixed = price * @rules.fixed_pct / 100.0
-      profit = price + meli - @cost - fee - @ship - tax - fixed
+      profit = price + meli - @cost - fee - @ship - tax - fixed - ads
       { price: price.round(2), meli_amount: meli.round(2), fee: fee.round(2), profit: profit.round(2),
-        margin_pct: (profit / price * 100.0).round(2) }
+        margin_pct: (profit / price * 100.0).round(2),
+        costs: { cost: @cost.round(2), fee: fee.round(2), shipping: @ship.round(2), tax: tax.round(2), fixed_expenses: fixed.round(2),
+                 ads: ads.round(2), meli_amount: meli.round(2) } }
     end
+
+    def ads = @rules.ads_unit.to_f
 
     def meli_amount(offer)
       return 0.0 unless offer.meli_percentage.to_f.positive?

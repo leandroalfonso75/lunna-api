@@ -28,14 +28,20 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   margem e lucro. Separador `;` e vírgula decimal, para abrir direto no Excel.
 
 ## Regras
-- **Margem da oferta** (`Painel::PromotionEvaluator`):
-  lucro = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas; margem = lucro ÷ preço.
+- **Margem da oferta** (`Painel::PromotionEvaluator`), sempre **pós Ads** ("margem real" e "lucro real" na tela):
+  lucro = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas − Ads; margem = lucro ÷ preço.
+  - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias fechados = gasto (`ml_ad_item_dailies`) ÷ unidades
+    vendidas no mesmo período (vendas não canceladas). Sem gasto, ou gasto sem venda, vale zero (a tela mostra o gasto).
+  - O painel do anúncio mostra os custos por unidade linha a linha, hoje e depois da melhor oferta.
   - Parte do ML: ofertas com desconto dividido (`meli_percentage`) — o ML banca esse % do preço original.
   - Tarifa: a do ML no preço da oferta (`/sites/MLB/listing_prices`, guardada em `ml_promotion_offers.fees`); em outro
     preço, % da tarifa × preço + taxa fixa.
   - Frete, custo, imposto e despesas fixas: os mesmos da seção Anúncios.
 - **Preço da oferta:** fixo (SMART, PRICE_MATCHING, relâmpago com ML, DOD) ou, nas de faixa (campanha do vendedor,
   DEAL, desconto próprio, relâmpago), o maior preço permitido. Com margem máxima, desce o preço até ela.
+- **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por
+  valor, preço mínimo e máximo em R$ (oferta abaixo do valor mínimo não serve; nas de faixa o preço fica até o valor
+  máximo; a margem mínima geral não vale nesse modo).
 - **Margem mínima:** a do anúncio ou, sem ela, a geral de Configurações (`companies.min_margin_pct`). Oferta abaixo
   dela não serve. **Margem máxima** (opcional): a do anúncio ou, sem ela, a geral de Configurações
   (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto.
@@ -44,7 +50,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   também no preço da regra ("ajustar o preço da atual").
 - **Fora da escolha:** cupom (`SELLER_COUPON_CAMPAIGN`) e desconto no Pix (`BANK`), que somam no checkout, e anúncio
   sem custo.
-- **Aplicar ao SKU:** grava as mesmas margens nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
+- **Aplicar ao SKU:** grava os mesmos limites nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
+- **Aplicar às variações:** grava também nos anúncios das outras variações do produto (SKUs com o mesmo produto pai
+  no Olist, `olist_products.parent_olist_id`).
 - Mudar margens: só administradores.
 
 ## Aplicar no Mercado Livre (`Painel::PromotionActions`)

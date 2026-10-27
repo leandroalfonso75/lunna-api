@@ -1,5 +1,5 @@
 # Seção Promoções: anúncios ativos com a promoção atual, a melhor oferta disponível (maior margem dentro da faixa
-# mínima–máxima) e o ganho da troca; promoções da Central do ML; detalhe de um anúncio com todas as ofertas;
+# mínima–máxima, pós Ads) e o ganho da troca; promoções da Central do ML; detalhe de um anúncio com todas as ofertas;
 # exportação em CSV. Margem mínima: a do anúncio (ml_promotion_settings) ou a geral da empresa (min_margin_pct).
 require "csv" # stdlib; vira gem no Ruby 3.4
 
@@ -13,6 +13,7 @@ module Painel
       "sem_oferta" => [ "Sem oferta na margem", "neutral" ], "sem_custo" => [ "Sem custo", "neutral" ]
     }.freeze
     GAIN_EPSILON = 0.01
+    ADS_DAYS = 15
 
     def self.call(account, params) = new(account, params).call
     def self.detail(account, item_id) = new(account, {}).detail(item_id)
@@ -50,7 +51,10 @@ module Painel
       item = @account.ml_items.find(item_id)
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]), with_offers: true)
       row.merge(offers: evaluated.sort_by { |e| [ e[:valid] ? 0 : 1, -(e[:margin_pct] || -999) ] }.map { |e| offer_payload(e) },
-                sku_items: sku_siblings(item))
+                sku_items: sku_siblings(item),
+                variation_items: PromotionSettings.variation_item_ids(@account, item).then do |ids|
+                  @account.ml_items.where(item_id: ids).pluck(:item_id, :title, :sku).map { |id, title, sku| { item_id: id, title: title, sku: sku } }
+                end)
     end
 
     # => { item:, row:, current:, best:, evaluated: } de um anúncio (usado para aplicar a melhor oferta).
@@ -116,8 +120,26 @@ module Painel
       {
         olist: Olist::UnitCost.for_skus(@company, skus),
         manual: @company.ml_costs.where(sku: skus).index_by(&:sku),
-        settings: @account.ml_promotion_settings.where(item_id: items.map(&:item_id)).index_by(&:item_id)
+        settings: @account.ml_promotion_settings.where(item_id: items.map(&:item_id)).index_by(&:item_id),
+        ads: ads_per_unit(items.map(&:item_id))
       }
+    end
+
+    # Custo de Ads por unidade de cada anúncio nos últimos 15 dias fechados: gasto ÷ unidades vendidas (vendas não
+    # canceladas). Sem gasto, ou gasto sem nenhuma venda, fica zero (o gasto sem venda aparece à parte).
+    def ads_per_unit(item_ids)
+      zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
+      last = zone.today - 1
+      first = last - (ADS_DAYS - 1)
+      spend = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: first..last).group(:item_id).sum(:cost)
+      units = MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+        .where(o: { ml_account_id: @account.id }).where.not(o: { status: %w[cancelled invalid] })
+        .where(item_id: spend.keys).where("o.date_created BETWEEN ? AND ?", first.in_time_zone(zone).beginning_of_day, last.in_time_zone(zone).end_of_day)
+        .group("ml_order_items.item_id").sum("ml_order_items.quantity")
+      spend.to_h do |id, cost|
+        sold = units[id].to_i
+        [ id, { spend: cost.to_f.round(2), units: sold, unit: sold.positive? ? (cost.to_f / sold).round(2) : 0.0, days: ADS_DAYS } ]
+      end
     end
 
     def build_rows(items)
@@ -128,10 +150,13 @@ module Painel
 
     def evaluator_for(item, ctx)
       setting = ctx[:settings][item.item_id]
-      rules = PromotionEvaluator::Rules.new(
-        min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f,
-        tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f
-      )
+      ads = ctx[:ads][item.item_id]&.dig(:unit).to_f
+      limits = if setting&.limit_mode == "price"
+        { min_pct: nil, max_pct: nil, min_price: setting.min_price&.to_f, max_price: setting.max_price&.to_f }
+      else
+        { min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f }
+      end
+      rules = PromotionEvaluator::Rules.new(**limits, tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f, ads_unit: ads)
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
     end
 
@@ -159,13 +184,17 @@ module Painel
         item_id: item.item_id, title: item.title, sku: item.sku, thumbnail: item.thumbnail, permalink: item.permalink,
         listing_type: item.listing_type_id, logistic_type: item.logistic_type, stock: item.available_quantity,
         full_price: full_price, cost: cost,
-        base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct),
+        base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct, :costs),
+        ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: ADS_DAYS },
         current: current && short(current), best: best && short(best),
         gain: gain(current, best),
         offers_count: evaluated.count { |e| e[:valid] },
         settings: {
+          limit_mode: setting&.limit_mode || "margin",
           min_margin_pct: setting&.min_margin_pct&.to_f, max_margin_pct: setting&.max_margin_pct&.to_f,
-          apply_to_sku: setting&.apply_to_sku || false, automation_enabled: setting.nil? || setting.automation_enabled,
+          min_price: setting&.min_price&.to_f, max_price: setting&.max_price&.to_f,
+          apply_to_sku: setting&.apply_to_sku || false, apply_to_variations: setting&.apply_to_variations || false,
+          automation_enabled: setting.nil? || setting.automation_enabled,
           effective_min_pct: (setting&.min_margin_pct || @company.min_margin_pct).to_f,
           effective_max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f
         },
@@ -194,7 +223,7 @@ module Painel
       o = e[:offer]
       { promotion_id: o.promotion_id, type: o.promotion_type, label: e[:label], name: o.name, status: o.status,
         price: e[:price], margin_pct: e[:margin_pct], profit: e[:profit], meli_amount: e[:meli_amount],
-        valid: e[:valid], reason: e[:reason], finish_date: o.finish_date,
+        valid: e[:valid], reason: e[:reason], finish_date: o.finish_date, costs: e[:costs],
         action: action_for(e) }
     end
 

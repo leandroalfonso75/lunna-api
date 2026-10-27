@@ -78,4 +78,32 @@ RSpec.describe "/api/promotions", type: :request do
     expect(row["settings"]["effective_max_pct"]).to eq(15.0)
     expect(row["best"]["margin_pct"]).to be_within(0.01).of(15.0)
   end
+
+  it "limites por valor apagam a margem do anúncio, e valem também para as outras variações do produto" do
+    parent = create(:olist_product, company: company, sku: "PAI", status: "A", kind: "V", variation_kind: "P")
+    OlistProduct.where(company_id: company.id, sku: "SKU-A").update_all(parent_olist_id: parent.olist_id, variation_kind: "V")
+    create(:olist_product, company: company, sku: "SKU-B", status: "A", kind: "S", variation_kind: "V", parent_olist_id: parent.olist_id)
+    other_variation = create(:ml_item, ml_account: account, sku: "SKU-B")
+
+    patch "/api/promotions/items/#{item.item_id}/settings",
+      params: { account_id: account.id, limit_mode: "price", min_price: 60, max_price: 90, min_margin_pct: 30, apply_to_variations: true },
+      headers: auth_headers(admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(json["settings"]).to include("limit_mode" => "price", "min_price" => 60.0, "max_price" => 90.0, "min_margin_pct" => nil)
+    expect(json["best"]["price"]).to eq(90.0)
+    expect(json["variation_items"].map { |v| v["item_id"] }).to eq([ other_variation.item_id ])
+    expect(MlPromotionSetting.find_by(item_id: other_variation.item_id)).to have_attributes(limit_mode: "price", max_price: 90)
+  end
+
+  it "margem pós Ads: custo de Ads por unidade dos últimos 15 dias" do
+    MlAdItemDaily.create!(ml_account: account, item_id: item.item_id, date: 3.days.ago.to_date, cost: 30)
+    order = MlOrder.create!(order_id: 77, ml_account: account, status: "paid", date_created: 3.days.ago, total_amount: 100)
+    MlOrderItem.create!(order_id: order.order_id, item_id: item.item_id, quantity: 3, unit_price: 100, sale_fee: 10)
+
+    get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(json["ads"]).to include("spend" => 30.0, "units" => 3, "unit" => 10.0, "days" => 15)
+    expect(json["current"]["costs"]["ads"]).to eq(10.0)
+  end
 end
