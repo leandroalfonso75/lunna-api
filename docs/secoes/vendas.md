@@ -61,10 +61,11 @@ Implementado em `Painel::SalesQuery#economics`.
 
 ## Dados e atualização
 - Fonte: API do Mercado Livre, somente leitura. Pedido completo em `ml_orders.payload`; linhas em `ml_order_items`
-  (com título, SKU, tipo de anúncio e variação); envio em `ml_orders.shipment`.
+  (com título, SKU, tipo de anúncio e variação); envio em `ml_orders.shipment`; reclamações em `ml_orders.claims`.
 - **Privacidade:** do comprador guardamos só id e apelido. O envio é salvo sem nome, telefone e endereço (só cidade/UF).
-- A sincronização normal (5 min) relê os pedidos dos últimos 4 dias e busca o envio de 60 pedidos por rodada
-  (`Ml::Sync::Shipments`; envio já entregue/cancelado não é relido; em andamento é relido depois de 2 h).
+- A sincronização normal (5 min) relê os pedidos criados nos últimos 4 dias e os alterados nos últimos 2 dias, busca o
+  envio de 60 pedidos por rodada (`Ml::Sync::Shipments`; envio em andamento é relido depois de 2 h; envio já
+  entregue/cancelado só é relido se o pedido mudar depois) e as reclamações de 40 (`Ml::Sync::Claims`).
 - A primeira carga de uma conta nova busca 95 dias de pedidos. O botão "Baixar os 3 meses de novo" (administrador,
   `POST /api/sales/sync`) roda `Ml::SalesBackfillJob`, que baixa os pedidos e os envios em pedaços de 100 até acabar
   (cerca de 2 envios por segundo).
@@ -77,13 +78,14 @@ Implementado em `Painel::SalesQuery#economics`.
 
 **API (`lunna-api`)**
 - `app/controllers/sales_controller.rb` (`GET /api/sales`, `GET /api/sales/:id`, `POST /api/sales/sync`)
-- `app/services/painel/sales_query.rb` (filtros, ordenação, totais, lucro)
-- `app/services/ml/sync/orders.rb`, `shipments.rb`; `app/jobs/ml/sales_backfill_job.rb`; cliente em `app/services/ml/client.rb`
-- Migration `20261017200001_add_sale_details_to_ml_orders.rb`
+- `app/services/painel/sales_query.rb` (filtros, ordenação, totais, lucro, custo de Ads), `sale_issues.rb` (motivo do
+  cancelamento/reclamação/devolução em texto)
+- `app/services/ml/sync/orders.rb`, `shipments.rb`, `claims.rb`; `app/jobs/ml/sales_backfill_job.rb`; cliente em `app/services/ml/client.rb`
+- Migrations `20261017200001_add_sale_details_to_ml_orders.rb`, `20261027010001_add_claims_to_ml_orders.rb`
 
 ## Pendências
 - A comissão e a tarifa fixa aparecem somadas (`sale_fee`); separar exigiria `/orders/{id}` + `/payments`.
-- Devoluções e reclamações (`/post-purchase`) ainda não entram; venda devolvida segue contada até o ML cancelar.
+- Venda com reembolso parcial (`partially_refunded`) ainda conta a receita inteira.
 - Sem exportação para planilha.
 - Despesas fixas (3%) ainda sem campo de edição em Configurações.
 - Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.
