@@ -6,7 +6,8 @@
 # GET /api/promotions/export?account_id= → CSV com todas as promoções e anúncios (ativos e candidatos).
 # POST /api/promotions/sync?account_id= (admin) → lê de novo a Central de Promoções.
 # POST /api/promotions/items/:item_id/apply?account_id= (admin) → aplica no ML a melhor oferta (ou promotion_id +
-#   promotion_type + action escolhidos); responde o resultado e o anúncio atualizado.
+#   promotion_type + action escolhidos); responde o resultado e o anúncio atualizado. also_sku / also_variations: leva
+#   a mesma promoção, em fila, aos outros anúncios do SKU e das variações do produto.
 # POST /api/promotions/items/:item_id/leave?account_id= (admin) → sai da promoção de preço atual.
 # POST /api/promotions/apply_best?account_id= (admin) → aplica a melhor oferta em vários anúncios (item_ids), em fila.
 # GET /api/promotions/actions?account_id= → histórico das ações nas promoções.
@@ -48,7 +49,18 @@ class PromotionsController < ApplicationController
   def apply
     target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :action).to_h.symbolize_keys : nil
     result = Painel::PromotionActions.apply(Current.account, params[:item_id], user: Current.user, target: target)
-    render json: action_response(result)
+    queued = 0
+    if result.ok
+      applied = target || (result.action && { promotion_id: result.action.to_promotion_id, promotion_type: result.action.to_type })
+      # já estava na melhor: leva a promoção atual dele
+      applied ||= Painel::PromotionsQuery.evaluate_item(Current.account, params[:item_id])[:current]
+        &.then { |c| { promotion_id: c[:offer].promotion_id, promotion_type: c[:offer].promotion_type } }
+      bool = ActiveModel::Type::Boolean.new
+      queued = Painel::PromotionActions.extend_to_related(Current.account, params[:item_id], applied, user: Current.user,
+        sku: bool.cast(params[:also_sku]), variations: bool.cast(params[:also_variations]))
+    end
+    message = queued.positive? ? "#{result.message} A mesma promoção foi enviada para mais #{queued} anúncios (veja o Histórico)." : result.message
+    render json: action_response(result).merge(message: message, queued: queued)
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Anúncio não encontrado." ], status: :not_found)
   end

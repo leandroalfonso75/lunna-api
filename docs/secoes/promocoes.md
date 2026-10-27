@@ -18,6 +18,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   melhor marcada) e o formulário de margem mínima e máxima, com "aplicar aos outros anúncios do SKU".
 - **Aba Promoções do ML:** cada promoção da Central com tipo, situação, período, anúncios ativos e candidatos;
   "Ver anúncios" filtra a aba Anúncios por ela.
+- **Levar a mesma promoção ao produto:** na confirmação de entrar/trocar, dá para marcar "aplicar aos outros anúncios
+  do SKU" e "às variações do produto"; eles vão para a fila (`PromotionActions.extend_to_related`), cada um pelo seu
+  preço e seus limites.
 - **Aplicar (administrador):** no painel do anúncio, "Aplicar a melhor oferta", "Entrar"/"Ajustar" em cada oferta e
   "Sair da promoção"; cada um mostra antes o que vai acontecer (de onde sai, para onde vai, preço e margem) e só age
   depois de "Confirmar". Na lista, marcar anúncios (ou "Marcar os desta página que podem melhorar") e "Aplicar a melhor
@@ -39,6 +42,11 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   - Frete, custo, imposto e despesas fixas: os mesmos da seção Anúncios.
 - **Preço da oferta:** fixo (SMART, PRICE_MATCHING, relâmpago com ML, DOD) ou, nas de faixa (campanha do vendedor,
   DEAL, desconto próprio, relâmpago), o maior preço permitido. Com margem máxima, desce o preço até ela.
+- **O preço de venda nunca sobe.** A oferta parte do preço do anúncio (que o Lunna nunca altera) e não pode ficar acima
+  do preço que o comprador paga hoje (`price_cap`: o da promoção ativa de menor preço ou, sem promoção, o do anúncio).
+  Motivo: acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor. As margens mínima e máxima (ou os valores)
+  são os limites do preço de venda depois do desconto: oferta abaixo da mínima ou acima da máxima não serve, inclusive a
+  atual ("Acima da máxima" pede um desconto maior).
 - **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por
   valor, preço mínimo e máximo em R$ (oferta abaixo do valor mínimo não serve; nas de faixa o preço fica até o valor
   máximo; a margem mínima geral não vale nesse modo).

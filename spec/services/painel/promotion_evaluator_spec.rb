@@ -8,8 +8,9 @@ RSpec.describe Painel::PromotionEvaluator do
     MlPromotionOffer.new(ml_account: account, item_id: item.item_id, promotion_type: type, status: status, original_price: 100, **attrs)
   end
 
-  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0)
-    rules = described_class::Rules.new(min_pct: min, max_pct: max, min_price: min_price, max_price: max_price, tax_pct: 10, fixed_pct: 5, ads_unit: ads)
+  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0, cap: nil)
+    rules = described_class::Rules.new(min_pct: min, max_pct: max, min_price: min_price, max_price: max_price, tax_pct: 10, fixed_pct: 5, ads_unit: ads,
+                                       price_cap: cap)
     described_class.new(item: item, cost: 40, rules: rules)
   end
 
@@ -65,5 +66,10 @@ RSpec.describe Painel::PromotionEvaluator do
   it "por valor: o preço da faixa fica até o valor máximo e oferta abaixo do valor mínimo não serve" do
     expect(evaluator(max_price: 88).evaluate_offer(campaign)).to include(price: 88.0, valid: true)
     expect(evaluator(min_price: 92).evaluate_offer(smart)).to include(valid: false, reason: "abaixo do valor mínimo")
+  end
+
+  it "o preço nunca sobe: a faixa fica até o preço de venda de hoje e oferta fixa acima dele não serve" do
+    expect(evaluator(cap: 85).evaluate_offer(campaign)).to include(price: 85.0, valid: true)
+    expect(evaluator(cap: 85).evaluate_offer(smart)).to include(valid: false, reason: "acima do preço de venda de hoje")
   end
 end

@@ -4,13 +4,14 @@ module Ml
   class PromotionsApplyJob < ApplicationJob
     queue_as :default
 
-    def perform(account_id, item_ids, user_id = nil)
+    # target: nil = a melhor oferta de cada anúncio; { "promotion_id", "promotion_type" } = a mesma promoção em todos.
+    def perform(account_id, item_ids, user_id = nil, target = nil)
       account = MlAccount.active.find_by(id: account_id)
       return unless account
 
       user = User.find_by(id: user_id)
       Array(item_ids).each do |item_id|
-        Painel::PromotionActions.apply(account, item_id, user: user, source: "lote")
+        Painel::PromotionActions.apply(account, item_id, user: user, source: "lote", target: target&.symbolize_keys)
       rescue ActiveRecord::RecordNotFound
         next
       end

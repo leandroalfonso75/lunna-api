@@ -20,6 +20,23 @@ module Painel
       new(account, user, source).apply(item_id, target)
     end
 
+    # Leva a mesma promoção para os outros anúncios do mesmo SKU e/ou das outras variações do produto, em fila
+    # (Ml::PromotionsApplyJob): cada um é avaliado pelo seu preço e pelos seus limites; o que não servir fica no
+    # histórico com o motivo. => quantidade enviada para a fila.
+    def self.extend_to_related(account, item_id, target, user: nil, sku: false, variations: false)
+      return 0 if target.blank? || target[:promotion_type].blank? || !(sku || variations)
+
+      item = account.ml_items.find(item_id)
+      ids = []
+      ids += account.ml_items.where(sku: item.sku, status: "active").where.not(item_id: item.item_id).pluck(:item_id) if sku && item.sku.present?
+      ids += PromotionSettings.variation_item_ids(account, item) if variations
+      ids = account.ml_items.where(item_id: ids.uniq, status: "active").pluck(:item_id)
+      return 0 if ids.empty?
+
+      Ml::PromotionsApplyJob.perform_later(account.id, ids, user&.id, target.slice(:promotion_id, :promotion_type).transform_keys(&:to_s))
+      ids.size
+    end
+
     def self.leave(account, item_id, user: nil, source: "tela")
       new(account, user, source).leave(item_id)
     end

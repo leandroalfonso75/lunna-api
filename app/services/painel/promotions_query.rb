@@ -8,7 +8,8 @@ module Painel
     PER_PAGES = [ 25, 50, 100 ].freeze
     SORTS = %w[gain margin best_margin title price].freeze
     STATUSES = {
-      "trocar" => [ "Trocar por melhor", "warn" ], "sem_promocao" => [ "Sem promoção", "warn" ],
+      "trocar" => [ "Trocar por melhor", "warn" ], "acima_maxima" => [ "Acima da máxima", "warn" ],
+      "sem_promocao" => [ "Sem promoção", "warn" ],
       "ok" => [ "Na melhor", "ok" ], "abaixo_minima" => [ "Abaixo da mínima", "bad" ],
       "sem_oferta" => [ "Sem oferta na margem", "neutral" ], "sem_custo" => [ "Sem custo", "neutral" ]
     }.freeze
@@ -121,7 +122,8 @@ module Painel
         olist: Olist::UnitCost.for_skus(@company, skus),
         manual: @company.ml_costs.where(sku: skus).index_by(&:sku),
         settings: @account.ml_promotion_settings.where(item_id: items.map(&:item_id)).index_by(&:item_id),
-        ads: ads_per_unit(items.map(&:item_id))
+        ads: ads_per_unit(items.map(&:item_id)),
+        offers: offers_by_item(items.map(&:item_id))
       }
     end
 
@@ -143,9 +145,8 @@ module Painel
     end
 
     def build_rows(items)
-      by_item = offers_by_item(items.map(&:item_id))
       ctx = context(items)
-      items.map { |item| build_row(item, by_item[item.item_id] || [], ctx).first }
+      items.map { |item| build_row(item, ctx[:offers][item.item_id] || [], ctx).first }
     end
 
     def evaluator_for(item, ctx)
@@ -156,8 +157,17 @@ module Painel
       else
         { min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f }
       end
-      rules = PromotionEvaluator::Rules.new(**limits, tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f, ads_unit: ads)
+      rules = PromotionEvaluator::Rules.new(**limits, tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f, ads_unit: ads,
+                                            price_cap: price_cap(item, ctx))
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
+    end
+
+    # Preço de venda de hoje: o da promoção de preço ativa (o menor, se houver mais de uma) ou o do anúncio.
+    # Nenhuma oferta pode passar dele.
+    def price_cap(item, ctx)
+      active = (ctx[:offers]&.dig(item.item_id) || [])
+        .select { |o| o.status == "started" && o.price.to_f.positive? && PromotionEvaluator::PRICE_TYPES.include?(o.promotion_type) }
+      active.map { |o| o.price.to_f }.min || item.price&.to_f
     end
 
     def unit_cost(item, ctx)
@@ -171,8 +181,9 @@ module Painel
     def build_row(item, offers, ctx, with_offers: false)
       evaluator = evaluator_for(item, ctx)
       evaluated = evaluator.evaluate(offers)
+      # promoção atual = a que define o preço que o comprador paga hoje (a de menor preço, se houver mais de uma ativa)
       current = evaluated.select { |e| e[:as_is] && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
-        .max_by { |e| e[:offer].status == "started" ? 1 : 0 }
+        .min_by { |e| [ e[:offer].status == "started" ? 0 : 1, e[:price].to_f ] }
       best = evaluator.best(evaluated)
       @last_current = current
       @last_best = best
@@ -205,8 +216,11 @@ module Painel
 
     def status_key(cost, current, best)
       return "sem_custo" if cost.nil?
+      above_max = current && current[:reason] == "acima da margem máxima"
+      return "ok" if above_max && best.nil? # nenhuma oferta chega na faixa sem subir o preço: fica como está
       return (current && !current[:valid] ? "abaixo_minima" : "sem_oferta") if best.nil? && (current.nil? || !current[:valid])
       return "sem_promocao" if current.nil?
+      return "acima_maxima" if above_max
       return "abaixo_minima" unless current[:valid]
       return "trocar" if best && !best.equal?(current) && best[:profit] - current[:profit] > GAIN_EPSILON
 

@@ -15,17 +15,18 @@ RSpec.describe "/api/promotions", type: :request do
     create(:olist_product, company: company, sku: "SKU-A", cost_price: 40, status: "A", kind: "S")
     MlPromotion.create!(ml_account: account, promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN", name: "Campanha 20%", status: "started")
     MlPromotionOffer.create!(ml_account: account, item_id: item.item_id, promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN",
-      name: "Campanha 20%", status: "started", price: 80, original_price: 100, min_price: 50, max_price: 95, fees: fees)
+      name: "Campanha 20%", status: "started", price: 90, original_price: 100, min_price: 50, max_price: 95, fees: fees)
     MlPromotionOffer.create!(ml_account: account, item_id: item.item_id, promotion_id: "P-2", promotion_type: "DEAL",
-      name: "Evento", status: "candidate", original_price: 100, min_price: 50, max_price: 95, fees: fees, finish_date: 5.days.from_now)
+      name: "Evento", status: "candidate", original_price: 100, min_price: 50, max_price: 90, meli_percentage: 2, fees: fees,
+      finish_date: 5.days.from_now) # o ML banca 2% do preço original: no mesmo preço, rende mais
   end
 
-  it "mostra a promoção atual, a melhor oferta e o ganho (empate: ajustar o preço da atual em vez de trocar)" do
+  it "mostra a promoção atual, a melhor oferta (sem subir o preço de venda) e o ganho da troca" do
     get "/api/promotions", params: { account_id: account.id }, headers: auth_headers(member)
 
     row = json["items"].find { |r| r["item_id"] == item.item_id }
-    expect(row["current"]).to include("name" => "Campanha 20%", "price" => 80.0)
-    expect(row["best"]).to include("name" => "Campanha 20%", "price" => 95.0, "action" => "editar_preco")
+    expect(row["current"]).to include("name" => "Campanha 20%", "price" => 90.0)
+    expect(row["best"]).to include("name" => "Evento", "price" => 90.0, "action" => "aderir")
     expect(row["status"]["key"]).to eq("trocar")
     expect(row["gain"]).to be > 0
     expect(json["promotions"].first).to include("promotion_id" => "C-1", "active_items" => 1)
@@ -105,5 +106,22 @@ RSpec.describe "/api/promotions", type: :request do
 
     expect(json["ads"]).to include("spend" => 30.0, "units" => 3, "unit" => 10.0, "days" => 15)
     expect(json["current"]["costs"]["ads"]).to eq(10.0)
+  end
+
+  it "aplicar pode levar a mesma promoção aos outros anúncios do SKU, em fila" do
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "Anúncio entrou em P-2."))
+
+    expect {
+      post "/api/promotions/items/#{item.item_id}/apply",
+        params: { account_id: account.id, promotion_id: "P-2", promotion_type: "DEAL", also_sku: true }, headers: auth_headers(admin)
+    }.to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ sibling.item_id ], admin.id, { "promotion_id" => "P-2", "promotion_type" => "DEAL" })
+    expect(json).to include("queued" => 1)
+    expect(json["message"]).to include("mais 1 anúncios")
+  end
+
+  it "a melhor oferta nunca fica acima do preço de venda de hoje" do
+    get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(json["best"]["price"]).to be <= 90.0
   end
 end

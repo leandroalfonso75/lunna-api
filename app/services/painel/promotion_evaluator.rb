@@ -5,6 +5,9 @@
 #
 # - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias (gasto ÷ unidades vendidas); sem histórico, zero.
 # - Limites: por margem (mínima/máxima, %) ou por valor (preço mínimo/máximo, R$), um ou outro.
+# - Preço nunca sobe: a oferta parte do preço do anúncio e não pode ficar acima do preço de venda de hoje (price_cap:
+#   o da promoção atual ou, sem promoção, o do anúncio). Subir o preço acima de R$ 79 obriga o frete grátis, pago pelo
+#   vendedor.
 # - Parte do ML: nas ofertas com desconto dividido (meli_percentage), o ML banca esse % do preço original.
 # - Tarifa: a do ML no preço da oferta (Ml::Sync::Promotions guarda em `fees`); fora desse preço,
 #   % da tarifa × preço + taxa fixa.
@@ -26,7 +29,7 @@ module Painel
       "BANK" => "Desconto no Pix", "VOLUME" => "Desconto por quantidade"
     }.freeze
 
-    Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, keyword_init: true)
+    Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, :price_cap, keyword_init: true)
 
     def initialize(item:, cost:, rules:)
       @item = item
@@ -40,7 +43,7 @@ module Painel
     def evaluate(offers)
       offers.flat_map do |offer|
         if offer.active? && offer.price.to_f.positive?
-          as_is = evaluate_offer(offer, price: offer.price.to_f).merge(as_is: true)
+          as_is = evaluate_offer(offer, price: offer.price.to_f, as_is: true)
           offer.flexible? ? [ as_is, evaluate_offer(offer) ] : [ as_is ]
         else
           [ evaluate_offer(offer) ]
@@ -69,8 +72,8 @@ module Painel
       economics(price.to_f, nil)
     end
 
-    def evaluate_offer(offer, price: nil)
-      out = { offer: offer, as_is: false, label: TYPE_LABELS.fetch(offer.promotion_type, offer.promotion_type.to_s.tr("_", " ").capitalize),
+    def evaluate_offer(offer, price: nil, as_is: false)
+      out = { offer: offer, as_is: as_is, label: TYPE_LABELS.fetch(offer.promotion_type, offer.promotion_type.to_s.tr("_", " ").capitalize),
               price: nil, profit: nil, margin_pct: nil, meli_amount: 0.0, fee: nil, valid: false, reason: nil }
       return out.merge(reason: "não muda o preço (soma no checkout)") unless PRICE_TYPES.include?(offer.promotion_type)
       return out.merge(reason: "sem custo do produto") if @cost.nil?
@@ -82,8 +85,10 @@ module Painel
       eco = economics(price, offer)
       out = out.merge(eco)
       return out.merge(reason: "abaixo da margem mínima") if @rules.min_pct && eco[:margin_pct] < @rules.min_pct - 0.005
+      return out.merge(reason: "acima da margem máxima") if @rules.max_pct && eco[:margin_pct] > @rules.max_pct + 0.005
       return out.merge(reason: "abaixo do valor mínimo") if @rules.min_price && price < @rules.min_price.to_f - 0.005
       return out.merge(reason: "acima do valor máximo") if @rules.max_price && price > @rules.max_price.to_f + 0.005
+      return out.merge(reason: "acima do preço de venda de hoje") if @rules.price_cap && price > @rules.price_cap.to_f + 0.005
 
       out.merge(valid: true)
     end
@@ -96,6 +101,7 @@ module Painel
       high = offer.max_price.to_f
       low = offer.min_price.to_f
       high = [ high, @rules.max_price.to_f ].min if @rules.max_price
+      high = [ high, @rules.price_cap.to_f ].min if @rules.price_cap
       return nil unless high.positive? && high >= low
       return high if @rules.max_pct.nil? || economics(high, offer)[:margin_pct] <= @rules.max_pct
 
