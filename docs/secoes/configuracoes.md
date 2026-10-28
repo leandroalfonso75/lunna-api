@@ -4,7 +4,9 @@ Cadastros da empresa e das contas conectadas.
 
 ## Abas
 - **Empresa:** nome, **Impostos e margem** (`tax_pct`, margem mínima, margem máxima nas promoções (`max_margin_pct`, opcional), cortes da Curva ABC, limites de variação) e a IA
-  (chave e modelo do OpenRouter, por empresa).
+  (chave e modelo do OpenRouter, por empresa). **Rotina das 03:00 das Promoções:** liga/desliga
+  (`promo_routine_enabled`) e modo (`promo_routine_mode`: `simulation` registra o que faria; `apply` aplica no ML).
+  Passar para aplicação real só com o ok do usuário.
 - **Contas:** contas do Mercado Livre conectadas (conectar e remover). A conta é conectada por OAuth.
 - **Usuários:** administradores e membros da empresa.
 
