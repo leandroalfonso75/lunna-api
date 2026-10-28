@@ -5,9 +5,8 @@
 #
 # - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias (gasto ÷ unidades vendidas); sem histórico, zero.
 # - Limites: por margem (mínima/máxima, %) ou por valor (preço mínimo/máximo, R$), um ou outro.
-# - Preço nunca sobe: a oferta parte do preço do anúncio e não pode ficar acima do preço de venda de hoje (price_cap:
-#   o da promoção atual ou, sem promoção, o do anúncio). Subir o preço acima de R$ 79 obriga o frete grátis, pago pelo
-#   vendedor.
+# - O preço cheio do anúncio nunca muda e é o teto (price_cap): a promoção parte dele e o preço final fica abaixo dele
+#   (acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor; o preço cheio já define isso).
 # - Parte do ML: nas ofertas com desconto dividido (meli_percentage), o ML banca esse % do preço original.
 # - Tarifa: a do ML no preço da oferta (Ml::Sync::Promotions guarda em `fees`); fora desse preço,
 #   % da tarifa × preço + taxa fixa.
@@ -88,7 +87,7 @@ module Painel
       return out.merge(reason: "acima da margem máxima") if @rules.max_pct && eco[:margin_pct] > @rules.max_pct + 0.005
       return out.merge(reason: "abaixo do valor mínimo") if @rules.min_price && price < @rules.min_price.to_f - 0.005
       return out.merge(reason: "acima do valor máximo") if @rules.max_price && price > @rules.max_price.to_f + 0.005
-      return out.merge(reason: "acima do preço de venda de hoje") if @rules.price_cap && price > @rules.price_cap.to_f + 0.005
+      return out.merge(reason: "acima do preço cheio do anúncio") if @rules.price_cap && price > @rules.price_cap.to_f + 0.005
 
       out.merge(valid: true)
     end

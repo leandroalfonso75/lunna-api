@@ -21,12 +21,12 @@ RSpec.describe "/api/promotions", type: :request do
       finish_date: 5.days.from_now) # o ML banca 2% do preço original: no mesmo preço, rende mais
   end
 
-  it "mostra a promoção atual, a melhor oferta (sem subir o preço de venda) e o ganho da troca" do
+  it "mostra a promoção atual, a melhor oferta (até o preço cheio do anúncio) e o ganho" do
     get "/api/promotions", params: { account_id: account.id }, headers: auth_headers(member)
 
     row = json["items"].find { |r| r["item_id"] == item.item_id }
     expect(row["current"]).to include("name" => "Campanha 20%", "price" => 90.0)
-    expect(row["best"]).to include("name" => "Evento", "price" => 90.0, "action" => "aderir")
+    expect(row["best"]).to include("name" => "Campanha 20%", "price" => 95.0, "action" => "editar_preco")
     expect(row["status"]["key"]).to eq("trocar")
     expect(row["gain"]).to be > 0
     expect(json["promotions"].first).to include("promotion_id" => "C-1", "active_items" => 1)
@@ -119,9 +119,9 @@ RSpec.describe "/api/promotions", type: :request do
     expect(json["message"]).to include("mais 1 anúncios")
   end
 
-  it "a melhor oferta nunca fica acima do preço de venda de hoje" do
+  it "a melhor oferta nunca fica acima do preço cheio do anúncio" do
     get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
 
-    expect(json["best"]["price"]).to be <= 90.0
+    expect(json["best"]["price"]).to be <= 100.0
   end
 end

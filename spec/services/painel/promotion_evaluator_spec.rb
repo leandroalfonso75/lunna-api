@@ -68,8 +68,8 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(evaluator(min_price: 92).evaluate_offer(smart)).to include(valid: false, reason: "abaixo do valor mínimo")
   end
 
-  it "o preço nunca sobe: a faixa fica até o preço de venda de hoje e oferta fixa acima dele não serve" do
+  it "o preço cheio do anúncio é o teto: a faixa fica até ele e oferta fixa acima dele não serve" do
     expect(evaluator(cap: 85).evaluate_offer(campaign)).to include(price: 85.0, valid: true)
-    expect(evaluator(cap: 85).evaluate_offer(smart)).to include(valid: false, reason: "acima do preço de venda de hoje")
+    expect(evaluator(cap: 85).evaluate_offer(smart)).to include(valid: false, reason: "acima do preço cheio do anúncio")
   end
 end

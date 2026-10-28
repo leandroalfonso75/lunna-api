@@ -42,9 +42,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   - Frete, custo, imposto e despesas fixas: os mesmos da seção Anúncios.
 - **Preço da oferta:** fixo (SMART, PRICE_MATCHING, relâmpago com ML, DOD) ou, nas de faixa (campanha do vendedor,
   DEAL, desconto próprio, relâmpago), o maior preço permitido. Com margem máxima, desce o preço até ela.
-- **O preço de venda nunca sobe.** A oferta parte do preço do anúncio (que o Lunna nunca altera) e não pode ficar acima
-  do preço que o comprador paga hoje (`price_cap`: o da promoção ativa de menor preço ou, sem promoção, o do anúncio).
-  Motivo: acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor. As margens mínima e máxima (ou os valores)
+- **O preço cheio do anúncio nunca muda** e é o teto (`price_cap`): a promoção parte dele e o preço final fica abaixo
+  dele. O preço final pode subir ou descer em relação ao de hoje (cheio 100, promoção a 90, pode ir a 92), dentro dos
+  limites. Motivo: acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor. As margens mínima e máxima (ou os valores)
   são os limites do preço de venda depois do desconto: oferta abaixo da mínima ou acima da máxima não serve, inclusive a
   atual ("Acima da máxima" pede um desconto maior).
 - **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por

@@ -162,12 +162,10 @@ module Painel
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
     end
 
-    # Preço de venda de hoje: o da promoção de preço ativa (o menor, se houver mais de uma) ou o do anúncio.
-    # Nenhuma oferta pode passar dele.
-    def price_cap(item, ctx)
-      active = (ctx[:offers]&.dig(item.item_id) || [])
-        .select { |o| o.status == "started" && o.price.to_f.positive? && PromotionEvaluator::PRICE_TYPES.include?(o.promotion_type) }
-      active.map { |o| o.price.to_f }.min || item.price&.to_f
+    # Preço cheio do anúncio (o Lunna nunca altera): nenhuma oferta pode passar dele. O preço final da promoção pode
+    # subir ou descer em relação ao de hoje, desde que fique abaixo do preço cheio e dentro dos limites.
+    def price_cap(item, _ctx)
+      (item.original_price || item.price)&.to_f
     end
 
     def unit_cost(item, ctx)
