@@ -28,6 +28,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   "Sair da promoção"; cada um mostra antes o que vai acontecer (de onde sai, para onde vai, preço e margem) e só age
   depois de "Confirmar". Na lista, marcar anúncios (ou "Marcar os desta página que podem melhorar") e "Aplicar a melhor
   oferta nos marcados": vai para a fila (`Ml::PromotionsApplyJob`), um anúncio de cada vez.
+- **Percorrer a lista:** no painel do anúncio, "Próximo anúncio →" abre o seguinte da lista (na ordem da tela, entrando
+  nos produtos com variações) sem mudar nada; na confirmação de aplicar ou sair, "Confirmar e ir para o próximo" aplica
+  e, se o ML aceitou, já abre o seguinte. O cabeçalho da tabela fica fixo ao rolar.
 - **Aba Histórico:** cada ação (pela tela, em lote ou pela rotina) com de/para, preço, margem, ganho, quem e o
   resultado do ML.
 - **Exportar todas (CSV):** uma linha por anúncio e oferta (ativa ou candidata), com preços, faixa, parte do ML,
