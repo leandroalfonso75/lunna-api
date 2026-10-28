@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_190001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -39,6 +39,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
     t.string "ai_model"
     t.decimal "fixed_expenses_pct", precision: 6, scale: 2, default: "3.0", null: false
     t.decimal "max_margin_pct", precision: 6, scale: 2
+    t.boolean "promo_routine_enabled", default: false, null: false
+    t.string "promo_routine_mode", default: "simulation", null: false
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -338,7 +340,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
     t.uuid "user_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "run_id"
+    t.decimal "from_profit", precision: 12, scale: 2
+    t.decimal "to_profit", precision: 12, scale: 2
     t.index ["ml_account_id", "created_at"], name: "index_ml_promotion_actions_on_ml_account_id_and_created_at"
+    t.index ["run_id"], name: "index_ml_promotion_actions_on_run_id"
     t.index ["user_id"], name: "index_ml_promotion_actions_on_user_id"
   end
 
@@ -368,6 +374,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
     t.datetime "updated_at", null: false
     t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_offers_on_ml_account_id_and_item_id"
     t.index ["ml_account_id", "promotion_id"], name: "index_ml_promotion_offers_on_ml_account_id_and_promotion_id"
+  end
+
+  create_table "ml_promotion_runs", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "mode", null: false
+    t.string "trigger", null: false
+    t.string "status", default: "running", null: false
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.jsonb "totals", default: {}, null: false
+    t.string "error"
+    t.uuid "user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "started_at"], name: "index_ml_promotion_runs_on_ml_account_id_and_started_at"
+    t.index ["user_id"], name: "index_ml_promotion_runs_on_user_id"
   end
 
   create_table "ml_promotion_settings", force: :cascade do |t|
@@ -773,8 +795,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_actions", "ml_promotion_runs", column: "run_id", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_offers", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_runs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_runs", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_settings", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_settings", "users", column: "updated_by_id", on_delete: :nullify
   add_foreign_key "ml_promotions", "ml_accounts", on_delete: :cascade

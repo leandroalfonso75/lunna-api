@@ -20,6 +20,7 @@ module Painel
     def self.detail(account, item_id) = new(account, {}).detail(item_id)
     def self.export_csv(account) = new(account, {}).export_csv
     def self.evaluate_item(account, item_id) = new(account, {}).evaluate_item(item_id)
+    def self.evaluate_all(account) = new(account, {}).evaluate_all
     def self.actions(account, params) = new(account, params).actions
 
     KIND_LABELS = { "aderir" => "Entrou", "ajustar_preco" => "Ajustou o preço", "trocar" => "Trocou", "sair" => "Saiu" }.freeze
@@ -66,6 +67,16 @@ module Painel
       item = @account.ml_items.find(item_id)
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]))
       { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best }
+    end
+
+    # => [ { item:, row:, current:, best: } ] de todos os anúncios ativos (usado pela rotina das 03:00).
+    def evaluate_all
+      items = items_scope.to_a
+      ctx = context(items)
+      items.map do |item|
+        row, = build_row(item, ctx[:offers][item.item_id] || [], ctx)
+        { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id] }
+      end
     end
 
     # Histórico das ações nas promoções, as mais novas primeiro (filtro opcional por anúncio).

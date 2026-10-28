@@ -28,6 +28,7 @@ class Company < ApplicationRecord
   validates :fixed_expenses_pct, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
   validates :max_margin_pct, numericality: { greater_than: -100, less_than: 100 }, allow_nil: true
+  validates :promo_routine_mode, inclusion: { in: %w[simulation apply] }
   validate :max_margin_above_min
   validate :abc_cut_a_below_abc_cut_b
 

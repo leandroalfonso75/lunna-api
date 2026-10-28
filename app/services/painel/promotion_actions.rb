@@ -16,8 +16,8 @@ module Painel
 
     Result = Struct.new(:ok, :message, :action, keyword_init: true)
 
-    def self.apply(account, item_id, user: nil, source: "tela", target: nil)
-      new(account, user, source).apply(item_id, target)
+    def self.apply(account, item_id, user: nil, source: "tela", target: nil, run: nil)
+      new(account, user, source, run: run).apply(item_id, target)
     end
 
     # Leva a mesma promoção para os outros anúncios do mesmo SKU e/ou das outras variações do produto, em fila
@@ -41,10 +41,11 @@ module Painel
       new(account, user, source).leave(item_id)
     end
 
-    def initialize(account, user, source)
+    def initialize(account, user, source, run: nil)
       @account = account
       @user = user
       @source = source
+      @run = run
     end
 
     # target: nil = a melhor oferta; ou { promotion_id:, promotion_type:, action: "aderir" | "editar_preco" }.
@@ -164,7 +165,8 @@ module Painel
 
     def record(kind, item_id, from, to)
       @account.ml_promotion_actions.create!(
-        item_id: item_id, kind: kind, source: @source, user: @user,
+        item_id: item_id, kind: kind, source: @source, user: @user, run: @run,
+        from_profit: from&.dig(:profit), to_profit: to&.dig(:profit),
         from_promotion_id: from&.dig(:offer)&.promotion_id, from_type: from&.dig(:offer)&.promotion_type, from_name: from && name_of(from),
         from_price: from&.dig(:price), from_margin_pct: from&.dig(:margin_pct),
         to_promotion_id: to&.dig(:offer)&.promotion_id, to_type: to&.dig(:offer)&.promotion_type, to_name: to && name_of(to),

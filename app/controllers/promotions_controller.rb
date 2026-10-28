@@ -11,10 +11,14 @@
 # POST /api/promotions/items/:item_id/leave?account_id= (admin) → sai da promoção de preço atual.
 # POST /api/promotions/apply_best?account_id= (admin) → aplica a melhor oferta em vários anúncios (item_ids), em fila.
 # GET /api/promotions/actions?account_id= → histórico das ações nas promoções.
+# GET /api/promotions/runs?account_id= → execuções da rotina das 03:00 (e simulações manuais), com os totais.
+# POST /api/promotions/runs?account_id= (admin) → "Simular agora": roda a rotina em simulação, em fila.
+# GET /api/promotions/runs/:id?account_id= → uma execução com o antes e o depois de cada anúncio.
+# GET /api/promotions/runs/:id/export?account_id= → a mesma execução em CSV.
 class PromotionsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: %i[update_settings sync apply leave apply_best]
+  before_action :require_admin!, only: %i[update_settings sync apply leave apply_best simulate]
   MAX_BATCH = 300
 
   def index
@@ -84,6 +88,38 @@ class PromotionsController < ApplicationController
 
   def actions
     render json: { actions: Painel::PromotionsQuery.actions(Current.account, params) }
+  end
+
+  def runs
+    company = Current.account.company
+    render json: {
+      routine: { enabled: company.promo_routine_enabled, mode: company.promo_routine_mode },
+      running: Current.account.ml_promotion_runs.exists?(status: "running"),
+      runs: Painel::PromotionRunReport.list(Current.account)
+    }
+  end
+
+  def simulate
+    if Current.account.ml_promotion_runs.where(status: "running").where("started_at > ?", 30.minutes.ago).exists?
+      return render_errors([ "Já tem uma execução da rotina em andamento." ], status: :conflict)
+    end
+
+    Ml::PromotionsRoutineJob.perform_later(Current.account.id, Current.user&.id)
+    render json: { queued: true }, status: :accepted
+  end
+
+  def run
+    render json: Painel::PromotionRunReport.detail(Current.account, params[:id])
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Execução não encontrada." ], status: :not_found)
+  end
+
+  def run_export
+    run = Current.account.ml_promotion_runs.find(params[:id])
+    send_data "﻿" + Painel::PromotionRunReport.csv(Current.account, run),
+      filename: "rotina-promocoes-#{run.started_at.in_time_zone.strftime('%Y-%m-%d-%H%M')}.csv", type: "text/csv; charset=utf-8"
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Execução não encontrada." ], status: :not_found)
   end
 
   private

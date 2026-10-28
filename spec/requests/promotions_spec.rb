@@ -157,4 +157,25 @@ RSpec.describe "/api/promotions", type: :request do
     expect(group["children"].map { |c| c["sku"] }.uniq).to contain_exactly("SKU-A", "SKU-B")
     expect(group["children"].find { |c| c["sku"] == "SKU-B" }["notes"]).to eq("Nunca entrar em relâmpago")
   end
+
+  it "simular agora vai para a fila (só administrador) e o relatório mostra antes e depois" do
+    post "/api/promotions/runs", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(response).to have_http_status(:forbidden)
+
+    expect {
+      post "/api/promotions/runs", params: { account_id: account.id }, headers: auth_headers(admin)
+    }.to have_enqueued_job(Ml::PromotionsRoutineJob).with(account.id, admin.id)
+
+    allow(Ml::Sync::Promotions).to receive(:call)
+    run = Painel::PromotionRoutine.call(account, mode: "simulation", trigger: "manual")
+    get "/api/promotions/runs/#{run.id}", params: { account_id: account.id }, headers: auth_headers(member)
+
+    row = json["rows"].find { |r| r["item_id"] == item.item_id }
+    expect(row).to include("changes" => true, "ok" => true)
+    expect(row["before"]["price"]).to eq(90.0)
+    expect(row["after"]["price"]).to be > 90.0
+    get "/api/promotions/runs", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["routine"]).to eq("enabled" => false, "mode" => "simulation")
+    expect(json["runs"].first["mode_label"]).to eq("Simulação")
+  end
 end

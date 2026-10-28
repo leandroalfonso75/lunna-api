@@ -58,6 +58,10 @@ Rails.application.routes.draw do
     post "promotions/items/:item_id/leave", to: "promotions#leave"
     post "promotions/apply_best", to: "promotions#apply_best"
     get "promotions/actions", to: "promotions#actions"
+    get "promotions/runs", to: "promotions#runs"
+    post "promotions/runs", to: "promotions#simulate"
+    get "promotions/runs/:id", to: "promotions#run"
+    get "promotions/runs/:id/export", to: "promotions#run_export"
     get "sales", to: "sales#index"
     post "sales/sync", to: "sales#sync"
     get "sales/:id", to: "sales#show", as: :sale

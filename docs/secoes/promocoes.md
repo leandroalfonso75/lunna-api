@@ -92,6 +92,20 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   estoque reservado) não são aplicados pelo Lunna.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 
+## Rotina das 03:00 (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
+- Agendada em `config/recurring.yml` (`0 3 * * * America/Sao_Paulo`). Roda para cada conta ativa cuja empresa ligou a
+  rotina em Configurações → Impostos e margem (`companies.promo_routine_enabled` e `promo_routine_mode`).
+- **Simulação** (`simulation`): relê a Central, calcula a melhor oferta de cada anúncio com as mesmas regras da tela e
+  só registra o que faria. **Aplicação real** (`apply`): aplica pela mesma `Painel::PromotionActions` da tela.
+- Age em: trocar, sem promoção (inclui promoção que acabou ou caiu), acima da máxima e abaixo da mínima com oferta que
+  serve. Não mexe em: na melhor, sem custo, para revisar (registra a regra), automação desligada e **anúncio com regra
+  própria em texto** (a rotina não interpreta texto; registra o motivo).
+- Relâmpago e oferta do dia (estoque reservado) nunca são escolhidas como melhor oferta.
+- Cada execução fica em `ml_promotion_runs` (modo, origem, totais) e cada anúncio em `ml_promotion_actions` (`run_id`,
+  antes e depois: preço, margem, lucro). Aba "Rotina das 03:00" em Promoções: lista as execuções, mostra o antes e o
+  depois e exporta CSV; "Simular agora" (administrador) roda uma simulação na hora.
+- Precisa do Lunna ligado às 03:00 (computador com Docker, ou servidor).
+
 ## Dados e atualização
 - `Ml::Sync::Promotions`, dentro da sincronização do ML, a cada **1 hora** (`PROMOTIONS_EVERY`): promoções da conta
   (`/seller-promotions/users/{id}`) e ofertas de cada anúncio ativo (`/seller-promotions/items/{id}`, 3 em paralelo,
@@ -120,7 +134,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 ## Pendências
 - Fase 2 testada no ML real em 2026-10-27 (2 trocas feitas pela tela). Exige o app do ML com permissão de **leitura e
   escrita em Ofertas/Promoções** (DevCenter); só leitura dá 403 do PolicyAgent, e a tela avisa.
-- Fase 3: rotina das 03:00 (recadastrar promoção que acabou ou caiu e trocar por oferta melhor), primeiro em simulação.
+- Rotina das 03:00: ligada em 2026-10-28 em simulação; passar para aplicação real depois de conferir os relatórios.
 - Redução de tarifa do PRICE_MATCHING: confirmar como o ML informa; hoje a conta usa a tarifa de `listing_prices`.
 - Ofertas relâmpago pedem estoque mínimo; a escolha ainda não confere o estoque.
 - Frete quando a promoção cruza R$ 79: hoje usa o frete do preço cheio.

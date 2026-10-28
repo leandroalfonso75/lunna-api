@@ -22,6 +22,8 @@ module Painel
   class PromotionEvaluator
     PRICE_TYPES = %w[SELLER_CAMPAIGN DEAL PRICE_DISCOUNT LIGHTNING SMART SMART_LIGHTNING PRICE_MATCHING DOD
                      MARKETPLACE_CAMPAIGN UNHEALTHY_STOCK PRE_NEGOTIATED].freeze
+    # Relâmpago e oferta do dia pedem estoque reservado: o Lunna não entra nelas (só pelo ML), então não são escolhidas.
+    STOCK_RESERVED_TYPES = %w[LIGHTNING DOD].freeze
 
     TYPE_LABELS = {
       "SELLER_CAMPAIGN" => "Campanha do vendedor", "DEAL" => "Evento do ML", "PRICE_DISCOUNT" => "Desconto próprio",
@@ -110,6 +112,7 @@ module Painel
       return out.merge(reason: "não muda o preço (soma no checkout)") unless PRICE_TYPES.include?(offer.promotion_type)
       return out.merge(reason: "sem custo do produto") if @cost.nil?
       return out.merge(reason: "encerrada") if offer.finish_date.present? && offer.finish_date < Time.current
+      return out.merge(reason: "pede estoque reservado (entrar pelo ML)") if !as_is && STOCK_RESERVED_TYPES.include?(offer.promotion_type)
 
       price ||= choose_price(offer)
       return out.merge(reason: "sem preço permitido") if price.nil?

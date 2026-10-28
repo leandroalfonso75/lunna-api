@@ -11,6 +11,10 @@ production: &default
   cleanup:
     class: CleanupJob
     schedule: every day at 4am
+  # Promoções: rotina das 03:00 no horário de Brasília (simulação ou aplicação real, conforme Configurações)
+  promotions_routine:
+    class: Ml::PromotionsRoutineJob
+    schedule: "0 3 * * * America/Sao_Paulo"
 
 development:
   <<: *default

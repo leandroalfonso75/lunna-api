@@ -15,6 +15,8 @@ module Payloads
       tax_pct: company.tax_pct.to_f,
       min_margin_pct: company.min_margin_pct.to_f,
       max_margin_pct: company.max_margin_pct&.to_f,
+      promo_routine_enabled: company.promo_routine_enabled,
+      promo_routine_mode: company.promo_routine_mode,
       abc_cut_a: company.abc_cut_a.to_f,
       abc_cut_b: company.abc_cut_b.to_f,
       group_up_pct: company.group_up_pct.to_f,
