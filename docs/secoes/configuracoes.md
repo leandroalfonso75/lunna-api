@@ -28,3 +28,10 @@ Cadastros da empresa e das contas conectadas.
 
 ## Pendências
 - Campo de despesas fixas e aba do Olist.
+
+## Atenção: desconectar uma conta do Mercado Livre
+- Hoje "Desconectar" apaga a conta e **todos os dados dela** no Lunna (vendas, anúncios, Ads, promoções, limites de
+  promoção por anúncio e histórico). Reconectar baixa de novo os últimos 95 dias do ML, mas os limites por anúncio e o
+  histórico se perdem. Pendência: trocar por pausar a conta, sem apagar dados.
+- Reconectar no ambiente local exige um endereço https para o retorno do login (túnel temporário) cadastrado como URL
+  de redirecionamento no DevCenter do ML.

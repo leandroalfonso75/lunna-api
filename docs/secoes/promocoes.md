@@ -100,8 +100,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   `20261027160002_create_ml_promotion_actions.rb`
 
 ## Pendências
-- Fase 2: ainda não testada com uma escrita real no Mercado Livre (só com respostas simuladas nos testes); a primeira
-  aplicação real deve ser acompanhada.
+- Fase 2 testada no ML real em 2026-10-27 (2 trocas feitas pela tela). Exige o app do ML com permissão de **leitura e
+  escrita em Ofertas/Promoções** (DevCenter); só leitura dá 403 do PolicyAgent, e a tela avisa.
 - Fase 3: rotina das 03:00 (recadastrar promoção que acabou ou caiu e trocar por oferta melhor), primeiro em simulação.
 - Redução de tarifa do PRICE_MATCHING: confirmar como o ML informa; hoje a conta usa a tarifa de `listing_prices`.
 - Ofertas relâmpago pedem estoque mínimo; a escolha ainda não confere o estoque.
