@@ -76,4 +76,45 @@ RSpec.describe Painel::PromotionActions do
     expect(result.message).to include("permissão de leitura de promoções")
     expect(a_request(:post, /seller-promotions/)).not_to have_been_made
   end
+
+  describe "aplicar mesmo assim e outro valor" do
+    let(:p2) { { promotion_id: "P-2", promotion_type: "DEAL", action: "aderir" } }
+
+    before { stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}") }
+
+    it "aplica a oferta barrada pela margem quando pedido, e guarda a regra ferida no Histórico" do
+      company.update!(min_margin_pct: 40)
+      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 84.0 }.to_json)
+        .to_return(status: 201, body: "{}")
+
+      refused = described_class.apply(account, item.item_id, user: user, target: p2)
+      expect(refused.ok).to be false
+      expect(join).not_to have_been_requested
+
+      result = described_class.apply(account, item.item_id, user: user, target: p2.merge(force: "true"))
+      expect(result.ok).to be true
+      expect(result.message).to include("Aplicado mesmo assim (abaixo da margem mínima)")
+      expect(MlPromotionAction.last).to have_attributes(ok: true, to_promotion_id: "P-2", forced_reason: "abaixo da margem mínima")
+    end
+
+    it "aplica outro preço informado, mesmo passando do limite de aumento" do
+      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 90.0 }.to_json)
+        .to_return(status: 201, body: "{}")
+
+      expect(described_class.apply(account, item.item_id, user: user, target: p2.merge(price: "90")).ok).to be false
+
+      result = described_class.apply(account, item.item_id, user: user, target: p2.merge(price: "90,00", force: true))
+      expect(result.ok).to be true
+      expect(join).to have_been_requested
+      expect(MlPromotionAction.last).to have_attributes(to_price: 90, forced_reason: a_string_including("aumento"))
+    end
+
+    it "não passa da faixa de preço que o Mercado Livre aceita na oferta" do
+      result = described_class.apply(account, item.item_id, user: user, target: p2.merge(price: "99", force: true))
+
+      expect(result.ok).to be false
+      expect(result.message).to include("só aceita até R$ 95,00")
+      expect(a_request(:any, /seller-promotions/)).not_to have_been_made
+    end
+  end
 end

@@ -67,7 +67,7 @@ module Painel
     def evaluate_item(item_id)
       item = @account.ml_items.find(item_id)
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]))
-      { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best }
+      { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best, evaluator: @last_evaluator }
     end
 
     # => [ { item:, row:, current:, best: } ] de todos os anúncios ativos (usado pela rotina das 03:00).
@@ -88,7 +88,7 @@ module Painel
       users = User.where(id: scope.map(&:user_id).compact.uniq).pluck(:id, :name).to_h
       scope.map do |a|
         { id: a.id, item_id: a.item_id, title: titles[a.item_id], kind: a.kind, kind_label: KIND_LABELS.fetch(a.kind, a.kind),
-          source: a.source, source_label: SOURCE_LABELS.fetch(a.source, a.source), ok: a.ok, error: a.error,
+          source: a.source, source_label: SOURCE_LABELS.fetch(a.source, a.source), ok: a.ok, error: a.error, forced_reason: a.forced_reason,
           from: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f },
           to: a.to_type && { name: a.to_name, price: a.to_price&.to_f, margin_pct: a.to_margin_pct&.to_f },
           gain: a.gain&.to_f, user: users[a.user_id], created_at: a.created_at }
@@ -207,6 +207,7 @@ module Painel
       best = evaluator.best(evaluated)
       @last_current = current
       @last_best = best
+      @last_evaluator = evaluator
       full_price = (item.original_price || item.price).to_f
       setting = ctx[:settings][item.item_id]
       cost = unit_cost(item, ctx)
@@ -318,7 +319,7 @@ module Painel
       o = e[:offer]
       { promotion_id: o.promotion_id, type: o.promotion_type, label: e[:label], name: o.name, status: o.status,
         price: e[:price], margin_pct: e[:margin_pct], profit: e[:profit], meli_amount: e[:meli_amount],
-        valid: e[:valid], reason: e[:reason], finish_date: o.finish_date, costs: e[:costs],
+        valid: e[:valid], reason: e[:reason], start_date: o.start_date || promo_dates(o)&.first, finish_date: o.finish_date || promo_dates(o)&.last, costs: e[:costs],
         action: action_for(e) }
     end
 
@@ -335,7 +336,13 @@ module Painel
       short(e).merge(original_price: o.original_price&.to_f, min_price: o.min_price&.to_f, max_price: o.max_price&.to_f,
                      suggested_price: o.suggested_price&.to_f, meli_percentage: o.meli_percentage&.to_f,
                      seller_percentage: o.seller_percentage&.to_f, fixed_amount: o.fixed_amount&.to_f,
-                     fee: e[:fee], flexible: o.flexible?, start_date: o.start_date, stock_reserved: o.stock_reserved)
+                     fee: e[:fee], flexible: o.flexible?, stock_reserved: o.stock_reserved)
+    end
+
+    # Validade da campanha quando a oferta do anúncio não traz datas (ex.: "Impulsione suas vendas").
+    def promo_dates(offer)
+      @promo_dates ||= @account.ml_promotions.pluck(:promotion_id, :start_date, :finish_date).to_h { |id, s, f| [ id, [ s, f ] ] }
+      @promo_dates[offer.promotion_id]
     end
 
     def sku_siblings(item)

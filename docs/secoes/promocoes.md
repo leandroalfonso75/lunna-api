@@ -63,6 +63,16 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   ofertas (`review` na API), a **melhor oferta barrada** (maior margem entre as que não cabem, com o que faltou) e a
   sugestão do que mudar nos limites para ela caber ("Para caber", com o botão "Usar a sugestão" que preenche o campo).
   No painel, o quadro de custos mostra "Hoje" ao lado da melhor oferta barrada; na lista, ela aparece riscada.
+- **Aplicar fora das regras** (só administradores, só em "Para revisar"): o painel tem "Aplicar mesmo assim" (a melhor
+  oferta barrada no preço dela) e "Outro valor" (preço final em R$ ou % de desconto sobre o preço cheio, só nas ofertas
+  de faixa, com margem e lucro aproximados na tela). A API recebe `force` e `price` em `POST .../apply`; o preço precisa
+  ficar na faixa do ML e abaixo do preço cheio, e nem `force` passa o que o ML recusaria (encerrada, preço fixo do ML,
+  acima do preço cheio, estoque para reservar). A regra ferida vai para `ml_promotion_actions.forced_reason` e aparece no
+  Histórico ("mesmo assim: …"). Levar ao SKU/variações não vale aqui (cada anúncio segue as próprias regras).
+- **Validade:** o quadro de custos mostra o período (início até o fim) em "Hoje" e na melhor oferta (ou barrada); a lista
+  mostra as datas nas colunas da promoção atual e da melhor oferta, e a tabela de ofertas tem a coluna "Validade". Sem
+  data na oferta, vale a da campanha (`ml_promotions`); desconto próprio a criar = 30 dias a partir de quando aplicar;
+  relâmpago/oferta do dia candidatos = horário definido pelo ML ao entrar.
 - **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por
   valor, preço mínimo e máximo em R$ (oferta abaixo do valor mínimo não serve; nas de faixa o preço fica até o valor
   máximo; a margem mínima geral não vale nesse modo).
@@ -82,14 +92,14 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Mudar margens: só administradores.
 
 ## Aplicar no Mercado Livre (`Painel::PromotionActions`)
-- Antes de agir, relê as ofertas do anúncio; só aplica oferta que serve pela regra de margem.
+- Antes de agir, relê as ofertas do anúncio; só aplica oferta que serve pelas regras, salvo "aplicar mesmo assim" (acima).
 - **Entrar:** `POST /seller-promotions/items/{id}?app_version=v2` com `promotion_id`, `promotion_type` e `deal_price` (faixa)
   ou `offer_id` (preço dado pelo ML: SMART, PRICE_MATCHING…); desconto próprio (`PRICE_DISCOUNT`) por 30 dias.
 - **Sair:** `DELETE /seller-promotions/items/{id}?promotion_type=…&promotion_id=…` (ou `offer_id`).
 - **Trocar** = sair da atual e entrar na nova; **ajustar o preço** = sair e entrar de novo na mesma. Se a entrada falhar
   depois de sair, tenta voltar para a anterior com o preço de antes e avisa se não conseguiu.
 - Escrita sem retentativa automática (`Ml::Client#write`), para não aplicar duas vezes. Relâmpago e oferta do dia (pedem
-  estoque reservado) não são aplicados pelo Lunna.
+  estoque reservado) entram com o estoque mínimo que o ML sugere (`stock`), se o anúncio tiver esse estoque.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 
 ## Não automatizar promoções

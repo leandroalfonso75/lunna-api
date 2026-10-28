@@ -62,7 +62,7 @@ class PromotionsController < ApplicationController
   end
 
   def apply
-    target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :action).to_h.symbolize_keys : nil
+    target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :action, :price, :force).to_h.symbolize_keys : nil
     result = Painel::PromotionActions.apply(Current.account, params[:item_id], user: Current.user, target: target)
     queued = 0
     if result.ok

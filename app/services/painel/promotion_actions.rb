@@ -50,16 +50,29 @@ module Painel
     end
 
     # target: nil = a melhor oferta; ou { promotion_id:, promotion_type:, action: "aderir" | "editar_preco" }.
+    # Com price: aplica nesse preço (só ofertas de preço livre, dentro da faixa do ML). Com force: aplica mesmo
+    # ferindo as regras do Lunna (margem, valor, aumento) e guarda no Histórico a regra ferida.
     def apply(item_id, target = nil)
       client = fresh_client
       Ml::Sync::Promotions.call(client, @account, item_ids: [ item_id ])
       ev = PromotionsQuery.evaluate_item(@account, item_id)
       current = ev[:current]
       chosen = target ? find_entry(ev[:evaluated], target) : ev[:best]
+      force = target && ActiveModel::Type::Boolean.new.cast(target[:force])
 
       return Result.new(ok: false, message: "Nenhuma oferta deste anúncio respeita a margem mínima.") if chosen.nil?
+      if target && target[:price].present?
+        price = target[:price].to_s.tr(",", ".").to_f.round(2)
+        if (why = custom_price_problem(chosen[:offer], price, ev[:evaluator]))
+          return Result.new(ok: false, message: why)
+        end
+        chosen = ev[:evaluator].evaluate_offer(chosen[:offer], price: price)
+      end
       return Result.new(ok: true, message: "O anúncio já está na melhor oferta.") if chosen[:as_is] || (current && chosen.equal?(current))
-      return Result.new(ok: false, message: "Esta oferta não serve: #{chosen[:reason]}.") unless chosen[:valid]
+      unless chosen[:valid] || (force && !HARD_REASONS.any? { |r| chosen[:reason].to_s.start_with?(r) })
+        return Result.new(ok: false, message: "Esta oferta não serve: #{chosen[:reason]}.")
+      end
+      @forced_reason = chosen[:valid] ? nil : chosen[:reason]
       unless JOINABLE.include?(chosen[:offer].promotion_type)
         return Result.new(ok: false, message: "#{chosen[:label]} não pode ser aplicada pelo Lunna: entre por ela no Mercado Livre.")
       end
@@ -100,6 +113,22 @@ module Painel
     def fresh_client
       Ml::OAuth.refresh!(@account)
       Ml::Client.new(access_token: @account.access_token)
+    end
+
+    # O que nem "aplicar mesmo assim" passa: o Mercado Livre recusaria (ou não há o que aplicar).
+    HARD_REASONS = [ "não muda o preço", "encerrada", "sem preço permitido", "acima do preço cheio do anúncio",
+                     "sem estoque sugerido", "estoque insuficiente" ].freeze
+
+    def custom_price_problem(offer, price, evaluator)
+      brl = ->(v) { ActiveSupport::NumberHelper.number_to_currency(v, unit: "R$", separator: ",", delimiter: ".") }
+      return "Informe um preço maior que zero." unless price.positive?
+      return "#{offer.name.presence || offer.promotion_type} tem preço fixo dado pelo Mercado Livre: não dá para escolher outro valor." unless offer.flexible?
+      return "O Mercado Livre só aceita até #{brl.(offer.max_price)} nesta oferta." if price > offer.max_price.to_f + 0.005
+      return "O Mercado Livre só aceita a partir de #{brl.(offer.min_price)} nesta oferta." if offer.min_price.to_f.positive? && price < offer.min_price.to_f - 0.005
+      cap = evaluator.rules.price_cap
+      return "O preço precisa ficar abaixo do preço cheio do anúncio (#{brl.(cap)})." if cap && price > cap.to_f + 0.005
+
+      nil
     end
 
     def find_entry(evaluated, target)
@@ -178,7 +207,8 @@ module Painel
         from_price: from&.dig(:price), from_margin_pct: from&.dig(:margin_pct),
         to_promotion_id: to&.dig(:offer)&.promotion_id, to_type: to&.dig(:offer)&.promotion_type, to_name: to && name_of(to),
         to_price: to&.dig(:price), to_margin_pct: to&.dig(:margin_pct),
-        gain: from && to ? (to[:profit] - from[:profit]).round(2) : nil
+        gain: from && to ? (to[:profit] - from[:profit]).round(2) : nil,
+        forced_reason: to ? @forced_reason : nil
       )
     end
 
@@ -190,12 +220,13 @@ module Painel
     def name_of(entry) = entry[:offer].name.presence || entry[:label]
 
     def success_message(kind, current, chosen)
-      price = ActiveSupport::NumberHelper.number_to_currency(chosen[:price], unit: "R$ ", separator: ",", delimiter: ".")
-      case kind
+      price = ActiveSupport::NumberHelper.number_to_currency(chosen[:price], unit: "R$", separator: ",", delimiter: ".")
+      text = case kind
       when "aderir" then "Anúncio entrou em #{name_of(chosen)} a #{price}."
       when "ajustar_preco" then "Preço em #{name_of(chosen)} ajustado para #{price}."
       else "Anúncio trocou #{name_of(current)} por #{name_of(chosen)} a #{price}."
       end
+      @forced_reason ? "#{text} Aplicado mesmo assim (#{@forced_reason}); fica registrado no Histórico." : text
     end
 
     NO_WRITE_PERMISSION = "o aplicativo do Lunna no Mercado Livre só tem permissão de leitura de promoções (ofertas). "                           "É preciso liberar leitura e escrita de Ofertas e Promoções no DevCenter e autorizar a conta de novo"

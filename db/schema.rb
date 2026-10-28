@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_28_190001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -343,6 +343,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_190001) do
     t.bigint "run_id"
     t.decimal "from_profit", precision: 12, scale: 2
     t.decimal "to_profit", precision: 12, scale: 2
+    t.string "forced_reason"
     t.index ["ml_account_id", "created_at"], name: "index_ml_promotion_actions_on_ml_account_id_and_created_at"
     t.index ["run_id"], name: "index_ml_promotion_actions_on_run_id"
     t.index ["user_id"], name: "index_ml_promotion_actions_on_user_id"
