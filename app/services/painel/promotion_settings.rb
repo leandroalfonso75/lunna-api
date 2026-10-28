@@ -36,6 +36,24 @@ module Painel
       end
     end
 
+    # "Não automatizar promoções neste anúncio" (automation_enabled = false): só muda esse campo, no anúncio e, se
+    # pedido, nos outros anúncios do SKU e das variações do produto; os limites de cada um ficam como estão.
+    def set_automation(account, item_id, enabled, user, sku: false, variations: false)
+      item = account.ml_items.find(item_id)
+      targets = [ item.item_id ]
+      targets += account.ml_items.where(sku: item.sku).where.not(item_id: item.item_id).pluck(:item_id) if sku && item.sku.present?
+      targets += variation_item_ids(account, item) if variations
+
+      MlPromotionSetting.transaction do
+        targets.uniq.each do |id|
+          setting = account.ml_promotion_settings.find_or_initialize_by(item_id: id)
+          setting.sku ||= account.ml_items.where(item_id: id).pick(:sku)
+          setting.update!(automation_enabled: enabled, updated_by: user)
+        end
+      end
+      targets.uniq
+    end
+
     # Anúncios (ativos ou pausados) das outras variações do mesmo produto: SKUs com o mesmo produto pai no Olist.
     def variation_item_ids(account, item)
       return [] if item.sku.blank?

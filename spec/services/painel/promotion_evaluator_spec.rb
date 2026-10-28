@@ -93,4 +93,15 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(e.evaluate_offer(wide)[:price]).to eq(199.99)
     expect(e.evaluate_offer(fixed)).to include(valid: false, reason: "passaria da casa dos R$ 200")
   end
+
+  it "relâmpago entra reservando o estoque sugerido pelo ML, se o anúncio tiver estoque" do
+    item.available_quantity = 10
+    lightning = offer("LIGHTNING", min_price: 50, max_price: 95, payload: { "stock" => { "min" => 5, "max" => 12 } },
+      fees: { "price" => 95, "sale_fee" => 9.5, "percentage_fee" => 10, "fixed_fee" => 0 })
+    expect(lightning.stock_reserved).to eq(5)
+    expect(evaluator.evaluate_offer(lightning)).to include(valid: true)
+
+    item.available_quantity = 3
+    expect(evaluator.evaluate_offer(lightning)).to include(valid: false, reason: "estoque insuficiente para reservar (pede 5, tem 3)")
+  end
 end

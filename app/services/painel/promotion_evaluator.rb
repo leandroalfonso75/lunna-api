@@ -22,8 +22,7 @@ module Painel
   class PromotionEvaluator
     PRICE_TYPES = %w[SELLER_CAMPAIGN DEAL PRICE_DISCOUNT LIGHTNING SMART SMART_LIGHTNING PRICE_MATCHING DOD
                      MARKETPLACE_CAMPAIGN UNHEALTHY_STOCK PRE_NEGOTIATED].freeze
-    # Relâmpago e oferta do dia pedem estoque reservado: o Lunna não entra nelas (só pelo ML), então não são escolhidas.
-    STOCK_RESERVED_TYPES = %w[LIGHTNING DOD].freeze
+
 
     TYPE_LABELS = {
       "SELLER_CAMPAIGN" => "Campanha do vendedor", "DEAL" => "Evento do ML", "PRICE_DISCOUNT" => "Desconto próprio",
@@ -112,7 +111,9 @@ module Painel
       return out.merge(reason: "não muda o preço (soma no checkout)") unless PRICE_TYPES.include?(offer.promotion_type)
       return out.merge(reason: "sem custo do produto") if @cost.nil?
       return out.merge(reason: "encerrada") if offer.finish_date.present? && offer.finish_date < Time.current
-      return out.merge(reason: "pede estoque reservado (entrar pelo ML)") if !as_is && STOCK_RESERVED_TYPES.include?(offer.promotion_type)
+      if !as_is && (why = stock_reason(offer))
+        return out.merge(reason: why)
+      end
 
       price ||= choose_price(offer)
       return out.merge(reason: "sem preço permitido") if price.nil?
@@ -132,6 +133,19 @@ module Painel
     end
 
     private
+
+    # Relâmpago e oferta do dia: o anúncio precisa ter o estoque que o ML sugere reservar.
+    def stock_reason(offer)
+      return nil unless MlPromotionOffer::STOCK_TYPES.include?(offer.promotion_type)
+
+      need = offer.stock_reserved
+      return "sem estoque sugerido pelo ML para reservar" if need.nil? || need <= 0
+
+      have = @item.try(:available_quantity).to_i
+      return "estoque insuficiente para reservar (pede #{need}, tem #{have})" if have < need
+
+      nil
+    end
 
     def choose_price(offer)
       return (offer.price || offer.max_price)&.to_f unless offer.flexible?

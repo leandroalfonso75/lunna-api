@@ -10,6 +10,8 @@
 #   a mesma promoção, em fila, aos outros anúncios do SKU e das variações do produto.
 # POST /api/promotions/items/:item_id/leave?account_id= (admin) → sai da promoção de preço atual.
 # POST /api/promotions/apply_best?account_id= (admin) → aplica a melhor oferta em vários anúncios (item_ids), em fila.
+# PATCH /api/promotions/items/:item_id/automation?account_id= (admin) → "não automatizar promoções neste anúncio"
+#   (enabled: false) ou volta a automatizar; apply_to_sku / apply_to_variations levam aos outros anúncios do produto.
 # GET /api/promotions/actions?account_id= → histórico das ações nas promoções.
 # GET /api/promotions/runs?account_id= → execuções da rotina das 03:00 (e simulações manuais), com os totais.
 # POST /api/promotions/runs?account_id= (admin) → "Simular agora": roda a rotina em simulação, em fila.
@@ -18,7 +20,7 @@
 class PromotionsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: %i[update_settings sync apply leave apply_best simulate]
+  before_action :require_admin!, only: %i[update_settings update_automation sync apply leave apply_best simulate]
   MAX_BATCH = 300
 
   def index
@@ -38,6 +40,15 @@ class PromotionsController < ApplicationController
     render_errors([ "Anúncio não encontrado." ], status: :not_found)
   rescue ActiveRecord::RecordInvalid => e
     render_errors(e.record.errors.full_messages, status: :unprocessable_entity)
+  end
+
+  def update_automation
+    bool = ActiveModel::Type::Boolean.new
+    ids = Painel::PromotionSettings.set_automation(Current.account, params[:item_id], bool.cast(params[:enabled]) != false, Current.user,
+      sku: bool.cast(params[:apply_to_sku]), variations: bool.cast(params[:apply_to_variations]))
+    render json: Painel::PromotionsQuery.detail(Current.account, params[:item_id]).merge(updated: ids.size)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Anúncio não encontrado." ], status: :not_found)
   end
 
   def export
@@ -79,6 +90,8 @@ class PromotionsController < ApplicationController
   def apply_best
     ids = Array(params[:item_ids]).map(&:to_s).uniq
     ids = Current.account.ml_items.where(item_id: ids).pluck(:item_id)
+    # em lote, os anúncios marcados como "não automatizar" ficam de fora (só mudam um a um, pela tela)
+    ids -= Current.account.ml_promotion_settings.where(item_id: ids, automation_enabled: false).pluck(:item_id)
     return render_errors([ "Escolha os anúncios." ], status: :unprocessable_entity) if ids.empty?
     return render_errors([ "No máximo #{MAX_BATCH} anúncios por vez." ], status: :unprocessable_entity) if ids.size > MAX_BATCH
 

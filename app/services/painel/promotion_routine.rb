@@ -54,7 +54,10 @@ module Painel
       status = row[:status][:key]
       setting = ev[:setting]
 
-      return skip(run, ev, "automacao_desligada", "automação desligada neste anúncio") if setting && !setting.automation_enabled
+      if setting && !setting.automation_enabled
+        # "não automatizar": não mexe, mas registra a melhor oferta como sugestão
+        return skip(run, ev, "automacao_desligada", "marcado para não automatizar promoções (só muda pela tela)", to: ev[:best].present? && !ev[:best][:as_is])
+      end
       if status == "para_revisar"
         return skip(run, ev, "revisar", row.dig(:review, :label) || "nenhuma oferta cabe nas regras", kind: "revisar")
       end
@@ -82,8 +85,8 @@ module Painel
       "erro"
     end
 
-    def skip(run, ev, key, reason, kind: "pular")
-      record(run, ev, kind, ok: true, error: reason, to: false)
+    def skip(run, ev, key, reason, kind: "pular", to: false)
+      record(run, ev, kind, ok: true, error: reason, to: to)
       key
     end
 

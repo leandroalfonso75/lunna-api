@@ -178,4 +178,24 @@ RSpec.describe "/api/promotions", type: :request do
     expect(json["routine"]).to eq("enabled" => false, "mode" => "simulation")
     expect(json["runs"].first["mode_label"]).to eq("Simulação")
   end
+
+  it "não automatizar: marca o anúncio e o SKU, mostra na aba própria e tira do lote, sem apagar os limites" do
+    MlPromotionSetting.create!(ml_account: account, item_id: item.item_id, min_margin_pct: 12)
+
+    patch "/api/promotions/items/#{item.item_id}/automation",
+      params: { account_id: account.id, enabled: false, apply_to_sku: true }, headers: auth_headers(admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(json["updated"]).to eq(2)
+    expect(MlPromotionSetting.find_by(item_id: item.item_id)).to have_attributes(automation_enabled: false, min_margin_pct: 12)
+    expect(MlPromotionSetting.find_by(item_id: sibling.item_id).automation_enabled).to be false
+
+    get "/api/promotions", params: { account_id: account.id, status: "nao_automatizados" }, headers: auth_headers(member)
+    expect(json["counts"]["nao_automatizados"]).to eq(2)
+    expect(json["items"].map { |r| r["item_id"] }).to contain_exactly(item.item_id, sibling.item_id)
+    expect(json["items"].find { |r| r["item_id"] == item.item_id }["best"]).to be_present # a melhor oferta segue sugerida
+
+    post "/api/promotions/apply_best", params: { account_id: account.id, item_ids: [ item.item_id ] }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:unprocessable_entity)
+  end
 end

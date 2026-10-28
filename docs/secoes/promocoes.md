@@ -92,6 +92,13 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   estoque reservado) não são aplicados pelo Lunna.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 
+## Não automatizar promoções
+- No painel do anúncio (ou do produto), "Não automatizar promoções neste anúncio" (`ml_promotion_settings.automation_enabled
+  = false`), com opção de levar às outras variações e aos outros anúncios do mesmo SKU (`PATCH .../automation`; só esse
+  campo muda, os limites de cada anúncio ficam).
+- Anúncio não automatizado: a rotina das 03:00 não mexe (registra a melhor oferta como sugestão), o lote e "levar ao
+  produto" pulam. Só muda pela tela, um a um. Aparece com a marca "não automatizado" e na guia "Não automatizados".
+
 ## Rotina das 03:00 (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
 - Agendada em `config/recurring.yml` (`0 3 * * * America/Sao_Paulo`). Roda para cada conta ativa cuja empresa ligou a
   rotina em Configurações → Impostos e margem (`companies.promo_routine_enabled` e `promo_routine_mode`).
@@ -100,7 +107,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Age em: trocar, sem promoção (inclui promoção que acabou ou caiu), acima da máxima e abaixo da mínima com oferta que
   serve. Não mexe em: na melhor, sem custo, para revisar (registra a regra), automação desligada e **anúncio com regra
   própria em texto** (a rotina não interpreta texto; registra o motivo).
-- Relâmpago e oferta do dia (estoque reservado) nunca são escolhidas como melhor oferta.
+- Relâmpago e oferta do dia entram reservando o estoque que o ML sugere (`stock.min` da oferta); só servem se o anúncio
+  tiver esse estoque disponível.
 - Cada execução fica em `ml_promotion_runs` (modo, origem, totais) e cada anúncio em `ml_promotion_actions` (`run_id`,
   antes e depois: preço, margem, lucro). Aba "Rotina das 03:00" em Promoções: lista as execuções, mostra o antes e o
   depois e exporta CSV; "Simular agora" (administrador) roda uma simulação na hora.

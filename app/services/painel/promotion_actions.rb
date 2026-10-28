@@ -4,11 +4,11 @@
 #
 # Trocar = sair da promoção atual e entrar na nova; ajustar o preço = sair e entrar de novo na mesma com o preço da
 # regra. Se a entrada falhar depois de sair, o Lunna tenta voltar para a promoção anterior com o preço de antes.
-# Só ofertas que servem pela regra de margem são aplicadas; relâmpago e oferta do dia (pedem estoque reservado)
-# ficam para o Mercado Livre.
+# Só ofertas que servem pela regra de margem são aplicadas. Relâmpago e oferta do dia entram reservando o estoque
+# sugerido pelo ML (stock.min da oferta). Anúncio marcado como "não automatizar" só muda por ação da tela, uma a uma.
 module Painel
   class PromotionActions
-    JOINABLE = %w[SELLER_CAMPAIGN DEAL PRICE_DISCOUNT SMART PRICE_MATCHING MARKETPLACE_CAMPAIGN UNHEALTHY_STOCK
+    JOINABLE = %w[SELLER_CAMPAIGN DEAL PRICE_DISCOUNT SMART PRICE_MATCHING MARKETPLACE_CAMPAIGN UNHEALTHY_STOCK LIGHTNING DOD
                   SMART_LIGHTNING PRE_NEGOTIATED].freeze
     # Ofertas com preço dado pelo ML: entra-se pelo offer_id, sem escolher preço.
     OFFER_ID_TYPES = %w[SMART PRICE_MATCHING MARKETPLACE_CAMPAIGN UNHEALTHY_STOCK SMART_LIGHTNING PRE_NEGOTIATED].freeze
@@ -31,6 +31,7 @@ module Painel
       ids += account.ml_items.where(sku: item.sku, status: "active").where.not(item_id: item.item_id).pluck(:item_id) if sku && item.sku.present?
       ids += PromotionSettings.variation_item_ids(account, item) if variations
       ids = account.ml_items.where(item_id: ids.uniq, status: "active").pluck(:item_id)
+      ids -= account.ml_promotion_settings.where(item_id: ids, automation_enabled: false).pluck(:item_id) # "não automatizar"
       return 0 if ids.empty?
 
       Ml::PromotionsApplyJob.perform_later(account.id, ids, user&.id, target.slice(:promotion_id, :promotion_type).transform_keys(&:to_s))
@@ -60,7 +61,7 @@ module Painel
       return Result.new(ok: true, message: "O anúncio já está na melhor oferta.") if chosen[:as_is] || (current && chosen.equal?(current))
       return Result.new(ok: false, message: "Esta oferta não serve: #{chosen[:reason]}.") unless chosen[:valid]
       unless JOINABLE.include?(chosen[:offer].promotion_type)
-        return Result.new(ok: false, message: "#{chosen[:label]} pede estoque reservado: entre por ela no Mercado Livre.")
+        return Result.new(ok: false, message: "#{chosen[:label]} não pode ser aplicada pelo Lunna: entre por ela no Mercado Livre.")
       end
 
       kind = if current.nil? then "aderir"
@@ -148,6 +149,12 @@ module Painel
     end
 
     def join_body(offer, price)
+      body = base_join_body(offer, price)
+      body[:stock] = offer.stock_reserved if offer.stock_reserved
+      body
+    end
+
+    def base_join_body(offer, price)
       if OFFER_ID_TYPES.include?(offer.promotion_type)
         { promotion_id: offer.promotion_id, promotion_type: offer.promotion_type, offer_id: offer_id(offer) }
       elsif offer.promotion_type == "PRICE_DISCOUNT"

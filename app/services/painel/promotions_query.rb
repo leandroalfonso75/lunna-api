@@ -37,6 +37,7 @@ module Painel
     def call
       rows = build_rows(items_scope.to_a)
       counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k } }
+      counts["nao_automatizados"] = rows.count { |r| r[:manual] }
       top = group_rows(rows)
       filtered = filter(top)
       sorted = sort(filtered)
@@ -231,7 +232,9 @@ module Painel
         },
         status: status_label(status_key(cost, current, best)),
         review: review_for(cost, current, best, evaluated, evaluator),
-        notes: setting&.rules_note.presence
+        notes: setting&.rules_note.presence,
+        # "não automatizar promoções neste anúncio": a rotina e o lote não mexem; a melhor oferta segue sugerida
+        manual: setting.present? && !setting.automation_enabled
       }
       [ row, evaluated ]
     end
@@ -332,7 +335,7 @@ module Painel
       short(e).merge(original_price: o.original_price&.to_f, min_price: o.min_price&.to_f, max_price: o.max_price&.to_f,
                      suggested_price: o.suggested_price&.to_f, meli_percentage: o.meli_percentage&.to_f,
                      seller_percentage: o.seller_percentage&.to_f, fixed_amount: o.fixed_amount&.to_f,
-                     fee: e[:fee], flexible: o.flexible?, start_date: o.start_date)
+                     fee: e[:fee], flexible: o.flexible?, start_date: o.start_date, stock_reserved: o.stock_reserved)
     end
 
     def sku_siblings(item)
@@ -405,11 +408,13 @@ module Painel
 
     # Filtra por anúncio: um grupo fica quando algum anúncio dele passa, e só com esses anúncios dentro.
     def filter(rows)
+      manual_only = @params[:status].to_s == "nao_automatizados"
       status = STATUSES.key?(@params[:status].to_s) ? @params[:status].to_s : nil
       promo_ids = @params[:promotion_id].present? ? @account.ml_promotion_offers.where(promotion_id: @params[:promotion_id]).pluck(:item_id).to_set : nil
       q = @params[:q].to_s.strip.downcase.presence
       keep = lambda do |r|
-        (status.nil? || r[:status][:key] == status) &&
+        (!manual_only || r[:manual]) &&
+          (status.nil? || r[:status][:key] == status) &&
           (promo_ids.nil? || promo_ids.include?(r[:item_id])) &&
           (q.nil? || [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) })
       end
@@ -418,7 +423,7 @@ module Painel
         next (keep.call(r) ? r : nil) unless r[:group]
 
         kids = r[:children].select { |c| keep.call(c) }
-        kids = r[:children] if kids.empty? && q && [ r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } && status.nil? && promo_ids.nil?
+        kids = r[:children] if kids.empty? && q && [ r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } && status.nil? && promo_ids.nil? && !manual_only
         next nil if kids.empty?
 
         r.merge(children: kids, matched: kids.size)

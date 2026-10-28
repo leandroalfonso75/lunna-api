@@ -7,5 +7,14 @@ class MlPromotionOffer < ApplicationRecord
   ACTIVE_STATUSES = %w[started pending].freeze
 
   def flexible? = FLEXIBLE_TYPES.include?(promotion_type) && max_price.to_f.positive?
+
+  # Relâmpago e oferta do dia reservam estoque: o ML sugere o mínimo (stock.min) que o anúncio precisa separar.
+  STOCK_TYPES = %w[LIGHTNING SMART_LIGHTNING DOD].freeze
+
+  def stock_reserved
+    return nil unless STOCK_TYPES.include?(promotion_type)
+
+    (payload || {}).dig("stock", "min")&.to_i
+  end
   def active? = ACTIVE_STATUSES.include?(status)
 end

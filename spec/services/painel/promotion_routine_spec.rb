@@ -57,4 +57,15 @@ RSpec.describe Painel::PromotionRoutine do
     Ml::PromotionsRoutineJob.perform_now
     expect(described_class).to have_received(:call).with(account, mode: "apply", trigger: "agendada")
   end
+
+  it "anúncio marcado para não automatizar não é mexido, mas a melhor oferta fica registrada como sugestão" do
+    MlPromotionSetting.create!(ml_account: account, item_id: other.item_id, automation_enabled: false)
+
+    run = described_class.call(account, mode: "simulation", trigger: "manual")
+
+    expect(run.totals).to include("simulado" => 1, "automacao_desligada" => 1)
+    skipped = run.actions.find_by(item_id: other.item_id)
+    expect(skipped).to have_attributes(kind: "pular", error: a_string_including("não automatizar"))
+    expect(skipped.to_price).to be_present
+  end
 end
