@@ -41,6 +41,8 @@ module Painel
       RAISE_BANDS.find { |floor, _| price >= floor }&.last
     end
 
+    attr_reader :rules
+
     def initialize(item:, cost:, rules:)
       @item = item
       @cost = cost

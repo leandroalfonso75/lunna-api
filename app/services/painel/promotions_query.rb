@@ -219,7 +219,7 @@ module Painel
           effective_max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f
         },
         status: status_label(status_key(cost, current, best)),
-        review: review_for(cost, current, best, evaluated),
+        review: review_for(cost, current, best, evaluated, evaluator),
         notes: setting&.rules_note.presence
       }
       [ row, evaluated ]
@@ -238,16 +238,60 @@ module Painel
     end
 
     # Por que nada foi aplicado: a regra que barrou a promoção atual e as que barraram cada oferta (as mais comuns).
-    def review_for(cost, current, best, evaluated)
+    # Por que nada foi aplicado: a regra que barrou a promoção atual, as que barraram cada oferta (as mais comuns), a
+    # melhor oferta barrada (a de maior margem entre as que não cabem, com o que faltou) e o que mudar para caber.
+    def review_for(cost, current, best, evaluated, evaluator)
       return nil unless cost && best.nil? && (current.nil? || !current[:valid])
 
       offers = evaluated.reject { |e| e[:as_is] }.select { |e| e[:reason].present? && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
       tally = offers.group_by { |e| e[:reason] }.transform_values(&:size).sort_by { |_, n| -n }
+      blocked = offers.select { |e| e[:margin_pct] }.max_by { |e| [ e[:margin_pct], e[:offer].finish_date.to_i ] }
       {
         current_reason: current && current[:reason],
         reasons: tally.first(3).map { |reason, n| { reason: reason, offers: n } },
-        label: current&.dig(:reason) || tally.first&.first || "nenhuma oferta disponível"
+        label: current&.dig(:reason) || tally.first&.first || "nenhuma oferta disponível",
+        blocked_best: blocked && short(blocked).merge(shortfall: shortfall(blocked, evaluator.rules)),
+        suggestion: blocked && suggestion(blocked, evaluator.rules),
+        suggested: blocked && suggested_limit(blocked)
       }
+    end
+
+    # Campo e valor que, preenchidos nos limites do anúncio, fariam a melhor barrada caber (botão "Usar a sugestão").
+    def suggested_limit(e)
+      case e[:reason]
+      when "abaixo da margem mínima" then e[:margin_pct].positive? ? { field: "min_margin_pct", value: e[:margin_pct].floor(1) } : nil
+      when "acima da margem máxima" then { field: "max_margin_pct", value: e[:margin_pct].ceil(1) }
+      when "abaixo do valor mínimo" then { field: "min_price", value: e[:price] }
+      when "acima do valor máximo" then { field: "max_price", value: e[:price] }
+      end
+    end
+
+    # O que faltou para a oferta barrada caber na regra que a barrou.
+    def shortfall(e, rules)
+      case e[:reason]
+      when "abaixo da margem mínima" then format("margem %.1f%%, mínima %.1f%%: faltam %.1f p.p.", e[:margin_pct], rules.min_pct, rules.min_pct - e[:margin_pct])
+      when "acima da margem máxima" then format("margem %.1f%%, máxima %.1f%%: %.1f p.p. acima", e[:margin_pct], rules.max_pct, e[:margin_pct] - rules.max_pct)
+      when "abaixo do valor mínimo" then format("preço R$ %.2f, mínimo R$ %.2f", e[:price], rules.min_price)
+      when "acima do valor máximo" then format("preço R$ %.2f, máximo R$ %.2f", e[:price], rules.max_price)
+      else e[:reason]
+      end
+    end
+
+    # Mudança nos limites do anúncio que faria a melhor oferta barrada caber.
+    def suggestion(e, rules)
+      case e[:reason]
+      when "abaixo da margem mínima"
+        if e[:margin_pct] <= 0 then "nenhuma oferta dá lucro: rever o custo do produto ou o preço cheio do anúncio"
+        else format("baixar a margem mínima deste anúncio para %.1f%% (ou reduzir o custo)", e[:margin_pct].floor(1))
+        end
+      when "acima da margem máxima" then format("subir a margem máxima deste anúncio para %.1f%%", e[:margin_pct].ceil(1))
+      when "abaixo do valor mínimo" then format("baixar o valor mínimo para R$ %.2f", e[:price])
+      when "acima do valor máximo" then format("subir o valor máximo para R$ %.2f", e[:price])
+      when /^aumento acima/ then "esperar a próxima promoção (o limite de aumento é sobre a última) ou trocar por uma oferta de preço menor"
+      when /^passaria da casa/ then "escolher uma oferta que fique abaixo da casa de cem"
+      when "acima do preço cheio do anúncio" then "nenhuma: o preço cheio é o teto"
+      else nil
+      end
     end
 
     def gain(current, best)

@@ -57,7 +57,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   visto pelo marketplace e derruba a conversão.
 - **Para revisar:** anúncio em que nenhuma oferta cabe nas regras e a promoção atual também não (ou não há promoção).
   Nada é aplicado; a guia vermelha "Para revisar" lista cada um com a regra que barrou a atual e as que barraram as
-  ofertas (`review` na API).
+  ofertas (`review` na API), a **melhor oferta barrada** (maior margem entre as que não cabem, com o que faltou) e a
+  sugestão do que mudar nos limites para ela caber ("Para caber", com o botão "Usar a sugestão" que preenche o campo).
+  No painel, o quadro de custos mostra "Hoje" ao lado da melhor oferta barrada; na lista, ela aparece riscada.
 - **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por
   valor, preço mínimo e máximo em R$ (oferta abaixo do valor mínimo não serve; nas de faixa o preço fica até o valor
   máximo; a margem mínima geral não vale nesse modo).

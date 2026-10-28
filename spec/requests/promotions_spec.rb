@@ -134,6 +134,9 @@ RSpec.describe "/api/promotions", type: :request do
     row = json["items"].find { |r| r["item_id"] == item.item_id }
     expect(row["status"]["key"]).to eq("para_revisar")
     expect(row["review"]["label"]).to eq("abaixo da margem mínima")
+    expect(row["review"]["blocked_best"]).to include("name" => "Campanha 20%", "reason" => "abaixo da margem mínima")
+    expect(row["review"]["blocked_best"]["shortfall"]).to include("mínima 40.0%")
+    expect(row["review"]["suggested"]).to include("field" => "min_margin_pct")
     expect(json["counts"]["para_revisar"]).to be >= 1
   end
 
