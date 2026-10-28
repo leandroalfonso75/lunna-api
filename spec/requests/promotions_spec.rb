@@ -26,7 +26,8 @@ RSpec.describe "/api/promotions", type: :request do
 
     row = json["items"].find { |r| r["item_id"] == item.item_id }
     expect(row["current"]).to include("name" => "Campanha 20%", "price" => 90.0)
-    expect(row["best"]).to include("name" => "Campanha 20%", "price" => 95.0, "action" => "editar_preco")
+    # última promoção a 90 (faixa 50–99,99): sobe no máximo 5%, até 94,50
+    expect(row["best"]).to include("name" => "Campanha 20%", "price" => 94.5, "action" => "editar_preco")
     expect(row["status"]["key"]).to eq("trocar")
     expect(row["gain"]).to be > 0
     expect(json["promotions"].first).to include("promotion_id" => "C-1", "active_items" => 1)
@@ -123,5 +124,34 @@ RSpec.describe "/api/promotions", type: :request do
     get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
 
     expect(json["best"]["price"]).to be <= 100.0
+  end
+
+  it "anúncio em que nenhuma oferta cabe nas regras vai para revisar, com a regra que barrou" do
+    company.update!(min_margin_pct: 40)
+
+    get "/api/promotions", params: { account_id: account.id, status: "para_revisar" }, headers: auth_headers(member)
+
+    row = json["items"].find { |r| r["item_id"] == item.item_id }
+    expect(row["status"]["key"]).to eq("para_revisar")
+    expect(row["review"]["label"]).to eq("abaixo da margem mínima")
+    expect(json["counts"]["para_revisar"]).to be >= 1
+  end
+
+  it "variações do mesmo produto ficam agrupadas numa linha, e a nota de regras do anúncio é guardada" do
+    parent = create(:olist_product, company: company, sku: "PAI", description: "Produto Pai", status: "A", kind: "V", variation_kind: "P")
+    OlistProduct.where(company_id: company.id, sku: "SKU-A").update_all(parent_olist_id: parent.olist_id, variation_kind: "V")
+    create(:olist_product, company: company, sku: "SKU-B", status: "A", kind: "S", variation_kind: "V", parent_olist_id: parent.olist_id)
+    create(:ml_item, ml_account: account, sku: "SKU-B")
+
+    patch "/api/promotions/items/#{item.item_id}/settings",
+      params: { account_id: account.id, limit_mode: "margin", rules_note: "  Nunca entrar em relâmpago  ", apply_to_variations: true }, headers: auth_headers(admin)
+    expect(json["settings"]["rules_note"]).to eq("Nunca entrar em relâmpago")
+
+    get "/api/promotions", params: { account_id: account.id }, headers: auth_headers(member)
+
+    group = json["items"].find { |r| r["group"] }
+    expect(group).to include("title" => "Produto Pai", "sku" => "PAI", "count" => 3, "variations" => 2)
+    expect(group["children"].map { |c| c["sku"] }.uniq).to contain_exactly("SKU-A", "SKU-B")
+    expect(group["children"].find { |c| c["sku"] == "SKU-B" }["notes"]).to eq("Nunca entrar em relâmpago")
   end
 end

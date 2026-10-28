@@ -8,9 +8,9 @@ RSpec.describe Painel::PromotionEvaluator do
     MlPromotionOffer.new(ml_account: account, item_id: item.item_id, promotion_type: type, status: status, original_price: 100, **attrs)
   end
 
-  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0, cap: nil)
+  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0, cap: nil, current: nil)
     rules = described_class::Rules.new(min_pct: min, max_pct: max, min_price: min_price, max_price: max_price, tax_pct: 10, fixed_pct: 5, ads_unit: ads,
-                                       price_cap: cap)
+                                       price_cap: cap, current_price: current)
     described_class.new(item: item, cost: 40, rules: rules)
   end
 
@@ -71,5 +71,26 @@ RSpec.describe Painel::PromotionEvaluator do
   it "o preço cheio do anúncio é o teto: a faixa fica até ele e oferta fixa acima dele não serve" do
     expect(evaluator(cap: 85).evaluate_offer(campaign)).to include(price: 85.0, valid: true)
     expect(evaluator(cap: 85).evaluate_offer(smart)).to include(valid: false, reason: "acima do preço cheio do anúncio")
+  end
+
+  it "o aumento sobre a última promoção é limitado por faixa de preço" do
+    expect(described_class.raise_pct_for(240)).to eq(2.0)
+    expect(described_class.raise_pct_for(150)).to eq(3.0)
+    expect(described_class.raise_pct_for(60)).to eq(5.0)
+    expect(described_class.raise_pct_for(20)).to eq(7.0)
+
+    # última promoção a 80 (faixa 50–99,99: até 5%): a faixa da campanha fica em 84,00 e a SMART a 90 não serve
+    expect(evaluator(current: 80).evaluate_offer(campaign)).to include(price: 84.0, valid: true)
+    expect(evaluator(current: 80).evaluate_offer(smart)).to include(valid: false, reason: "aumento acima de 5% sobre a última promoção (R$ 80.00)")
+  end
+
+  it "mesmo dentro do limite, o aumento não passa para a casa de cem seguinte" do
+    # última promoção a 198 (3% = 203,94), faixa até 220: fica em 199,99
+    wide = offer("SELLER_CAMPAIGN", min_price: 100, max_price: 220, fees: { "price" => 220, "sale_fee" => 22, "percentage_fee" => 10, "fixed_fee" => 0 })
+    fixed = offer("SMART", price: 201, meli_percentage: 1, fees: { "price" => 201, "sale_fee" => 20.1, "percentage_fee" => 10, "fixed_fee" => 0 })
+    e = evaluator(current: 198)
+
+    expect(e.evaluate_offer(wide)[:price]).to eq(199.99)
+    expect(e.evaluate_offer(fixed)).to include(valid: false, reason: "passaria da casa dos R$ 200")
   end
 end

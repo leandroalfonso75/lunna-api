@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_27_180001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_150001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -385,6 +385,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_180001) do
     t.decimal "min_price", precision: 12, scale: 2
     t.decimal "max_price", precision: 12, scale: 2
     t.boolean "apply_to_variations", default: false, null: false
+    t.text "rules_note"
     t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_settings_unique", unique: true
     t.index ["updated_by_id"], name: "index_ml_promotion_settings_on_updated_by_id"
   end

@@ -4,7 +4,7 @@
 module Painel
   module PromotionSettings
     MODES = %w[margin price].freeze
-    FIELDS = %i[min_margin_pct max_margin_pct min_price max_price automation_enabled].freeze
+    FIELDS = %i[min_margin_pct max_margin_pct min_price max_price automation_enabled rules_note].freeze
 
     module_function
 
@@ -16,6 +16,7 @@ module Painel
       apply_variations = bool.cast(attrs[:apply_to_variations]) || false
       values = FIELDS.each_with_object({}) { |f, h| h[f] = blank_to_nil(attrs[f]) if attrs.key?(f) }
       values[:automation_enabled] = true if values.key?(:automation_enabled) && values[:automation_enabled].nil?
+      values[:rules_note] = values[:rules_note].to_s.strip.first(2000).presence if values.key?(:rules_note)
       mode = MODES.include?(attrs[:limit_mode].to_s) ? attrs[:limit_mode].to_s : "margin"
       # um desabilita o outro: no modo valor a margem do anúncio é apagada, e vice-versa
       values.merge!(mode == "price" ? { min_margin_pct: nil, max_margin_pct: nil } : { min_price: nil, max_price: nil })

@@ -11,7 +11,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 ## O que a tela mostra
 - **Cartões:** anúncios em promoção, sem promoção, trocas que rendem mais (com o ganho somado por unidade) e abaixo
   da margem mínima.
-- **Aba Anúncios:** um anúncio ativo por linha, com preço cheio, promoção atual (preço, margem e lucro por unidade),
+- **Aba Anúncios:** as variações de um produto (mesmo produto pai no Olist) ficam agrupadas numa linha do produto, com
+  o nome do pai, quantas variações e anúncios, faixa de preço e a situação mais urgente; clicando, abrem os anúncios
+  dentro. "Limites do produto" grava os limites em todas as variações e nos anúncios do mesmo SKU. Anúncio sem pai
+  fica numa linha própria. As guias de situação mostram a contagem de anúncios entre parênteses. Um anúncio ativo por linha, com preço cheio, promoção atual (preço, margem e lucro por unidade),
   melhor oferta, ganho por unidade e situação: Trocar por melhor, Sem promoção, Abaixo da mínima, Na melhor, Sem custo.
   Filtros por situação, por promoção e busca por anúncio, título ou SKU.
 - **Painel do anúncio (clique na linha):** todas as ofertas do anúncio com preço, parte do ML, tarifa e margem (a
@@ -47,6 +50,14 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   limites. Motivo: acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor. As margens mínima e máxima (ou os valores)
   são os limites do preço de venda depois do desconto: oferta abaixo da mínima ou acima da máxima não serve, inclusive a
   atual ("Acima da máxima" pede um desconto maior).
+- **Aumento do preço de venda limitado por faixa**, sempre em relação à última promoção (o preço de hoje): acima de
+  R$ 200 até 2%; de R$ 100 a R$ 199,99 até 3%; de R$ 50 a R$ 99,99 até 5%; de R$ 10 a R$ 49,99 até 7% (abaixo de R$ 10
+  também 7%). Mesmo dentro do limite, o preço não passa para a casa de cem seguinte (198 não vira 201: fica em 199,99).
+  Oferta de preço fixo acima do limite não serve; nas de faixa, o preço para no limite. Motivo: aumento de preço é mal
+  visto pelo marketplace e derruba a conversão.
+- **Para revisar:** anúncio em que nenhuma oferta cabe nas regras e a promoção atual também não (ou não há promoção).
+  Nada é aplicado; a guia vermelha "Para revisar" lista cada um com a regra que barrou a atual e as que barraram as
+  ofertas (`review` na API).
 - **Limites por margem ou por valor** (`limit_mode`, um desabilita o outro): por margem, mínima e máxima em %; por
   valor, preço mínimo e máximo em R$ (oferta abaixo do valor mínimo não serve; nas de faixa o preço fica até o valor
   máximo; a margem mínima geral não vale nesse modo).
@@ -61,6 +72,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - **Aplicar ao SKU:** grava os mesmos limites nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
 - **Aplicar às variações:** grava também nos anúncios das outras variações do produto (SKUs com o mesmo produto pai
   no Olist, `olist_products.parent_olist_id`).
+- **Regras específicas do anúncio** (`rules_note`, texto livre até 2.000 caracteres): guardadas com os limites, mostradas
+  na lista ("com regra própria") e no painel; a rotina das 03:00 vai lê-las.
 - Mudar margens: só administradores.
 
 ## Aplicar no Mercado Livre (`Painel::PromotionActions`)

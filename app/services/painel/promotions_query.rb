@@ -11,7 +11,7 @@ module Painel
       "trocar" => [ "Trocar por melhor", "warn" ], "acima_maxima" => [ "Acima da máxima", "warn" ],
       "sem_promocao" => [ "Sem promoção", "warn" ],
       "ok" => [ "Na melhor", "ok" ], "abaixo_minima" => [ "Abaixo da mínima", "bad" ],
-      "sem_oferta" => [ "Sem oferta na margem", "neutral" ], "sem_custo" => [ "Sem custo", "neutral" ]
+      "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ]
     }.freeze
     GAIN_EPSILON = 0.01
     ADS_DAYS = 15
@@ -31,10 +31,13 @@ module Painel
       @params = params
     end
 
+    # A lista agrupa as variações de um produto (SKUs com o mesmo produto pai no Olist) numa linha só, com os anúncios
+    # dentro; anúncio sem pai fica numa linha própria. Contagens, resumo e filtros são por anúncio; a paginação, por linha.
     def call
       rows = build_rows(items_scope.to_a)
       counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k } }
-      filtered = filter(rows)
+      top = group_rows(rows)
+      filtered = filter(top)
       sorted = sort(filtered)
       page, per = paging
 
@@ -158,7 +161,7 @@ module Painel
         { min_pct: (setting&.min_margin_pct || @company.min_margin_pct)&.to_f, max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f }
       end
       rules = PromotionEvaluator::Rules.new(**limits, tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f, ads_unit: ads,
-                                            price_cap: price_cap(item, ctx))
+                                            price_cap: price_cap(item, ctx), current_price: current_price(item, ctx))
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
     end
 
@@ -166,6 +169,13 @@ module Painel
     # subir ou descer em relação ao de hoje, desde que fique abaixo do preço cheio e dentro dos limites.
     def price_cap(item, _ctx)
       (item.original_price || item.price)&.to_f
+    end
+
+    # Preço da última promoção (o que o comprador paga hoje): base do limite de aumento. Sem promoção, o preço do anúncio.
+    def current_price(item, ctx)
+      active = (ctx[:offers]&.dig(item.item_id) || [])
+        .select { |o| o.status == "started" && o.price.to_f.positive? && PromotionEvaluator::PRICE_TYPES.include?(o.promotion_type) }
+      active.map { |o| o.price.to_f }.min || item.price&.to_f
     end
 
     def unit_cost(item, ctx)
@@ -203,26 +213,41 @@ module Painel
           min_margin_pct: setting&.min_margin_pct&.to_f, max_margin_pct: setting&.max_margin_pct&.to_f,
           min_price: setting&.min_price&.to_f, max_price: setting&.max_price&.to_f,
           apply_to_sku: setting&.apply_to_sku || false, apply_to_variations: setting&.apply_to_variations || false,
+          rules_note: setting&.rules_note,
           automation_enabled: setting.nil? || setting.automation_enabled,
           effective_min_pct: (setting&.min_margin_pct || @company.min_margin_pct).to_f,
           effective_max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f
         },
-        status: status_label(status_key(cost, current, best))
+        status: status_label(status_key(cost, current, best)),
+        review: review_for(cost, current, best, evaluated),
+        notes: setting&.rules_note.presence
       }
       [ row, evaluated ]
     end
 
     def status_key(cost, current, best)
       return "sem_custo" if cost.nil?
-      above_max = current && current[:reason] == "acima da margem máxima"
-      return "ok" if above_max && best.nil? # nenhuma oferta chega na faixa sem subir o preço: fica como está
-      return (current && !current[:valid] ? "abaixo_minima" : "sem_oferta") if best.nil? && (current.nil? || !current[:valid])
+      # nenhuma oferta cabe nas regras e a atual também não (ou não há atual): nada é aplicado, vai para revisão
+      return "para_revisar" if best.nil? && (current.nil? || !current[:valid])
       return "sem_promocao" if current.nil?
-      return "acima_maxima" if above_max
+      return "acima_maxima" if current[:reason] == "acima da margem máxima"
       return "abaixo_minima" unless current[:valid]
       return "trocar" if best && !best.equal?(current) && best[:profit] - current[:profit] > GAIN_EPSILON
 
       "ok"
+    end
+
+    # Por que nada foi aplicado: a regra que barrou a promoção atual e as que barraram cada oferta (as mais comuns).
+    def review_for(cost, current, best, evaluated)
+      return nil unless cost && best.nil? && (current.nil? || !current[:valid])
+
+      offers = evaluated.reject { |e| e[:as_is] }.select { |e| e[:reason].present? && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
+      tally = offers.group_by { |e| e[:reason] }.transform_values(&:size).sort_by { |_, n| -n }
+      {
+        current_reason: current && current[:reason],
+        reasons: tally.first(3).map { |reason, n| { reason: reason, offers: n } },
+        label: current&.dig(:reason) || tally.first&.first || "nenhuma oferta disponível"
+      }
     end
 
     def gain(current, best)
@@ -274,6 +299,7 @@ module Painel
         to_switch: rows.count { |r| r[:status][:key] == "trocar" },
         switch_gain: rows.sum { |r| r[:status][:key] == "trocar" ? r[:gain].to_f : 0.0 }.round(2),
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
+        to_review: rows.count { |r| r[:status][:key] == "para_revisar" },
         without_cost: rows.count { |r| r[:status][:key] == "sem_custo" }
       }
     end
@@ -289,18 +315,59 @@ module Painel
       end
     end
 
+    # --- agrupamento por produto (variações) ---
+
+    STATUS_PRIORITY = %w[para_revisar abaixo_minima trocar acima_maxima sem_promocao sem_custo ok].freeze
+
+    def group_rows(rows)
+      skus = rows.map { |r| r[:sku] }.compact_blank.uniq
+      parent_of = OlistProduct.where(company_id: @company.id, sku: skus).where.not(parent_olist_id: nil).pluck(:sku, :parent_olist_id).to_h
+      parents = OlistProduct.where(company_id: @company.id, olist_id: parent_of.values.uniq).index_by(&:olist_id)
+
+      singles, grouped = rows.partition { |r| parent_of[r[:sku]].nil? }
+      groups = grouped.group_by { |r| parent_of[r[:sku]] }.map do |parent_id, children|
+        parent = parents[parent_id]
+        children = children.sort_by { |c| [ c[:sku].to_s, c[:item_id] ] }
+        statuses = children.map { |c| c[:status][:key] }
+        worst = STATUS_PRIORITY.find { |k| statuses.include?(k) } || "ok"
+        {
+          group: true, key: "grp-#{parent_id}", parent_olist_id: parent_id,
+          title: parent&.description.presence || children.first[:title], sku: parent&.sku, thumbnail: children.first[:thumbnail],
+          item_id: children.first[:item_id], # anúncio que representa o grupo nos limites (aplicados a todas as variações)
+          count: children.size, variations: children.map { |c| c[:sku] }.uniq.size,
+          price_min: children.map { |c| c[:full_price] }.min, price_max: children.map { |c| c[:full_price] }.max,
+          gain: children.filter_map { |c| c[:gain] }.max,
+          current_margin: children.filter_map { |c| c.dig(:current, :margin_pct) }.min,
+          best_margin: children.filter_map { |c| c.dig(:best, :margin_pct) }.max,
+          status: status_label(worst), statuses: statuses.tally,
+          children: children
+        }
+      end
+      singles + groups
+    end
+
     # --- filtros, ordenação e paginação ---
 
+    # Filtra por anúncio: um grupo fica quando algum anúncio dele passa, e só com esses anúncios dentro.
     def filter(rows)
-      rows = rows.select { |r| r[:status][:key] == @params[:status].to_s } if STATUSES.key?(@params[:status].to_s)
-      if (promo = @params[:promotion_id].presence)
-        ids = @account.ml_promotion_offers.where(promotion_id: promo).pluck(:item_id).to_set
-        rows = rows.select { |r| ids.include?(r[:item_id]) }
+      status = STATUSES.key?(@params[:status].to_s) ? @params[:status].to_s : nil
+      promo_ids = @params[:promotion_id].present? ? @account.ml_promotion_offers.where(promotion_id: @params[:promotion_id]).pluck(:item_id).to_set : nil
+      q = @params[:q].to_s.strip.downcase.presence
+      keep = lambda do |r|
+        (status.nil? || r[:status][:key] == status) &&
+          (promo_ids.nil? || promo_ids.include?(r[:item_id])) &&
+          (q.nil? || [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) })
       end
-      if (q = @params[:q].to_s.strip.downcase).present?
-        rows = rows.select { |r| [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } }
+
+      rows.filter_map do |r|
+        next (keep.call(r) ? r : nil) unless r[:group]
+
+        kids = r[:children].select { |c| keep.call(c) }
+        kids = r[:children] if kids.empty? && q && [ r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } && status.nil? && promo_ids.nil?
+        next nil if kids.empty?
+
+        r.merge(children: kids, matched: kids.size)
       end
-      rows
     end
 
     def sort_key = SORTS.include?(@params[:sort].to_s) ? @params[:sort].to_s : "gain"
@@ -310,9 +377,9 @@ module Painel
       rows.sort_by do |r|
         value = case sort_key
         when "gain" then r[:gain]
-        when "margin" then r.dig(:current, :margin_pct)
-        when "best_margin" then r.dig(:best, :margin_pct)
-        when "price" then r[:full_price]
+        when "margin" then r[:group] ? r[:current_margin] : r.dig(:current, :margin_pct)
+        when "best_margin" then r[:group] ? r[:best_margin] : r.dig(:best, :margin_pct)
+        when "price" then r[:group] ? r[:price_min] : r[:full_price]
         when "title" then nil
         end
         next [ 0, r[:title].to_s.downcase ] if sort_key == "title"

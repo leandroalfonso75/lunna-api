@@ -94,6 +94,6 @@ class PromotionsController < ApplicationController
 
   def settings_params
     params.permit(:limit_mode, :min_margin_pct, :max_margin_pct, :min_price, :max_price, :apply_to_sku, :apply_to_variations,
-                  :automation_enabled).to_h.symbolize_keys
+                  :automation_enabled, :rules_note).to_h.symbolize_keys
   end
 end

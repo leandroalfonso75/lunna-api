@@ -5,6 +5,9 @@
 #
 # - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias (gasto ÷ unidades vendidas); sem histórico, zero.
 # - Limites: por margem (mínima/máxima, %) ou por valor (preço mínimo/máximo, R$), um ou outro.
+# - Aumento do preço de venda limitado por faixa, em relação à última promoção (current_price): acima de R$ 200 até 2%,
+#   de R$ 100 a R$ 199,99 até 3%, de R$ 50 a R$ 99,99 até 5%, de R$ 10 a R$ 49,99 até 7% (abaixo de R$ 10 também 7%).
+#   Mesmo dentro do limite, o preço não passa para a casa de cem seguinte (198 não vira 201: fica em 199,99).
 # - O preço cheio do anúncio nunca muda e é o teto (price_cap): a promoção parte dele e o preço final fica abaixo dele
 #   (acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor; o preço cheio já define isso).
 # - Parte do ML: nas ofertas com desconto dividido (meli_percentage), o ML banca esse % do preço original.
@@ -28,13 +31,41 @@ module Painel
       "BANK" => "Desconto no Pix", "VOLUME" => "Desconto por quantidade"
     }.freeze
 
-    Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, :price_cap, keyword_init: true)
+    Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, :price_cap, :current_price,
+                       keyword_init: true)
+
+    # Faixas de aumento permitido sobre a última promoção: [preço mínimo da faixa, % máximo].
+    RAISE_BANDS = [ [ 200.0, 2.0 ], [ 100.0, 3.0 ], [ 50.0, 5.0 ], [ 0.0, 7.0 ] ].freeze
+
+    def self.raise_pct_for(price)
+      RAISE_BANDS.find { |floor, _| price >= floor }&.last
+    end
 
     def initialize(item:, cost:, rules:)
       @item = item
       @cost = cost
       @rules = rules
       @ship = item.ship_cost.to_f
+      @raise = raise_limits(rules.current_price&.to_f)
+    end
+
+    # => { cap:, pct:, hundred: } ou nil sem preço atual. `cap` = maior preço permitido ao subir; `hundred` = casa de
+    # cem que o aumento não pode cruzar (nil quando o limite de % já fica abaixo dela).
+    def raise_limits(current)
+      return nil unless current&.positive?
+
+      pct = self.class.raise_pct_for(current)
+      cap = (current * (1 + pct / 100.0)).floor(2)
+      hundred = (current / 100).floor * 100 + 100
+      crosses = current < hundred && cap >= hundred
+      { cap: crosses ? (hundred - 0.01).round(2) : cap, pct: pct, hundred: crosses ? hundred : nil, current: current }
+    end
+
+    def raise_reason(price)
+      return nil if @raise.nil? || price <= @raise[:cap] + 0.005
+      return "passaria da casa dos R$ #{@raise[:hundred].to_i}" if @raise[:hundred] && price >= @raise[:hundred]
+
+      format("aumento acima de %g%% sobre a última promoção (R$ %.2f)", @raise[:pct], @raise[:current])
     end
 
     # => [ { offer:, price:, margin_pct:, profit:, valid:, reason:, as_is: }, ... ] para todas as ofertas do anúncio.
@@ -88,6 +119,9 @@ module Painel
       return out.merge(reason: "abaixo do valor mínimo") if @rules.min_price && price < @rules.min_price.to_f - 0.005
       return out.merge(reason: "acima do valor máximo") if @rules.max_price && price > @rules.max_price.to_f + 0.005
       return out.merge(reason: "acima do preço cheio do anúncio") if @rules.price_cap && price > @rules.price_cap.to_f + 0.005
+      if !as_is && (why = raise_reason(price))
+        return out.merge(reason: why)
+      end
 
       out.merge(valid: true)
     end
@@ -101,6 +135,7 @@ module Painel
       low = offer.min_price.to_f
       high = [ high, @rules.max_price.to_f ].min if @rules.max_price
       high = [ high, @rules.price_cap.to_f ].min if @rules.price_cap
+      high = [ high, @raise[:cap] ].min if @raise
       return nil unless high.positive? && high >= low
       return high if @rules.max_pct.nil? || economics(high, offer)[:margin_pct] <= @rules.max_pct
 
