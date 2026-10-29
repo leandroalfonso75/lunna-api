@@ -44,9 +44,10 @@ module Painel
     FLASH_TYPES = %w[LIGHTNING SMART_LIGHTNING].freeze
 
     # Promoção atual = a que define o preço que o comprador paga hoje (a de menor preço, se houver mais de uma ativa).
+    # Programada (pending: o anúncio já entrou, mas ela ainda não começou) não define o preço de hoje.
     def self.current_of(evaluated)
-      evaluated.select { |e| e[:as_is] && PRICE_TYPES.include?(e[:offer].promotion_type) }
-        .min_by { |e| [ e[:offer].status == "started" ? 0 : 1, e[:price].to_f ] }
+      evaluated.select { |e| e[:as_is] && e[:offer].status == "started" && PRICE_TYPES.include?(e[:offer].promotion_type) }
+        .min_by { |e| e[:price].to_f }
     end
 
     # Faixas de aumento permitido sobre a última promoção: [preço mínimo da faixa, % máximo].
@@ -107,13 +108,16 @@ module Painel
     #   1. campanhas do Mercado Livre (e a promoção atual, como está ou com o preço ajustado);
     #   2. só se nenhuma couber, o desconto próprio (PRICE_DISCOUNT, sem nome).
     # Campanha do vendedor (SELLER_CAMPAIGN, criada com nome na Central) não é escolhida para entrar: só pela tela.
-    # Empate: fica a atual (evita troca à toa), depois a que termina mais tarde.
+    # Empate: fica a atual (evita troca à toa), depois a que já começou, depois a que termina mais tarde.
     def best(evaluated)
-      valid = evaluated.select { |e| e[:valid] }
+      # a programada (pending) já está garantida para depois: não é escolhida de novo
+      valid = evaluated.select { |e| e[:valid] && e[:offer].status != "pending" }
       current_type = ->(e) { @current && e[:offer].promotion_id == @current[:offer].promotion_id && e[:offer].promotion_type == @current[:offer].promotion_type }
       eligible = valid.reject { |e| e[:offer].promotion_type == "SELLER_CAMPAIGN" && !e[:as_is] && !current_type.(e) }
       ml = eligible.reject { |e| e[:offer].promotion_type == "PRICE_DISCOUNT" && !e[:as_is] && !current_type.(e) }
-      (ml.presence || eligible).min_by { |e| [ e[:margin_pct].round(2), -tie_rank(e), -e[:offer].finish_date.to_i ] }
+      # empate: a atual, depois a que já começou (troca na hora), depois a que termina mais tarde
+      later = ->(e) { e[:offer].start_date.present? && e[:offer].start_date > Time.current ? 1 : 0 }
+      (ml.presence || eligible).min_by { |e| [ e[:margin_pct].round(2), -tie_rank(e), later.(e), -e[:offer].finish_date.to_i ] }
     end
 
     def tie_rank(e)

@@ -147,4 +147,18 @@ RSpec.describe Painel::PromotionActions do
       expect(MlPromotionAction.last).to have_attributes(kind: "sair", ok: true)
     end
   end
+
+  it "com uma promoção programada (pending) e sem a atual, entra numa provisória e sai dela quando a programada começar" do
+    MlPromotionOffer.find_by(promotion_id: "C-1").update!(status: "candidate", price: nil)
+    MlPromotionOffer.find_by(promotion_id: "P-2").update!(status: "pending", price: 80, start_date: 10.days.from_now)
+    offer("C-3", "PRICE_DISCOUNT", status: "candidate", max: 95)
+    stub_request(:post, base).with(query: hash_including({})).to_return(status: 201, body: "{}")
+
+    result = nil
+    company.update!(max_margin_pct: 20) # preço cheio (25%) acima da máxima: precisa de promoção já
+    result = nil
+    expect { result = described_class.apply(account, item.item_id, user: user) }.to have_enqueued_job(Ml::PromotionsHandoffJob)
+    expect(result.ok).to be true
+    expect(MlPromotionAction.last).to have_attributes(kind: "aderir", to_type: "SELLER_CAMPAIGN").or have_attributes(kind: "aderir", to_type: "PRICE_DISCOUNT")
+  end
 end

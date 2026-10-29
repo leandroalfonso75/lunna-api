@@ -171,6 +171,20 @@ module Painel
       Ml::Sync::Promotions.call(client, @account, item_ids: [ item.item_id ])
     end
 
+    # Entrou numa promoção enquanto o anúncio já tem outra programada (pending, ex.: Black Friday): sai desta quando a
+    # programada começar.
+    def handoff_to_scheduled(item, chosen)
+      scheduled = @account.ml_promotion_offers.where(item_id: item.item_id, status: "pending")
+        .reject { |o| o.promotion_id == chosen[:offer].promotion_id && o.promotion_type == chosen[:offer].promotion_type }
+        .filter_map { |o| (start = self.class.start_of(@account, o)) && start > Time.current ? [ o, start ] : nil }
+        .min_by(&:last)
+      return unless scheduled
+
+      target = ->(o) { { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type } }
+      Ml::PromotionsHandoffJob.set(wait_until: scheduled.last + 5.minutes)
+        .perform_later(@account.id, item.item_id, target.(chosen[:offer]), target.(scheduled.first), @source)
+    end
+
     def fresh_client
       Ml::OAuth.refresh!(@account)
       Ml::Client.new(access_token: @account.access_token)
@@ -220,6 +234,7 @@ module Painel
       end
 
       log.update!(ok: true)
+      handoff_to_scheduled(item, chosen)
       Result.new(ok: true, message: success_message(kind, current, chosen), action: log)
     ensure
       Ml::Sync::Promotions.call(client, @account, item_ids: [ item.item_id ])

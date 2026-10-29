@@ -96,7 +96,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   da mínima ou acima da máxima) não há trava: a regra manda mudar, e o preço vai para a margem mais perto da mínima.
 - **Começo da oferta:** só troca na hora se a nova já começou. Se a atual está valendo e a melhor começa depois, o
   anúncio continua na atual, entra na nova (`agendar`) e, se a atual ainda vale quando a nova começa, sai dela nessa
-  hora (`Ml::PromotionsHandoffJob`, 5 minutos depois do início). Início = o da oferta ou, sem ele, o da campanha.
+  hora (`Ml::PromotionsHandoffJob`, 5 minutos depois do início). Início = o da oferta ou, sem ele, o da campanha. Em empate de
+  margem, a que já começou vence a que começa depois. Promoção programada (`pending`, o anúncio já entrou e ela ainda não
+  começou) não conta como a atual nem é escolhida de novo; se o anúncio entra numa promoção tendo uma programada, sai
+  desta quando a programada começar (cobre o intervalo entre o fim da atual e o início da programada).
 - **Fora da escolha:** cupom (`SELLER_COUPON_CAMPAIGN`) e desconto no Pix (`BANK`), que somam no checkout, e anúncio
   sem custo.
 - **Aplicar ao SKU:** grava os mesmos limites nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
