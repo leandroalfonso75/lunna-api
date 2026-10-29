@@ -223,6 +223,9 @@ module Painel
       if @rules.max_pct && !FLASH_TYPES.include?(offer.promotion_type) && (top = price_for_margin(@rules.max_pct, offer))
         high = [ high, top.floor(2) ].min
       end
+      # relâmpago: o ML recusa preço acima do que ele indica em `price` ("discounted price is not credible")
+      credible = (offer.payload || {})["price"].to_f
+      high = [ high, credible ].min if FLASH_TYPES.include?(offer.promotion_type) && credible.positive?
       return nil unless high.positive?
 
       floors = [ offer.min_price.to_f, @rules.min_price.to_f ]
