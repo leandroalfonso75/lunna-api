@@ -34,7 +34,9 @@ module Painel
     def call
       run = @account.ml_promotion_runs.create!(mode: @mode, trigger: @trigger, user: @user, started_at: Time.current)
       Ml::OAuth.refresh!(@account)
-      Ml::Sync::Promotions.call(Ml::Client.new(access_token: @account.access_token), @account)
+      client = Ml::Client.new(access_token: @account.access_token)
+      Ml::Sync::Promotions.call(client, @account)
+      Ml::Sync::CatalogStatus.call(client, @account)
 
       totals = Hash.new(0)
       PromotionsQuery.evaluate_all(@account).each do |ev|
@@ -67,6 +69,9 @@ module Painel
         return skip(run, ev, "catalogo_fora", "anúncio de catálogo fora da automação (Promoções > Incluir anúncios de catálogo)",
                     to: ev[:best].present? && !ev[:best][:as_is])
       end
+      if ev[:item].catalog_listing && row.dig(:catalog_info, :state) == "perdendo"
+        return catalog_losing(run, ev, row[:catalog_info])
+      end
       if ev[:current] && (ev[:evaluated] || []).any? { |e| e[:as_is] && e[:offer].status == "pending" }
         return skip(run, ev, "sem_mudanca", "já tem promoção programada para começar depois; a atual segue até lá")
       end
@@ -81,6 +86,18 @@ module Painel
 
       ev = ev.merge(best: target)
       @mode == "apply" ? apply(run, ev) : simulate(run, ev)
+    end
+
+    # Catálogo (com "Incluir anúncios de catálogo na automatização"): perdendo a vitrine, aplica a oferta que chega ao
+    # preço para ganhar, se ela couber nas regras; depois, a conferência de 1 em 1 hora (CatalogCheck).
+    def catalog_losing(run, ev, info)
+      entry = ev[:catalog_entry]
+      unless entry&.dig(:valid)
+        return skip(run, ev, "sem_mudanca", "catálogo perdendo (ganha a #{format('%.2f', info[:price_to_win].to_f).tr('.', ',')}): #{info[:message]}")
+      end
+
+      ev = ev.merge(best: entry)
+      @mode == "apply" ? apply(run, ev, price: entry[:offer].flexible? ? entry[:price] : nil) : simulate(run, ev)
     end
 
     # O que a rotina pode aplicar: => [oferta, nil] ou [nil, motivo de não mexer].
@@ -109,9 +126,10 @@ module Painel
       "simulado"
     end
 
-    def apply(run, ev)
+    def apply(run, ev, price: nil)
       o = ev[:best][:offer]
       target = { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type, action: o.active? ? "editar_preco" : "aderir" }
+      target[:price] = price if price
       result = PromotionActions.apply(@account, ev[:item].item_id, source: "rotina", run: run, target: target)
       CatalogCheck.schedule(@account, ev[:item], result.action) if result.ok && ev[:item].catalog_listing && result.action
       result.ok ? "aplicado" : "erro"

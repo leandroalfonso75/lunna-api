@@ -40,6 +40,8 @@ module Painel
       rows = build_rows(items_scope.to_a)
       counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k } }
       counts["nao_automatizados"] = rows.count { |r| r[:manual] }
+      counts["catalogo"] = rows.count { |r| r[:catalog] }
+      counts["catalogo_perdendo"] = rows.count { |r| r.dig(:catalog_info, :state) == "perdendo" }
       top = group_rows(rows)
       filtered = filter(top)
       sorted = sort(filtered)
@@ -89,7 +91,7 @@ module Painel
       items.map do |item|
         row, evaluated = build_row(item, ctx[:offers][item.item_id] || [], ctx)
         { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id],
-          evaluated: evaluated, evaluator: @last_evaluator }
+          evaluated: evaluated, evaluator: @last_evaluator, catalog_entry: @last_catalog_entry }
       end
     end
 
@@ -137,7 +139,8 @@ module Painel
     def items_scope
       @account.ml_items.where(status: "active")
         .select(:item_id, :title, :sku, :thumbnail, :permalink, :price, :original_price, :listing_type_id, :logistic_type,
-                :available_quantity, :ship_cost, :fee_now, :fee_details, :category_id, :catalog_listing, :item_relations, :sold_quantity)
+                :available_quantity, :ship_cost, :fee_now, :fee_details, :category_id, :catalog_listing, :item_relations, :sold_quantity,
+                :catalog_status, :catalog_price_to_win, :catalog_winner_price, :catalog_checked_at)
     end
 
     def offers_by_item(item_ids)
@@ -156,6 +159,55 @@ module Painel
         synced_with_catalog: synced_with_catalog
       }
     end
+
+    CATALOG_STATES = { "winning" => "ganhando", "sharing_first_place" => "compartilhando", "competing" => "perdendo",
+                       "listed" => "perdendo" }.freeze
+
+    # Anúncio de catálogo: ganhando ou perdendo a vitrine (lido do ML a cada 30 minutos) e, perdendo, o preço para
+    # ganhar e a oferta que chega nele (a que dá mais lucro, de preferência dentro das regras).
+    def catalog_info(item, current, evaluated, evaluator)
+      @last_catalog_entry = nil
+      return nil unless item.catalog_listing
+
+      state = CATALOG_STATES[item.catalog_status] || "sem_dados"
+      today = (current&.dig(:price) || item.price).to_f
+      info = { state: state, ml_status: item.catalog_status, checked_at: item.catalog_checked_at, price_today: today,
+               price_to_win: item.catalog_price_to_win&.to_f, winner_price: item.catalog_winner_price&.to_f }
+      return info unless state == "perdendo" && info[:price_to_win]
+
+      target = info[:price_to_win]
+      info[:reduce_by] = (today - target).round(2)
+      info[:reduce_pct] = today.positive? ? ((today - target) / today * 100).round(1) : nil
+      entry = catalog_entry(evaluated, evaluator, target)
+      @last_catalog_entry = entry
+      info[:suggestion] = entry && short(entry)
+      info[:message] = if entry.nil? then "nenhuma oferta chega a #{brl(target)}"
+      elsif entry[:valid] then "#{entry[:label]} a #{brl(entry[:price])} cabe nas regras"
+      else "#{entry[:label]} a #{brl(entry[:price])} chega ao preço, mas fica #{entry[:reason]}"
+      end
+      info
+    end
+
+    # A oferta que chega ao preço para ganhar: as de faixa no próprio preço alvo (se o ML aceitar), as de preço fixo se
+    # já estiverem abaixo dele. Prefere a que cabe nas regras e, entre elas, a de maior lucro.
+    def catalog_entry(evaluated, evaluator, target)
+      seen = {}
+      options = evaluated.filter_map do |e|
+        o = e[:offer]
+        next unless PromotionEvaluator::PRICE_TYPES.include?(o.promotion_type) && o.status != "pending"
+        next if seen[[ o.promotion_id, o.promotion_type ]]
+
+        seen[[ o.promotion_id, o.promotion_type ]] = true
+        if o.flexible? && target >= o.min_price.to_f - 0.005 && target <= o.max_price.to_f + 0.005
+          evaluator.evaluate_offer(o, price: target)
+        elsif !o.flexible? && e[:price] && e[:price] <= target + 0.005
+          e
+        end
+      end
+      options.select { |e| e[:profit] }.max_by { |e| [ e[:valid] ? 1 : 0, e[:profit] ] }
+    end
+
+    def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v, unit: "R$", separator: ",", delimiter: ".")
 
     # Anúncios tradicionais ligados a um anúncio de catálogo (item_relations de qualquer um dos dois lados).
     def synced_with_catalog
@@ -240,6 +292,7 @@ module Painel
         catalog: item.catalog_listing ? (item.item_relations.present? ? "sincronizado" : "sem_sincronizacao") : nil,
         synced_with_catalog: !item.catalog_listing && ctx[:synced_with_catalog].include?(item.item_id),
         sold_total: item.sold_quantity, sold_30d: ctx[:sales][item.item_id] || 0,
+        catalog_info: catalog_info(item, current, evaluated, evaluator),
         full_price: full_price, cost: cost,
         base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct, :costs),
         ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: ADS_DAYS },
@@ -461,11 +514,12 @@ module Painel
     # Filtra por anúncio: um grupo fica quando algum anúncio dele passa, e só com esses anúncios dentro.
     def filter(rows)
       manual_only = @params[:status].to_s == "nao_automatizados"
+      catalog_only = @params[:status].to_s == "catalogo"
       status = STATUSES.key?(@params[:status].to_s) ? @params[:status].to_s : nil
       promo_ids = @params[:promotion_id].present? ? @account.ml_promotion_offers.where(promotion_id: @params[:promotion_id]).pluck(:item_id).to_set : nil
       q = @params[:q].to_s.strip.downcase.presence
       keep = lambda do |r|
-        (!manual_only || r[:manual]) &&
+        (!manual_only || r[:manual]) && (!catalog_only || r[:catalog]) &&
           (status.nil? || r[:status][:key] == status) &&
           (promo_ids.nil? || promo_ids.include?(r[:item_id])) &&
           (q.nil? || [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) })
@@ -475,7 +529,7 @@ module Painel
         next (keep.call(r) ? r : nil) unless r[:group]
 
         kids = r[:children].select { |c| keep.call(c) }
-        kids = r[:children] if kids.empty? && q && [ r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } && status.nil? && promo_ids.nil? && !manual_only
+        kids = r[:children] if kids.empty? && q && [ r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) } && status.nil? && promo_ids.nil? && !manual_only && !catalog_only
         next nil if kids.empty?
 
         r.merge(children: kids, matched: kids.size)

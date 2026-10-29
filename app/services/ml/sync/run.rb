@@ -17,6 +17,7 @@ module Ml
       ADS_EVERY = 3.hours
       ADS_RECENT_EVERY = 30.minutes
       PROMOTIONS_EVERY = 1.hour
+      CATALOG_EVERY = 30.minutes
       DETAIL_MAX_LENGTH = 2_000
 
       # `sleeper:` só existe pra não dormir de verdade nos specs quando uma
@@ -59,6 +60,7 @@ module Ml
         sync_claims(client)
         sync_ads(client)
         sync_promotions(client)
+        sync_catalog(client)
         sync_quality(client)
         sync_details(client)
 
@@ -149,6 +151,14 @@ module Ml
 
         result = Ml::Sync::Promotions.call(client, @account)
         @notes.concat(result.notes)
+      end
+
+      # Catálogo (seção Promoções): ganhando ou perdendo e o preço para ganhar, a cada 30 minutos.
+      def sync_catalog(client)
+        last = @account.ml_items.where(status: "active", catalog_listing: true).minimum(:catalog_checked_at)
+        return if last.present? && last > CATALOG_EVERY.ago
+
+        @notes.concat(Ml::Sync::CatalogStatus.call(client, @account).notes)
       end
 
       # Reclamações, cancelamentos por mediação e devoluções das vendas (motivo, resultado, devolução).

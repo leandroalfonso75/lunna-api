@@ -212,4 +212,16 @@ RSpec.describe "/api/promotions", type: :request do
     post "/api/promotions/apply_best", params: { account_id: account.id, item_ids: [ item.item_id ] }, headers: auth_headers(admin)
     expect(response).to have_http_status(:unprocessable_entity)
   end
+
+  it "filtro Catálogo: ganhando ou perdendo, o preço para ganhar e a oferta que chega nele" do
+    item.update!(catalog_listing: true, catalog_status: "competing", catalog_price_to_win: 85, catalog_winner_price: 86)
+
+    get "/api/promotions", params: { account_id: account.id, status: "catalogo" }, headers: auth_headers(member)
+
+    expect(json["counts"]).to include("catalogo" => 1, "catalogo_perdendo" => 1)
+    expect(json["items"].map { |r| r["item_id"] }).to eq([ item.item_id ])
+    info = json["items"].first["catalog_info"]
+    expect(info).to include("state" => "perdendo", "price_to_win" => 85.0, "price_today" => 90.0)
+    expect(info["suggestion"]).to include("price" => 85.0)
+  end
 end

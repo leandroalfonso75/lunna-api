@@ -8,7 +8,9 @@ module Ml
       return unless account
 
       Ml::OAuth.refresh!(account)
-      Ml::Sync::Promotions.call(Ml::Client.new(access_token: account.access_token), account, item_ids: item_ids)
+      client = Ml::Client.new(access_token: account.access_token)
+      Ml::Sync::Promotions.call(client, account, item_ids: item_ids)
+      Ml::Sync::CatalogStatus.call(client, account, item_ids: item_ids)
     rescue Ml::OAuth::Error => e
       Rails.logger.warn("Ml::PromotionsSyncJob: #{e.message}")
     end

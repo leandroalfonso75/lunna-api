@@ -131,8 +131,14 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - A lista mostra em verde "Catálogo · com/sem sincronização" (anúncio de catálogo; sincronizado = ligado a um
   tradicional, `ml_items.item_relations`) e "Sincronizado com catálogo" no tradicional ligado. Mostra também Clássico ou
   Premium e as vendas (30 dias e total).
+- **Filtro Catálogo** (guia "Catálogo", com "N perdendo"): só os anúncios de catálogo, com "Ganhando", "Dividindo o 1º
+  lugar" ou "Perdendo" (lido de `/items/{id}/price_to_win` a cada 30 minutos em `Ml::Sync::CatalogStatus`, também na
+  leitura manual e no início da rotina; campos `ml_items.catalog_*`). Perdendo: o preço para ganhar, quanto reduzir e a
+  sugestão de promoção que chega nele (as de faixa no próprio preço alvo, as fixas já abaixo dele; prefere a que cabe nas
+  regras, depois a de maior lucro), com margem e a regra que fere.
 - **Incluir anúncios de catálogo na automatização** (abaixo dos cards; `companies.promo_include_catalog`). Desligado
-  (padrão): a rotina e o lote não mexem em anúncio de catálogo (`catalogo_fora`). Ligado: depois de uma mudança, uma
+  (padrão): a rotina e o lote não mexem em anúncio de catálogo (`catalogo_fora`). Ligado: perdendo, a rotina aplica a
+  sugestão no preço para ganhar se ela couber nas regras; depois de uma mudança, uma
   hora depois `Painel::CatalogCheck` confere no ML (`/items/{id}/price_to_win`) se está ganhando (`winning` ou
   `sharing_first_place`). Se não, volta ao preço anterior (a promoção de antes no preço de antes, com "aplicar mesmo
   assim", ou sai da promoção) e confere de novo depois de uma hora; sem ganhar ainda, fica em `ml_catalog_checks` como
