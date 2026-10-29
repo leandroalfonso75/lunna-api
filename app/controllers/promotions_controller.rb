@@ -20,7 +20,7 @@
 class PromotionsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: %i[update_settings update_automation sync apply leave apply_best simulate]
+  before_action :require_admin!, only: %i[update_settings update_automation sync apply leave apply_best simulate dismiss_catalog_check]
   MAX_BATCH = 300
 
   def index
@@ -92,11 +92,21 @@ class PromotionsController < ApplicationController
     ids = Current.account.ml_items.where(item_id: ids).pluck(:item_id)
     # em lote, os anúncios marcados como "não automatizar" ficam de fora (só mudam um a um, pela tela)
     ids -= Current.account.ml_promotion_settings.where(item_id: ids, automation_enabled: false).pluck(:item_id)
+    # catálogo só entra no lote com "Incluir anúncios de catálogo na automação"
+    ids -= Current.account.ml_items.where(item_id: ids, catalog_listing: true).pluck(:item_id) unless Current.account.company.promo_include_catalog
     return render_errors([ "Escolha os anúncios." ], status: :unprocessable_entity) if ids.empty?
     return render_errors([ "No máximo #{MAX_BATCH} anúncios por vez." ], status: :unprocessable_entity) if ids.size > MAX_BATCH
 
     Ml::PromotionsApplyJob.perform_later(Current.account.id, ids, Current.user&.id)
     render json: { queued: ids.size }, status: :accepted
+  end
+
+  # Aviso de catálogo para análise manual: marcar como visto.
+  def dismiss_catalog_check
+    Current.account.ml_catalog_checks.find(params[:id]).update!(status: "resolvido", message: "visto por #{Current.user&.name}")
+    head :no_content
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Aviso não encontrado." ], status: :not_found)
   end
 
   def actions

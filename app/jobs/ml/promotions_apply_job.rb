@@ -11,7 +11,9 @@ module Ml
 
       user = User.find_by(id: user_id)
       Array(item_ids).each do |item_id|
-        Painel::PromotionActions.apply(account, item_id, user: user, source: "lote", target: target&.symbolize_keys)
+        result = Painel::PromotionActions.apply(account, item_id, user: user, source: "lote", target: target&.symbolize_keys)
+        item = account.ml_items.find_by(item_id: item_id)
+        Painel::CatalogCheck.schedule(account, item, result.action) if result.ok && result.action && item&.catalog_listing
       rescue ActiveRecord::RecordNotFound
         next
       end

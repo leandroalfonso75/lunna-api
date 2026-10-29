@@ -28,6 +28,7 @@ module Ml
       id title status sub_status price original_price available_quantity sold_quantity
       listing_type_id category_id shipping catalog_listing permalink thumbnail
       seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
+      catalog_product_id item_relations
     ].join(",")
 
     def initialize(access_token:, sleeper: ->(seconds) { sleep(seconds) })
@@ -86,6 +87,11 @@ module Ml
     def leave_promotion(item_id, promotion_type:, promotion_id: nil, offer_id: nil)
       params = { app_version: "v2", promotion_type: promotion_type, promotion_id: promotion_id, offer_id: offer_id }.compact
       write(:delete, "/seller-promotions/items/#{item_id}", params)
+    end
+
+    # Anúncio de catálogo: se está ganhando a vitrine do produto (status winning, sharing_first_place, competing…).
+    def price_to_win(item_id)
+      get("/items/#{item_id}/price_to_win", { siteId: "MLB", version: "v2" })
     end
 
     # Reclamação/mediação de um pedido (cancelamento, reclamação, devolução).

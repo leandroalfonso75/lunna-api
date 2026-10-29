@@ -8,10 +8,10 @@ module Painel
     TRIGGER_LABELS = { "agendada" => "Agendada (03:00)", "manual" => "Simular agora" }.freeze
     RESULT_LABELS = {
       "aderir" => "Entraria / entrou", "trocar" => "Trocaria / trocou", "ajustar_preco" => "Ajustaria / ajustou o preço",
-      "revisar" => "Para revisar", "pular" => "Não mexeu"
+      "agendar" => "Entraria / entrou na próxima (começa depois)", "revisar" => "Para revisar", "pular" => "Não mexeu"
     }.freeze
     # ordem em que os anúncios aparecem no relatório
-    KIND_ORDER = %w[trocar ajustar_preco aderir revisar pular].freeze
+    KIND_ORDER = %w[trocar ajustar_preco aderir agendar revisar pular].freeze
 
     module_function
 
@@ -48,7 +48,7 @@ module Painel
     end
 
     def row(a, item)
-      changes = %w[trocar ajustar_preco aderir].include?(a.kind)
+      changes = %w[trocar ajustar_preco aderir agendar].include?(a.kind)
       {
         item_id: a.item_id, title: item[:title], sku: item[:sku], thumbnail: item[:thumbnail],
         kind: a.kind, kind_label: RESULT_LABELS.fetch(a.kind, a.kind), changes: changes, ok: a.ok,

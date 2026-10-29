@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe Painel::PromotionRoutine do
-  let(:company) { create(:company, tax_pct: 10, fixed_expenses_pct: 5, min_margin_pct: 9) }
+  let(:company) { create(:company, tax_pct: 10, fixed_expenses_pct: 5, min_margin_pct: 15) }
   let(:account) { create(:ml_account, company: company, expires_at: 3.hours.from_now) }
   let!(:item) { create(:ml_item, ml_account: account, sku: "SKU-A", price: 100, ship_cost: 10, fee_now: 10, fee_details: { "percentage_fee" => 10, "fixed_fee" => 0 }) }
   let!(:other) { create(:ml_item, ml_account: account, sku: "SKU-B", price: 100, ship_cost: 10, fee_now: 10, fee_details: { "percentage_fee" => 10, "fixed_fee" => 0 }) }
@@ -13,7 +13,7 @@ RSpec.describe Painel::PromotionRoutine do
     create(:olist_product, company: company, sku: "SKU-B", cost_price: 40, status: "A", kind: "S")
     [ item, other ].each do |i|
       MlPromotionOffer.create!(ml_account: account, item_id: i.item_id, promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN", name: "C-1",
-        status: "started", price: 80, original_price: 100, min_price: 50, max_price: 95, fees: fees)
+        status: "started", price: 80, original_price: 100, min_price: 50, max_price: 80, fees: fees)
       MlPromotionOffer.create!(ml_account: account, item_id: i.item_id, promotion_id: "P-2", promotion_type: "DEAL", name: "Evento",
         status: "candidate", original_price: 100, min_price: 50, max_price: 95, meli_percentage: 2, fees: fees)
     end
@@ -25,7 +25,7 @@ RSpec.describe Painel::PromotionRoutine do
     expect(run).to have_attributes(status: "done", mode: "simulation")
     expect(run.totals).to include("simulado" => 2, "anuncios" => 2)
     action = run.actions.find_by(item_id: item.item_id)
-    expect(action).to have_attributes(source: "simulacao", kind: "trocar", from_price: 80, to_price: 84, ok: true)
+    expect(action).to have_attributes(source: "simulacao", kind: "trocar", from_price: 80, to_price: 80, ok: true)
     expect(action.to_profit).to be > action.from_profit
     expect(a_request(:any, /seller-promotions/)).not_to have_been_made
   end

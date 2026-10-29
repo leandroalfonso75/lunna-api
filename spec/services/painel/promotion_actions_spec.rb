@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe Painel::PromotionActions do
-  let(:company) { create(:company, tax_pct: 10, fixed_expenses_pct: 5, min_margin_pct: 9) }
+  let(:company) { create(:company, tax_pct: 10, fixed_expenses_pct: 5, min_margin_pct: 15) }
   let(:account) { create(:ml_account, company: company, expires_at: 3.hours.from_now) }
   let(:user) { create(:user, :admin, company: company) }
   let!(:item) { create(:ml_item, ml_account: account, sku: "SKU-A", price: 100, ship_cost: 10, fee_now: 10, fee_details: { "percentage_fee" => 10, "fixed_fee" => 0 }) }
@@ -16,14 +16,14 @@ RSpec.describe Painel::PromotionActions do
   before do
     create(:olist_product, company: company, sku: "SKU-A", cost_price: 40, status: "A", kind: "S")
     allow(Ml::Sync::Promotions).to receive(:call) # as ofertas do teste já estão no banco
-    offer("C-1", "SELLER_CAMPAIGN", status: "started", price: 80, max: 85)
+    offer("C-1", "SELLER_CAMPAIGN", status: "started", price: 80, max: 80) # faixa já no teto: não sobe para a mínima
     offer("P-2", "DEAL", status: "candidate", max: 95, meli: 2) # última promoção a 80: sobe no máximo 5%, até 84,00; o ML banca 2%
   end
 
   it "troca pela melhor oferta: sai da atual e entra na nova com o preço da regra, e registra" do
     leave = stub_request(:delete, base).with(query: { app_version: "v2", promotion_type: "SELLER_CAMPAIGN", promotion_id: "C-1" }).to_return(status: 200, body: "{}")
     join = stub_request(:post, base).with(query: { app_version: "v2" },
-      body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 84.0 }.to_json).to_return(status: 201, body: "{}")
+      body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 80.0 }.to_json).to_return(status: 201, body: "{}")
 
     result = described_class.apply(account, item.item_id, user: user)
 
@@ -31,12 +31,12 @@ RSpec.describe Painel::PromotionActions do
     expect(result.message).to include("trocou C-1 por P-2")
     expect(leave).to have_been_requested
     expect(join).to have_been_requested
-    expect(MlPromotionAction.last).to have_attributes(kind: "trocar", ok: true, from_promotion_id: "C-1", to_promotion_id: "P-2", to_price: 84, user: user)
+    expect(MlPromotionAction.last).to have_attributes(kind: "trocar", ok: true, from_promotion_id: "C-1", to_promotion_id: "P-2", to_price: 80, user: user)
   end
 
   it "se o ML recusar a entrada, volta para a promoção anterior com o preço de antes" do
     stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}")
-    stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 84.0 }.to_json)
+    stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 80.0 }.to_json)
       .to_return(status: 400, body: { message: "item not eligible" }.to_json)
     back = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN", deal_price: 80.0 }.to_json).to_return(status: 201, body: "{}")
 
@@ -115,6 +115,36 @@ RSpec.describe Painel::PromotionActions do
       expect(result.ok).to be false
       expect(result.message).to include("só aceita até R$ 95,00")
       expect(a_request(:any, /seller-promotions/)).not_to have_been_made
+    end
+  end
+
+  describe "oferta melhor que só começa depois" do
+    before { MlPromotionOffer.find_by(promotion_id: "P-2").update!(start_date: 2.days.from_now) }
+
+    it "não sai da atual: entra na nova e agenda a saída da atual para quando a nova começar" do
+      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 80.0 }.to_json)
+        .to_return(status: 201, body: "{}")
+
+      result = nil
+      expect { result = described_class.apply(account, item.item_id, user: user) }.to have_enqueued_job(Ml::PromotionsHandoffJob)
+
+      expect(result.ok).to be true
+      expect(result.message).to include("até lá segue em C-1")
+      expect(join).to have_been_requested
+      expect(a_request(:delete, /seller-promotions/)).not_to have_been_made
+      expect(MlPromotionAction.last).to have_attributes(kind: "agendar", ok: true)
+    end
+
+    it "quando a nova começa, sai da anterior" do
+      MlPromotionOffer.find_by(promotion_id: "P-2").update!(status: "started", price: 80)
+      leave = stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}")
+
+      result = described_class.new(account, nil, "rotina").handoff(item.item_id, { promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN" },
+        { promotion_id: "P-2", promotion_type: "DEAL" })
+
+      expect(result.ok).to be true
+      expect(leave).to have_been_requested
+      expect(MlPromotionAction.last).to have_attributes(kind: "sair", ok: true)
     end
   end
 end

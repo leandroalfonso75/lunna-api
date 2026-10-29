@@ -78,10 +78,21 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   máximo; a margem mínima geral não vale nesse modo).
 - **Margem mínima:** a do anúncio ou, sem ela, a geral de Configurações (`companies.min_margin_pct`). Oferta abaixo
   dela não serve. **Margem máxima** (opcional): a do anúncio ou, sem ela, a geral de Configurações
-  (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto.
-- **Melhor oferta:** a de maior margem entre as que servem. Empate: a promoção atual (ajustar o preço dela), depois o
-  desconto próprio, depois a que termina mais tarde. A promoção ativa entra como está hoje e, se for de faixa,
-  também no preço da regra ("ajustar o preço da atual").
+  (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto. A máxima é só uma
+  **barreira** (nenhuma oferta passa dela), exceto na oferta relâmpago (`LIGHTNING`, `SMART_LIGHTNING`, cerca de 12
+  horas), que fica fora dela.
+- **Melhor oferta (desde 29/10):** a margem mais perto da **mínima**, ou seja, a de **menor** margem entre as que servem.
+  Nas ofertas de faixa, o preço é o menor que ainda dá a mínima (sem passar do teto). Empate: a promoção atual, depois
+  o desconto próprio, depois a que termina mais tarde. A promoção ativa entra como está hoje e, se for de faixa, também
+  no preço da regra ("ajustar o preço da atual").
+- **Trava de lucro:** quando a situação de hoje está dentro dos limites (a promoção atual ou, sem promoção, o preço do
+  anúncio), nenhuma oferta que reduza o lucro por unidade serve ("reduziria o lucro de R$ x para R$ y"). Com "Permitir
+  reduzir o preço mesmo com redução da margem" (abaixo dos cards; `companies.promo_allow_margin_drop` e
+  `promo_margin_drop_tolerance`, em pontos percentuais), a margem pode cair até a tolerância. Fora dos limites (abaixo
+  da mínima ou acima da máxima) não há trava: a regra manda mudar, e o preço vai para a margem mais perto da mínima.
+- **Começo da oferta:** só troca na hora se a nova já começou. Se a atual está valendo e a melhor começa depois, o
+  anúncio continua na atual, entra na nova (`agendar`) e, se a atual ainda vale quando a nova começa, sai dela nessa
+  hora (`Ml::PromotionsHandoffJob`, 5 minutos depois do início). Início = o da oferta ou, sem ele, o da campanha.
 - **Fora da escolha:** cupom (`SELLER_COUPON_CAMPAIGN`) e desconto no Pix (`BANK`), que somam no checkout, e anúncio
   sem custo.
 - **Aplicar ao SKU:** grava os mesmos limites nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
@@ -108,6 +119,17 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   campo muda, os limites de cada anúncio ficam).
 - Anúncio não automatizado: a rotina das 03:00 não mexe (registra a melhor oferta como sugestão), o lote e "levar ao
   produto" pulam. Só muda pela tela, um a um. Aparece com a marca "não automatizado" e na guia "Não automatizados".
+
+## Catálogo
+- A lista mostra em verde "Catálogo · com/sem sincronização" (anúncio de catálogo; sincronizado = ligado a um
+  tradicional, `ml_items.item_relations`) e "Sincronizado com catálogo" no tradicional ligado. Mostra também Clássico ou
+  Premium e as vendas (30 dias e total).
+- **Incluir anúncios de catálogo na automatização** (abaixo dos cards; `companies.promo_include_catalog`). Desligado
+  (padrão): a rotina e o lote não mexem em anúncio de catálogo (`catalogo_fora`). Ligado: depois de uma mudança, uma
+  hora depois `Painel::CatalogCheck` confere no ML (`/items/{id}/price_to_win`) se está ganhando (`winning` ou
+  `sharing_first_place`). Se não, volta ao preço anterior (a promoção de antes no preço de antes, com "aplicar mesmo
+  assim", ou sai da promoção) e confere de novo depois de uma hora; sem ganhar ainda, fica em `ml_catalog_checks` como
+  `analise_manual` e aparece no aviso "Catálogo para análise manual" da tela (com "Marcar como visto").
 
 ## Rotina das 03:00 (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
 - Agendada em `config/recurring.yml` (`0 3 * * * America/Sao_Paulo`). Roda para cada conta ativa cuja empresa ligou a

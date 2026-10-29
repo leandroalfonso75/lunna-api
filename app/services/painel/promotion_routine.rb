@@ -58,6 +58,10 @@ module Painel
         # "não automatizar": não mexe, mas registra a melhor oferta como sugestão
         return skip(run, ev, "automacao_desligada", "marcado para não automatizar promoções (só muda pela tela)", to: ev[:best].present? && !ev[:best][:as_is])
       end
+      if ev[:item].catalog_listing && !@account.company.promo_include_catalog
+        return skip(run, ev, "catalogo_fora", "anúncio de catálogo fora da automação (Promoções > Incluir anúncios de catálogo)",
+                    to: ev[:best].present? && !ev[:best][:as_is])
+      end
       if status == "para_revisar"
         return skip(run, ev, "revisar", row.dig(:review, :label) || "nenhuma oferta cabe nas regras", kind: "revisar")
       end
@@ -68,17 +72,14 @@ module Painel
     end
 
     def simulate(run, ev)
-      current, best = ev[:current], ev[:best]
-      kind = if current.nil? then "aderir"
-      elsif current[:offer].promotion_id == best[:offer].promotion_id && current[:offer].promotion_type == best[:offer].promotion_type then "ajustar_preco"
-      else "trocar"
-      end
+      kind = PromotionActions.kind_for(@account, ev[:current], ev[:best])
       record(run, ev, kind, ok: true)
       "simulado"
     end
 
     def apply(run, ev)
       result = PromotionActions.apply(@account, ev[:item].item_id, source: "rotina", run: run)
+      CatalogCheck.schedule(@account, ev[:item], result.action) if result.ok && ev[:item].catalog_listing && result.action
       result.ok ? "aplicado" : "erro"
     rescue Ml::Client::Error, ActiveRecord::RecordNotFound => e
       record(run, ev, "trocar", ok: false, error: e.message)

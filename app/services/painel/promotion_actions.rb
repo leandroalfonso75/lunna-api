@@ -77,10 +77,9 @@ module Painel
         return Result.new(ok: false, message: "#{chosen[:label]} não pode ser aplicada pelo Lunna: entre por ela no Mercado Livre.")
       end
 
-      kind = if current.nil? then "aderir"
-      elsif current[:offer].promotion_id == chosen[:offer].promotion_id && current[:offer].promotion_type == chosen[:offer].promotion_type then "ajustar_preco"
-      else "trocar"
-      end
+      kind = self.class.kind_for(@account, current, chosen)
+      return schedule(client, ev[:item], current, chosen) if kind == "agendar"
+
       execute(client, ev[:item], kind, current, chosen)
     rescue Ml::OAuth::Error
       Result.new(ok: false, message: "A conta do Mercado Livre precisa ser autorizada de novo.")
@@ -108,7 +107,69 @@ module Painel
       Result.new(ok: false, message: "A conta do Mercado Livre precisa ser autorizada de novo.")
     end
 
+    # aderir | ajustar_preco | trocar | agendar. Agendar = a promoção atual está valendo e a nova só começa depois: o
+    # anúncio continua na atual, entra na nova (que começa sozinha) e sai da atual quando a nova começar.
+    def self.kind_for(account, current, chosen)
+      return "aderir" if current.nil?
+      return "ajustar_preco" if current[:offer].promotion_id == chosen[:offer].promotion_id && current[:offer].promotion_type == chosen[:offer].promotion_type
+
+      start = start_of(account, chosen[:offer])
+      current[:offer].status == "started" && start && start > Time.current + 1.minute ? "agendar" : "trocar"
+    end
+
+    # Início da oferta: o da oferta do anúncio ou, sem ele, o da campanha.
+    def self.start_of(account, offer)
+      offer.start_date || account.ml_promotions.where(promotion_id: offer.promotion_id).pick(:start_date)
+    end
+
+    # Depois que a nova promoção começou: sai da anterior (Ml::PromotionsHandoffJob).
+    def handoff(item_id, from_target, to_target)
+      client = fresh_client
+      Ml::Sync::Promotions.call(client, @account, item_ids: [ item_id ])
+      offers = @account.ml_promotion_offers.where(item_id: item_id)
+      started = ->(t) { offers.find_by(promotion_id: t[:promotion_id].presence, promotion_type: t[:promotion_type], status: "started") }
+      to = started.(to_target)
+      from = started.(from_target)
+      return Result.new(ok: false, message: "A nova promoção ainda não começou para este anúncio.") unless to
+      return Result.new(ok: true, message: "O anúncio já tinha saído da promoção anterior.") unless from
+
+      ev = PromotionsQuery.evaluate_item(@account, item_id)
+      entry = ev[:evaluated].find { |e| e[:as_is] && e[:offer] == from }
+      log = record("sair", item_id, entry, nil)
+      leave_offer(client, item_id, from)
+      log.update!(ok: true, error: "saiu ao começar #{to.name.presence || to.promotion_type}")
+      Result.new(ok: true, message: "Saiu de #{from.name.presence || from.promotion_type}: a nova promoção começou.", action: log)
+    rescue Ml::Client::Error => e
+      log&.update!(error: e.message.truncate(500))
+      Result.new(ok: false, message: "O Mercado Livre recusou: #{ml_message(e)}", action: log)
+    end
+
     private
+
+    # Entra na nova sem sair da atual; se a atual ainda vale quando a nova começa, sai dela nessa hora.
+    def schedule(client, item, current, chosen)
+      start = self.class.start_of(@account, chosen[:offer])
+      log = record("agendar", item.item_id, current, chosen)
+      begin
+        client.join_promotion(item.item_id, join_body(chosen[:offer], chosen[:price]))
+      rescue Ml::Client::Error => e
+        return failed(log, "O Mercado Livre recusou a entrada em #{name_of(chosen)}: #{ml_message(e)}. O anúncio segue em #{name_of(current)}.", e)
+      end
+      log.update!(ok: true)
+      finish = current[:offer].finish_date
+      overlap = finish.nil? || finish > start
+      if overlap
+        target = ->(o) { { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type } }
+        Ml::PromotionsHandoffJob.set(wait_until: start + 5.minutes)
+          .perform_later(@account.id, item.item_id, target.(current[:offer]), target.(chosen[:offer]), @source)
+      end
+      when_text = start.in_time_zone("America/Sao_Paulo").strftime("%d/%m %H:%M")
+      Result.new(ok: true, action: log,
+        message: "Anúncio entrou em #{name_of(chosen)}, que começa em #{when_text}; até lá segue em #{name_of(current)}" +
+                 (overlap ? ", e sai dela quando a nova começar." : "."))
+    ensure
+      Ml::Sync::Promotions.call(client, @account, item_ids: [ item.item_id ])
+    end
 
     def fresh_client
       Ml::OAuth.refresh!(@account)

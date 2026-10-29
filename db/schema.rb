@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_150001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -41,6 +41,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
     t.decimal "max_margin_pct", precision: 6, scale: 2
     t.boolean "promo_routine_enabled", default: false, null: false
     t.string "promo_routine_mode", default: "simulation", null: false
+    t.boolean "promo_allow_margin_drop", default: false, null: false
+    t.decimal "promo_margin_drop_tolerance", precision: 5, scale: 2
+    t.boolean "promo_include_catalog", default: false, null: false
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -193,6 +196,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
     t.index ["ml_account_id", "campaign_id"], name: "index_ml_ad_items_on_ml_account_id_and_campaign_id"
   end
 
+  create_table "ml_catalog_checks", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.bigint "action_id"
+    t.string "status", default: "aguardando", null: false
+    t.integer "attempts", default: 0, null: false
+    t.string "ml_status"
+    t.string "message"
+    t.datetime "check_at"
+    t.datetime "checked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action_id"], name: "index_ml_catalog_checks_on_action_id"
+    t.index ["ml_account_id", "status"], name: "index_ml_catalog_checks_on_ml_account_id_and_status"
+    t.index ["ml_account_id"], name: "index_ml_catalog_checks_on_ml_account_id"
+  end
+
   create_table "ml_costs", force: :cascade do |t|
     t.uuid "company_id", null: false
     t.string "sku", null: false
@@ -272,6 +292,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
     t.datetime "synced_at"
     t.jsonb "inventory_refs", default: [], null: false
     t.jsonb "fee_details"
+    t.string "catalog_product_id"
+    t.jsonb "item_relations", default: [], null: false
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
   end
@@ -787,6 +809,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_220001) do
   add_foreign_key "ml_ad_day_syncs", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_item_dailies", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_catalog_checks", "ml_accounts"
+  add_foreign_key "ml_catalog_checks", "ml_promotion_actions", column: "action_id"
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade

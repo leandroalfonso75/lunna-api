@@ -29,6 +29,8 @@ module Ml
         logistic_type: logistic_type,
         free_shipping: !!shipping["free_shipping"],
         catalog_listing: !!@body["catalog_listing"],
+        catalog_product_id: @body["catalog_product_id"],
+        item_relations: Array(@body["item_relations"]).map { |r| r.slice("id", "variation_id", "stock_relation") },
         permalink: @body["permalink"],
         thumbnail: @body["thumbnail"],
         sku: sku,

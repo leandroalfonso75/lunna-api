@@ -48,6 +48,7 @@ RSpec.describe Ml::Client do
         id title status sub_status price original_price available_quantity sold_quantity
         listing_type_id category_id shipping catalog_listing permalink thumbnail
         seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
+        catalog_product_id item_relations
       ].join(",")
 
       stub_request(:get, "https://api.mercadolibre.com/items")
