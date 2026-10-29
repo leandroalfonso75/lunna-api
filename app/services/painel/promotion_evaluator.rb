@@ -103,10 +103,17 @@ module Painel
     # A situação de hoje (promoção atual ou, sem ela, o preço do anúncio) está dentro dos limites?
     def baseline_valid? = !@guard.nil?
 
-    # A de MENOR margem entre as válidas (a mais perto da mínima). Empate: fica a atual (evita troca à toa), depois o
-    # desconto próprio (não prende o anúncio à campanha de outro produto), depois a que termina mais tarde.
+    # A de MENOR margem entre as válidas (a mais perto da mínima), nesta ordem de preferência:
+    #   1. campanhas do Mercado Livre (e a promoção atual, como está ou com o preço ajustado);
+    #   2. só se nenhuma couber, o desconto próprio (PRICE_DISCOUNT, sem nome).
+    # Campanha do vendedor (SELLER_CAMPAIGN, criada com nome na Central) não é escolhida para entrar: só pela tela.
+    # Empate: fica a atual (evita troca à toa), depois a que termina mais tarde.
     def best(evaluated)
-      evaluated.select { |e| e[:valid] }.min_by { |e| [ e[:margin_pct].round(2), -tie_rank(e), -e[:offer].finish_date.to_i ] }
+      valid = evaluated.select { |e| e[:valid] }
+      current_type = ->(e) { @current && e[:offer].promotion_id == @current[:offer].promotion_id && e[:offer].promotion_type == @current[:offer].promotion_type }
+      eligible = valid.reject { |e| e[:offer].promotion_type == "SELLER_CAMPAIGN" && !e[:as_is] && !current_type.(e) }
+      ml = eligible.reject { |e| e[:offer].promotion_type == "PRICE_DISCOUNT" && !e[:as_is] && !current_type.(e) }
+      (ml.presence || eligible).min_by { |e| [ e[:margin_pct].round(2), -tie_rank(e), -e[:offer].finish_date.to_i ] }
     end
 
     def tie_rank(e)

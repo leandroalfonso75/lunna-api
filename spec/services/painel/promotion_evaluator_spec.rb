@@ -15,7 +15,7 @@ RSpec.describe Painel::PromotionEvaluator do
   end
 
   let(:smart) { offer("SMART", price: 90, meli_percentage: 2, fees: { "price" => 90, "sale_fee" => 9, "percentage_fee" => 10, "fixed_fee" => 0 }) }
-  let(:campaign) { offer("SELLER_CAMPAIGN", min_price: 50, max_price: 95, fees: { "price" => 95, "sale_fee" => 9.5, "percentage_fee" => 10, "fixed_fee" => 0 }) }
+  let(:campaign) { offer("DEAL", min_price: 50, max_price: 95, fees: { "price" => 95, "sale_fee" => 9.5, "percentage_fee" => 10, "fixed_fee" => 0 }) }
 
   # Faixa da campanha: lucro = 0,75 × preço − 50 − Ads (tarifa 10%, imposto 10%, despesas 5%, custo 40, frete 10).
   it "mira a margem mínima: nas de faixa, o menor preço que ainda dá a mínima; a melhor é a de menor margem" do
@@ -40,6 +40,16 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(evaluator(min: 10, max: 15).evaluate_offer(lightning)).to include(price: 90.0, valid: true)
   end
 
+  it "prefere as campanhas do ML; desconto próprio só se nenhuma couber; campanha do vendedor não é escolhida" do
+    seller = offer("SELLER_CAMPAIGN", min_price: 50, max_price: 95, fees: campaign.fees)
+    own = offer("PRICE_DISCOUNT", min_price: 50, max_price: 95, fees: campaign.fees)
+    e = evaluator(min: 15)
+
+    expect(e.best(e.evaluate([ seller, own, smart ]))[:offer]).to eq(smart) # 21,7% numa do ML vence 15% no desconto próprio
+    expect(e.best(e.evaluate([ seller, own ]))[:offer]).to eq(own)
+    expect(e.best(e.evaluate([ seller ]))).to be_nil
+  end
+
   it "oferta abaixo da margem mínima não serve, e cupom não entra na escolha" do
     e = evaluator(min: 25)
 
@@ -48,8 +58,8 @@ RSpec.describe Painel::PromotionEvaluator do
   end
 
   it "empate de margem fica com a promoção atual" do
-    current = offer("SELLER_CAMPAIGN", status: "started", min_price: 50, max_price: 95, fees: campaign.fees, finish_date: 1.day.from_now)
-    other = offer("SELLER_CAMPAIGN", min_price: 50, max_price: 95, fees: campaign.fees, finish_date: 10.days.from_now)
+    current = offer("DEAL", status: "started", min_price: 50, max_price: 95, fees: campaign.fees, finish_date: 1.day.from_now)
+    other = offer("DEAL", min_price: 50, max_price: 95, fees: campaign.fees, finish_date: 10.days.from_now)
     e = evaluator(min: 10)
 
     expect(e.best(e.evaluate([ other, current ]))[:offer]).to eq(current)

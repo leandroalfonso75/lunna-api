@@ -82,7 +82,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   **barreira** (nenhuma oferta passa dela), exceto na oferta relâmpago (`LIGHTNING`, `SMART_LIGHTNING`, cerca de 12
   horas), que fica fora dela.
 - **Melhor oferta (desde 29/10):** a margem mais perto da **mínima**, ou seja, a de **menor** margem entre as que servem.
-  Nas ofertas de faixa, o preço é o menor que ainda dá a mínima (sem passar do teto). Empate: a promoção atual, depois
+  Nas ofertas de faixa, o preço é o menor que ainda dá a mínima (sem passar do teto). Preferência: primeiro as campanhas do
+  Mercado Livre (e a promoção atual); o desconto próprio (`PRICE_DISCOUNT`, que o Lunna cria sem nome) só quando
+  nenhuma delas cabe. Campanha do vendedor (`SELLER_CAMPAIGN`, criada com nome na Central) não é escolhida para entrar,
+  só pela tela; o Lunna nunca cria campanha com nome. Empate: a promoção atual, depois
   o desconto próprio, depois a que termina mais tarde. A promoção ativa entra como está hoje e, se for de faixa, também
   no preço da regra ("ajustar o preço da atual").
 - **Trava de lucro:** quando a situação de hoje está dentro dos limites (a promoção atual ou, sem promoção, o preço do
