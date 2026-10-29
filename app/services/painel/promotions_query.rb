@@ -300,7 +300,11 @@ module Painel
 
       offers = evaluated.reject { |e| e[:as_is] }.select { |e| e[:reason].present? && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
       tally = offers.group_by { |e| e[:reason] }.transform_values(&:size).sort_by { |_, n| -n }
-      blocked = offers.select { |e| e[:margin_pct] }.max_by { |e| [ e[:margin_pct], e[:offer].finish_date.to_i ] }
+      # melhor barrada: só as que a automação escolheria (sem campanha do vendedor) e que rendem mais que hoje;
+      # oferta no mesmo preço e lucro da atual não é sugerida (trocar não muda nada)
+      blocked = offers.select { |e| e[:margin_pct] && e[:offer].promotion_type != "SELLER_CAMPAIGN" }
+        .select { |e| current.nil? || e[:profit] > current[:profit].to_f + GAIN_EPSILON }
+        .max_by { |e| [ e[:margin_pct], e[:offer].finish_date.to_i ] }
       {
         current_reason: current && current[:reason],
         reasons: tally.first(3).map { |reason, n| { reason: reason, offers: n } },
