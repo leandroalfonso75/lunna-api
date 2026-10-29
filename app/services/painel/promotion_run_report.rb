@@ -5,7 +5,7 @@ require "csv"
 module Painel
   module PromotionRunReport
     MODE_LABELS = { "simulation" => "Simulação", "apply" => "Aplicação real" }.freeze
-    TRIGGER_LABELS = { "agendada" => "Agendada (03:00)", "manual" => "Simular agora" }.freeze
+    TRIGGER_LABELS = { "agendada" => "Agendada (03:00)", "manual" => "Simular agora", "aplicacao_manual" => "Aplicação manual" }.freeze
     RESULT_LABELS = {
       "aderir" => "Entraria / entrou", "trocar" => "Trocaria / trocou", "ajustar_preco" => "Ajustaria / ajustou o preço",
       "agendar" => "Entraria / entrou na próxima (começa depois)", "revisar" => "Para revisar", "pular" => "Não mexeu"
