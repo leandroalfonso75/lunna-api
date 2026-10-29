@@ -87,8 +87,9 @@ module Painel
       items = items_scope.to_a
       ctx = context(items)
       items.map do |item|
-        row, = build_row(item, ctx[:offers][item.item_id] || [], ctx)
-        { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id] }
+        row, evaluated = build_row(item, ctx[:offers][item.item_id] || [], ctx)
+        { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id],
+          evaluated: evaluated, evaluator: @last_evaluator }
       end
     end
 

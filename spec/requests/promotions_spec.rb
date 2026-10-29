@@ -183,10 +183,11 @@ RSpec.describe "/api/promotions", type: :request do
     run = Painel::PromotionRoutine.call(account, mode: "simulation", trigger: "manual")
     get "/api/promotions/runs/#{run.id}", params: { account_id: account.id }, headers: auth_headers(member)
 
+    # a melhor seria ajustar o preço da campanha atual: a rotina não faz isso (só sem promoção ou campanha do ML melhor)
     row = json["rows"].find { |r| r["item_id"] == item.item_id }
-    expect(row).to include("changes" => true, "ok" => true)
+    expect(row).to include("changes" => false, "ok" => true)
+    expect(row["reason"]).to include("não ajusta o preço")
     expect(row["before"]["price"]).to eq(90.0)
-    expect(row["after"]["price"]).to be < 90.0
     get "/api/promotions/runs", params: { account_id: account.id }, headers: auth_headers(member)
     expect(json["routine"]).to eq("enabled" => false, "mode" => "simulation")
     expect(json["runs"].first["mode_label"]).to eq("Simulação")

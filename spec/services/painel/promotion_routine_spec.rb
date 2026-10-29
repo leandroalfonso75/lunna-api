@@ -45,7 +45,8 @@ RSpec.describe Painel::PromotionRoutine do
     run = described_class.call(account, mode: "apply", trigger: "agendada")
 
     expect(run.totals).to include("aplicado" => 2)
-    expect(Painel::PromotionActions).to have_received(:apply).with(account, item.item_id, source: "rotina", run: run)
+    expect(Painel::PromotionActions).to have_received(:apply)
+      .with(account, item.item_id, source: "rotina", run: run, target: { promotion_id: "P-2", promotion_type: "DEAL", action: "aderir" })
   end
 
   it "o job agendado só roda para empresas com a rotina ligada, no modo escolhido" do
@@ -67,5 +68,13 @@ RSpec.describe Painel::PromotionRoutine do
     skipped = run.actions.find_by(item_id: other.item_id)
     expect(skipped).to have_attributes(kind: "pular", error: a_string_including("não automatizar"))
     expect(skipped.to_price).to be_present
+  end
+
+  it "não mexe em anúncio que já tem promoção programada para começar depois" do
+    MlPromotionOffer.where(item_id: item.item_id, promotion_id: "P-2").update_all(status: "pending", price: 80, start_date: 10.days.from_now)
+
+    run = described_class.call(account, mode: "simulation", trigger: "manual")
+
+    expect(run.actions.find_by(item_id: item.item_id)).to have_attributes(kind: "pular", error: a_string_including("programada"))
   end
 end

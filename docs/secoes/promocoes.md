@@ -139,6 +139,12 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   `analise_manual` e aparece no aviso "Catálogo para análise manual" da tela (com "Marcar como visto").
 
 ## Rotina das 03:00 (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
+- **O que a rotina verifica (definido pelo usuário em 29/10):** só (1) anúncio que ficou sem promoção (acabou ou caiu):
+  entra na melhor oferta que já começou (campanha do ML ou, se nenhuma couber, desconto próprio sem nome); e (2) campanha
+  do ML mais atraente que a atual: troca, ou, se começa depois, entra nela e mantém a atual até lá. Não ajusta o preço da
+  promoção atual, não troca por desconto próprio nem por campanha do vendedor, e não mexe em anúncio com promoção
+  programada (`pending`): o intervalo entre o fim da atual e o início da programada é coberto na própria rotina do dia
+  em que a atual acabar. Ajustes finos ficam para a tela e o lote.
 - Agendada em `config/recurring.yml` (`0 3 * * * America/Sao_Paulo`). Roda para cada conta ativa cuja empresa ligou a
   rotina em Configurações → Impostos e margem (`companies.promo_routine_enabled` e `promo_routine_mode`).
 - **Simulação** (`simulation`): relê a Central, calcula a melhor oferta de cada anúncio com as mesmas regras da tela e

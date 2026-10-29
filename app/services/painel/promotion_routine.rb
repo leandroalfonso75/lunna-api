@@ -4,9 +4,14 @@
 #   - apply: aplica no ML pela mesma regra da tela (Painel::PromotionActions), um anúncio de cada vez.
 # Cada anúncio vira uma linha em ml_promotion_actions ligada à execução (run_id), com o antes e o depois.
 #
-# O que a rotina faz em cada situação:
-#   - trocar, sem promoção (inclui promoção que acabou ou caiu), acima da máxima, abaixo da mínima com oferta que
-#     serve: aplica a melhor oferta;
+# A rotina só verifica duas coisas (a escolha e os ajustes finos ficam para a tela e o lote):
+#   - o anúncio ficou sem promoção (acabou ou caiu): entra na melhor oferta que já começou (campanha do ML ou, se
+#     nenhuma couber, o desconto próprio sem nome);
+#   - surgiu uma campanha do ML mais atraente que a atual (pelas regras): troca, ou, se ela começa depois, entra nela
+#     e mantém a atual até lá.
+#   Não ajusta o preço da promoção atual, não troca por desconto próprio nem por campanha do vendedor e não mexe em
+#   anúncio que já tem promoção programada (pending).
+# Além disso:
 #   - para revisar: não mexe e registra a regra que barrou;
 #   - na melhor, sem custo: não mexe;
 #   - anúncio com regra própria em texto, ou com a automação desligada: não mexe e registra o motivo (o texto é para
@@ -62,13 +67,40 @@ module Painel
         return skip(run, ev, "catalogo_fora", "anúncio de catálogo fora da automação (Promoções > Incluir anúncios de catálogo)",
                     to: ev[:best].present? && !ev[:best][:as_is])
       end
+      if ev[:current] && (ev[:evaluated] || []).any? { |e| e[:as_is] && e[:offer].status == "pending" }
+        return skip(run, ev, "sem_mudanca", "já tem promoção programada para começar depois; a atual segue até lá")
+      end
       if status == "para_revisar"
         return skip(run, ev, "revisar", row.dig(:review, :label) || "nenhuma oferta cabe nas regras", kind: "revisar")
       end
       return "sem_mudanca" unless ACT_ON.include?(status) && ev[:best] && !ev[:best][:as_is]
       return skip(run, ev, "regra_propria", "regra própria do anúncio: #{setting.rules_note.truncate(120)}") if setting&.rules_note.present?
 
+      target, why = routine_target(ev)
+      return skip(run, ev, "sem_mudanca", why) unless target
+
+      ev = ev.merge(best: target)
       @mode == "apply" ? apply(run, ev) : simulate(run, ev)
+    end
+
+    # O que a rotina pode aplicar: => [oferta, nil] ou [nil, motivo de não mexer].
+    def routine_target(ev)
+      current, best, evaluated = ev[:current], ev[:best], ev[:evaluated] || []
+      if current.nil?
+        # sem promoção: só oferta que já começou (a programada, se houver, assume quando começar)
+        now = evaluated.reject { |e| e[:offer].start_date.present? && e[:offer].start_date > Time.current }
+        pick = ev[:evaluator] ? ev[:evaluator].best(now) : best
+        return pick ? [ pick, nil ] : [ nil, "sem promoção e nenhuma oferta que comece já cabe nas regras" ]
+      end
+      type = best[:offer].promotion_type
+      if best[:offer].promotion_id == current[:offer].promotion_id && type == current[:offer].promotion_type
+        return [ nil, "a rotina não ajusta o preço da promoção atual" ]
+      end
+      if %w[PRICE_DISCOUNT SELLER_CAMPAIGN].include?(type)
+        return [ nil, "a rotina só troca por campanha do ML (desconto próprio só quando o anúncio fica sem promoção)" ]
+      end
+
+      [ best, nil ]
     end
 
     def simulate(run, ev)
@@ -78,7 +110,9 @@ module Painel
     end
 
     def apply(run, ev)
-      result = PromotionActions.apply(@account, ev[:item].item_id, source: "rotina", run: run)
+      o = ev[:best][:offer]
+      target = { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type, action: o.active? ? "editar_preco" : "aderir" }
+      result = PromotionActions.apply(@account, ev[:item].item_id, source: "rotina", run: run, target: target)
       CatalogCheck.schedule(@account, ev[:item], result.action) if result.ok && ev[:item].catalog_listing && result.action
       result.ok ? "aplicado" : "erro"
     rescue Ml::Client::Error, ActiveRecord::RecordNotFound => e
