@@ -38,7 +38,8 @@ module Painel
     # dentro; anúncio sem pai fica numa linha própria. Contagens, resumo e filtros são por anúncio; a paginação, por linha.
     def call
       rows = build_rows(items_scope.to_a)
-      counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k } }
+      # "Para revisar" não conta os anúncios marcados para não automatizar (quem não automatiza não precisa revisar)
+      counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k && !(k == "para_revisar" && r[:manual]) } }
       counts["nao_automatizados"] = rows.count { |r| r[:manual] }
       counts["catalogo"] = rows.count { |r| r[:catalog] }
       counts["catalogo_perdendo"] = rows.count { |r| r.dig(:catalog_info, :state) == "perdendo" }
@@ -469,7 +470,7 @@ module Painel
         to_switch: rows.count { |r| r[:status][:key] == "trocar" },
         switch_gain: rows.sum { |r| r[:status][:key] == "trocar" ? r[:gain].to_f : 0.0 }.round(2),
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
-        to_review: rows.count { |r| r[:status][:key] == "para_revisar" },
+        to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !r[:manual] },
         without_cost: rows.count { |r| r[:status][:key] == "sem_custo" }
       }
     end
@@ -527,7 +528,7 @@ module Painel
       q = @params[:q].to_s.strip.downcase.presence
       keep = lambda do |r|
         (!manual_only || r[:manual]) && (!catalog_only || r[:catalog]) &&
-          (status.nil? || r[:status][:key] == status) &&
+          (status.nil? || r[:status][:key] == status) && !(status == "para_revisar" && r[:manual]) &&
           (promo_ids.nil? || promo_ids.include?(r[:item_id])) &&
           (q.nil? || [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) })
       end

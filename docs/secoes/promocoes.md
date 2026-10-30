@@ -69,6 +69,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   ofertas (`review` na API), a **melhor oferta barrada** (maior margem entre as que não cabem, com o que faltou) e a
   sugestão do que mudar nos limites para ela caber ("Para caber", com o botão "Usar a sugestão" que preenche o campo).
   No painel, o quadro de custos mostra "Hoje" ao lado da melhor oferta barrada; na lista, ela aparece riscada.
+  Anúncio marcado para não automatizar fica fora da guia "Para revisar" e da contagem (segue na guia "Não automatizados").
 - **Aplicar fora das regras** (só administradores, só em "Para revisar"): o painel tem "Aplicar mesmo assim" (a melhor
   oferta barrada no preço dela) e "Outro valor" (preço final em R$ ou % de desconto sobre o preço cheio, só nas ofertas
   de faixa, com margem e lucro aproximados na tela). A API recebe `force` e `price` em `POST .../apply`; o preço precisa
