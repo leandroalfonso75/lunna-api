@@ -5,7 +5,7 @@ description: Use ao alterar a página Configurações do Lunna (empresa, imposto
 
 1. Leia `docs/secoes/configuracoes.md`.
 2. Código principal: `company_controller.rb`, `ml_accounts_controller.rb`, `users_controller.rb`; front `app/pages/configuracoes/index.vue` e `components/settings/`.
-3. Promoções: margem máxima geral (`max_margin_pct`) e a rotina das 03:00 (`promo_routine_enabled`, `promo_routine_mode` simulation|apply) ficam na aba Empresa; o modo de aplicação real só liga com ok explícito do usuário.
+3. Promoções: a margem máxima geral (`max_margin_pct`) fica na aba Empresa; a rotina automática (liga/desliga, modo, horário, dias) e as demais opções da automação ficam na tela de Promoções, abaixo dos cards (`PATCH /api/company` com `promo_*`).
 4. Pendência conhecida: `fixed_expenses_pct` (despesas fixas, 3%) ainda não tem campo na tela e é usado em Anúncios e Vendas.
 5. Respeite: tudo escopado por `Current.company`, só administradores alteram, chave de IA cifrada e nunca devolvida ao front.
 6. Mudou regra ou arquivo? Atualize `docs/secoes/configuracoes.md` no mesmo commit.

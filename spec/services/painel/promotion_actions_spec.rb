@@ -84,7 +84,7 @@ RSpec.describe Painel::PromotionActions do
 
     it "aplica a oferta barrada pela margem quando pedido, e guarda a regra ferida no Histórico" do
       company.update!(min_margin_pct: 40)
-      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 84.0 }.to_json)
+      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 80.0 }.to_json)
         .to_return(status: 201, body: "{}")
 
       refused = described_class.apply(account, item.item_id, user: user, target: p2)

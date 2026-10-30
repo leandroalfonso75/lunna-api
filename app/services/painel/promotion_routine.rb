@@ -1,5 +1,5 @@
 # Rotina das 03:00 da seção Promoções. Relê a Central de Promoções, calcula a melhor oferta de cada anúncio ativo com
-# todas as regras (margem/valor, preço cheio, limite de aumento por faixa, casa de cem) e, conforme o modo da empresa:
+# todas as regras (margem/valor, preço cheio, trava de lucro, aumento de preço) e, conforme o modo da empresa:
 #   - simulation: só registra o que faria (nada muda no Mercado Livre);
 #   - apply: aplica no ML pela mesma regra da tela (Painel::PromotionActions), um anúncio de cada vez.
 # Cada anúncio vira uma linha em ml_promotion_actions ligada à execução (run_id), com o antes e o depois.

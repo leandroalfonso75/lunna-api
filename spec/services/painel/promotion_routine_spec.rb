@@ -49,14 +49,30 @@ RSpec.describe Painel::PromotionRoutine do
       .with(account, item.item_id, source: "rotina", run: run, target: { promotion_id: "P-2", promotion_type: "DEAL", action: "aderir" })
   end
 
-  it "o job agendado só roda para empresas com a rotina ligada, no modo escolhido" do
+  it "o job de cada hora só roda para empresas com a rotina ligada, no horário e no dia escolhidos, no modo escolhido" do
     allow(described_class).to receive(:call)
-    Ml::PromotionsRoutineJob.perform_now
-    expect(described_class).not_to have_received(:call)
+    now = Time.find_zone("America/Sao_Paulo").parse("2026-11-03 14:00") # segunda-feira
+    travel_to(now) do
+      Ml::PromotionsRoutineJob.perform_now
+      expect(described_class).not_to have_received(:call)
 
-    company.update!(promo_routine_enabled: true, promo_routine_mode: "apply")
-    Ml::PromotionsRoutineJob.perform_now
-    expect(described_class).to have_received(:call).with(account, mode: "apply", trigger: "agendada")
+      company.update!(promo_routine_enabled: true, promo_routine_mode: "apply", promo_schedule_hour: 14, promo_schedule_days: [ 1, 2, 3, 4, 5 ])
+      Ml::PromotionsRoutineJob.perform_now
+      expect(described_class).to have_received(:call).with(account, mode: "apply", trigger: "agendada").once
+
+      company.update!(promo_schedule_hour: 15)
+      Ml::PromotionsRoutineJob.perform_now
+      expect(described_class).to have_received(:call).once # outra hora: não roda
+    end
+    travel_to(now + 6.days) { Ml::PromotionsRoutineJob.perform_now } # domingo, fora dos dias
+    expect(described_class).to have_received(:call).once
+  end
+
+  it "horário, dias, base da margem e alvo têm validação" do
+    expect(company.update(promo_schedule_hour: 24)).to be false
+    expect(company.update(promo_schedule_days: [ 7 ])).to be false
+    expect(company.update(promo_margin_basis: "x")).to be false
+    expect(company.update(promo_schedule_hour: 0, promo_schedule_days: [], promo_margin_basis: "before_ads", promo_price_target: "max")).to be true
   end
 
   it "anúncio marcado para não automatizar não é mexido, mas a melhor oferta fica registrada como sugestão" do

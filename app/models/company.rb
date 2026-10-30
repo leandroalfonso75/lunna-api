@@ -29,6 +29,23 @@ class Company < ApplicationRecord
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
   validates :max_margin_pct, numericality: { greater_than: -100, less_than: 100 }, allow_nil: true
   validates :promo_routine_mode, inclusion: { in: %w[simulation apply] }
+  validates :promo_schedule_hour, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 23 }
+  validates :promo_margin_basis, inclusion: { in: %w[after_ads before_ads] }
+  validates :promo_price_target, inclusion: { in: %w[min max] }
+  validate :promo_schedule_days_valid
+
+  # Dias da semana da rotina de Promoções (0 = domingo … 6 = sábado); vazio = nunca roda.
+  def promo_schedule_days_valid
+    days = promo_schedule_days
+    return if days.is_a?(Array) && days.all? { |d| d.is_a?(Integer) && d.between?(0, 6) } && days.uniq.size == days.size
+
+    errors.add(:promo_schedule_days, "deve ser uma lista de dias da semana (0 a 6)")
+  end
+
+  # A rotina deve rodar agora (hora cheia, no horário de Brasília)?
+  def promo_due?(now = Time.current.in_time_zone("America/Sao_Paulo"))
+    promo_routine_enabled && now.hour == promo_schedule_hour && promo_schedule_days.include?(now.wday)
+  end
   validate :max_margin_above_min
   validate :abc_cut_a_below_abc_cut_b
 

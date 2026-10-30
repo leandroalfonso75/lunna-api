@@ -8,9 +8,10 @@ RSpec.describe Painel::PromotionEvaluator do
     MlPromotionOffer.new(ml_account: account, item_id: item.item_id, promotion_type: type, status: status, original_price: 100, **attrs)
   end
 
-  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0, cap: nil, current: nil)
+  def evaluator(min: nil, max: nil, min_price: nil, max_price: nil, ads: 0, cap: nil, current: nil, **opts)
     rules = described_class::Rules.new(min_pct: min, max_pct: max, min_price: min_price, max_price: max_price, tax_pct: 10, fixed_pct: 5, ads_unit: ads,
-                                       price_cap: cap, current_price: current)
+                                       price_cap: cap, current_price: current, basis: "after_ads", target: "min", allow_increase: true,
+                                       allow_lightning: true, **opts)
     described_class.new(item: item, cost: 40, rules: rules)
   end
 
@@ -29,15 +30,36 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(e.best([ smart_eval, campaign_eval ])[:offer]).to eq(campaign)
   end
 
-  it "a margem máxima é só uma barreira, e não vale para a oferta relâmpago" do
+  it "a margem máxima é só uma barreira com alvo na mínima; com alvo na máxima, o preço vai para ela" do
     e = evaluator(min: 15, max: 20)
-    item.available_quantity = 10
-    lightning = offer("LIGHTNING", min_price: 90, max_price: 95, payload: { "stock" => { "min" => 5 } },
-      fees: { "price" => 95, "sale_fee" => 9.5, "percentage_fee" => 10, "fixed_fee" => 0 })
 
     expect(e.evaluate_offer(campaign)).to include(price: 83.34, valid: true)
     expect(e.evaluate_offer(smart)).to include(valid: false, reason: "acima da margem máxima")
-    expect(evaluator(min: 10, max: 15).evaluate_offer(lightning)).to include(price: 90.0, valid: true)
+
+    top = evaluator(min: 15, max: 20, target: "max")
+    expect(top.evaluate_offer(campaign)).to include(price: 90.9, valid: true)
+    expect(top.evaluate_offer(campaign)[:margin_pct]).to be_within(0.05).of(20.0)
+    expect(top.best([ top.evaluate_offer(campaign), top.evaluate_offer(offer("DEAL", price: 86, fees: { "price" => 86, "sale_fee" => 8.6, "percentage_fee" => 10, "fixed_fee" => 0 })) ])[:price]).to eq(90.9)
+  end
+
+  it "oferta relâmpago só entra com autorização, e dentro dos limites" do
+    item.available_quantity = 10
+    lightning = offer("LIGHTNING", min_price: 50, max_price: 95, payload: { "stock" => { "min" => 5 }, "price" => 95 },
+      fees: { "price" => 95, "sale_fee" => 9.5, "percentage_fee" => 10, "fixed_fee" => 0 })
+
+    expect(evaluator(min: 10, allow_lightning: false).evaluate_offer(lightning)).to include(valid: false, reason: described_class::LIGHTNING_REASON)
+    expect(evaluator(min: 10, allow_lightning: true).evaluate_offer(lightning)).to include(valid: true)
+    expect(evaluator(min: 30, allow_lightning: true).evaluate_offer(lightning)).to include(valid: false, reason: "abaixo da margem mínima")
+  end
+
+  it "margem antes do Ads: os limites ignoram o Ads, mas o lucro pós Ads segue na conta" do
+    before = evaluator(min: 15, ads: 6, basis: "before_ads").evaluate_offer(campaign)
+    after = evaluator(min: 15, ads: 6, basis: "after_ads").evaluate_offer(campaign)
+
+    expect(before).to include(price: 83.34, valid: true)
+    expect(before[:margin_before_ads_pct]).to be_within(0.01).of(15.0)
+    expect(before[:profit]).to eq(before[:profit_before_ads] - 6)
+    expect(after).to include(price: 93.34, valid: true)
   end
 
   it "prefere as campanhas do ML; desconto próprio só se nenhuma couber; campanha do vendedor não é escolhida" do
@@ -91,26 +113,17 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(evaluator(cap: 85).evaluate_offer(smart)).to include(valid: false, reason: "acima do preço cheio do anúncio")
   end
 
-  it "o aumento sobre a última promoção é limitado por faixa de preço" do
-    expect(described_class.raise_pct_for(240)).to eq(2.0)
-    expect(described_class.raise_pct_for(150)).to eq(3.0)
-    expect(described_class.raise_pct_for(60)).to eq(5.0)
-    expect(described_class.raise_pct_for(20)).to eq(7.0)
+  it "sem permissão de aumento, o preço final não sobe enquanto a promoção atual vale" do
+    # hoje: campanha a 80 (acima da mínima de 5%); a mínima de 20% pediria 90,91 e a SMART fica a 90
+    current = offer("SELLER_CAMPAIGN", status: "started", price: 80, min_price: 50, max_price: 95, fees: campaign.fees)
+    e = evaluator(min: 5, max: 40, allow_increase: false)
+    evaluated = e.evaluate([ current, smart, campaign ])
 
-    # última promoção a 80 (faixa 50–99,99: até 5%, teto 84,00); a mínima de 20% pediria 90,91
-    expect(evaluator(min: 15, current: 80).evaluate_offer(campaign)).to include(price: 83.34, valid: true)
-    expect(evaluator(min: 20, current: 80).evaluate_offer(campaign)).to include(price: 84.0, valid: false)
-    expect(evaluator(current: 80).evaluate_offer(smart)).to include(valid: false, reason: "aumento acima de 5% sobre a última promoção (R$ 80.00)")
-  end
+    expect(evaluated.find { |x| x[:offer] == smart }).to include(valid: false, reason: a_string_starting_with("aumentaria o preço de R$ 80,00 para R$ 90,00"))
+    expect(evaluated.find { |x| x[:offer] == campaign }[:price]).to be <= 80.0
 
-  it "mesmo dentro do limite, o aumento não passa para a casa de cem seguinte" do
-    # última promoção a 198 (3% = 203,94), a mínima de 50% pediria 200: fica em 199,99
-    wide = offer("SELLER_CAMPAIGN", min_price: 100, max_price: 220, fees: { "price" => 220, "sale_fee" => 22, "percentage_fee" => 10, "fixed_fee" => 0 })
-    fixed = offer("SMART", price: 201, meli_percentage: 1, fees: { "price" => 201, "sale_fee" => 20.1, "percentage_fee" => 10, "fixed_fee" => 0 })
-    e = evaluator(min: 50, current: 198)
-
-    expect(e.evaluate_offer(wide)[:price]).to eq(199.99)
-    expect(e.evaluate_offer(fixed)).to include(valid: false, reason: "passaria da casa dos R$ 200")
+    allowed = evaluator(min: 5, max: 40, allow_increase: true)
+    expect(allowed.evaluate([ current, smart ]).find { |x| x[:offer] == smart }).to include(valid: true)
   end
 
   describe "trava de lucro" do
@@ -119,8 +132,7 @@ RSpec.describe Painel::PromotionEvaluator do
     let(:cheaper) { offer("SMART", price: 85, meli_percentage: 2, fees: { "price" => 85, "sale_fee" => 8.5, "percentage_fee" => 10, "fixed_fee" => 0 }) }
 
     def guarded(**opts)
-      rules = described_class::Rules.new(min_pct: 10, max_pct: nil, tax_pct: 10, fixed_pct: 5, ads_unit: 0, current_price: 90, **opts)
-      described_class.new(item: item, cost: 40, rules: rules)
+      evaluator(min: 10, current: 90, **opts)
     end
 
     it "sem permissão, não troca por oferta que reduz o lucro" do
@@ -141,8 +153,7 @@ RSpec.describe Painel::PromotionEvaluator do
     end
 
     it "fora dos limites (acima da máxima), não há trava: vai para a margem mais perto da mínima" do
-      rules = described_class::Rules.new(min_pct: 10, max_pct: 15, tax_pct: 10, fixed_pct: 5, ads_unit: 0, current_price: 90)
-      e = described_class.new(item: item, cost: 40, rules: rules)
+      e = evaluator(min: 10, max: 15, current: 90)
       best = e.best(e.evaluate([ current, cheaper ]))
 
       expect(best[:price]).to eq(76.93)

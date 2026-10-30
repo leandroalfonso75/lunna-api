@@ -54,7 +54,11 @@ module Painel
         promotions: promotions,
         rules: { min_margin_pct: @company.min_margin_pct.to_f, max_margin_pct: @company.max_margin_pct&.to_f },
         automation: { allow_margin_drop: @company.promo_allow_margin_drop, margin_drop_tolerance: @company.promo_margin_drop_tolerance&.to_f,
-                      include_catalog: @company.promo_include_catalog },
+                      include_catalog: @company.promo_include_catalog, routine_enabled: @company.promo_routine_enabled,
+                      routine_mode: @company.promo_routine_mode, schedule_hour: @company.promo_schedule_hour,
+                      schedule_days: @company.promo_schedule_days, margin_basis: @company.promo_margin_basis,
+                      price_target: @company.promo_price_target, allow_price_increase: @company.promo_allow_price_increase,
+                      allow_lightning: @company.promo_allow_lightning },
         catalog_alerts: catalog_alerts,
         synced_at: @account.promotions_synced_at
       }
@@ -248,7 +252,9 @@ module Painel
       rules = PromotionEvaluator::Rules.new(**limits, tax_pct: @company.tax_pct.to_f, fixed_pct: @company.fixed_expenses_pct.to_f, ads_unit: ads,
                                             price_cap: price_cap(item, ctx), current_price: current_price(item, ctx),
                                             allow_margin_drop: @company.promo_allow_margin_drop,
-                                            margin_drop_tol: @company.promo_margin_drop_tolerance&.to_f)
+                                            margin_drop_tol: @company.promo_margin_drop_tolerance&.to_f,
+                                            basis: @company.promo_margin_basis, target: @company.promo_price_target,
+                                            allow_increase: @company.promo_allow_price_increase, allow_lightning: @company.promo_allow_lightning)
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
     end
 
@@ -294,7 +300,7 @@ module Painel
         sold_total: item.sold_quantity, sold_30d: ctx[:sales][item.item_id] || 0,
         catalog_info: catalog_info(item, current, evaluated, evaluator),
         full_price: full_price, cost: cost,
-        base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct, :costs),
+        base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct, :profit_before_ads, :margin_before_ads_pct, :costs),
         ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: ADS_DAYS },
         current: current && short(current), best: best && short(best),
         gain: gain(current, best),
@@ -400,8 +406,8 @@ module Painel
       when "acima da margem máxima" then format("subir a margem máxima deste anúncio para %.1f%%", e[:margin_pct].ceil(1))
       when "abaixo do valor mínimo" then format("baixar o valor mínimo para R$ %.2f", e[:price])
       when "acima do valor máximo" then format("subir o valor máximo para R$ %.2f", e[:price])
-      when /^aumento acima/ then "esperar a próxima promoção (o limite de aumento é sobre a última) ou trocar por uma oferta de preço menor"
-      when /^passaria da casa/ then "escolher uma oferta que fique abaixo da casa de cem"
+      when /^aumentaria o preço/ then "esperar a promoção atual acabar, ou permitir o aumento do preço (Promoções, abaixo dos cards)"
+      when /^oferta relâmpago não autorizada/ then "autorizar a adesão de Oferta Relâmpago (Promoções, abaixo dos cards)"
       when "acima do preço cheio do anúncio" then "nenhuma: o preço cheio é o teto"
       else nil
       end
@@ -417,6 +423,7 @@ module Painel
       o = e[:offer]
       { promotion_id: o.promotion_id, type: o.promotion_type, label: e[:label], name: o.name, status: o.status,
         price: e[:price], margin_pct: e[:margin_pct], profit: e[:profit], meli_amount: e[:meli_amount],
+        profit_before_ads: e[:profit_before_ads], margin_before_ads_pct: e[:margin_before_ads_pct],
         valid: e[:valid], reason: e[:reason], start_date: o.start_date || promo_dates(o)&.first, finish_date: o.finish_date || promo_dates(o)&.last, costs: e[:costs],
         action: action_for(e) }
     end

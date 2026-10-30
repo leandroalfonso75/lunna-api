@@ -53,11 +53,17 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   limites. Motivo: acima de R$ 79 o frete grátis é obrigatório e pago pelo vendedor. As margens mínima e máxima (ou os valores)
   são os limites do preço de venda depois do desconto: oferta abaixo da mínima ou acima da máxima não serve, inclusive a
   atual ("Acima da máxima" pede um desconto maior).
-- **Aumento do preço de venda limitado por faixa**, sempre em relação à última promoção (o preço de hoje): acima de
-  R$ 200 até 2%; de R$ 100 a R$ 199,99 até 3%; de R$ 50 a R$ 99,99 até 5%; de R$ 10 a R$ 49,99 até 7% (abaixo de R$ 10
-  também 7%). Mesmo dentro do limite, o preço não passa para a casa de cem seguinte (198 não vira 201: fica em 199,99).
-  Oferta de preço fixo acima do limite não serve; nas de faixa, o preço para no limite. Motivo: aumento de preço é mal
-  visto pelo marketplace e derruba a conversão.
+- **Aumento do preço final** (`companies.promo_allow_price_increase`, "Permitir o aumento do preço para adesão de nova
+  promoção", abaixo dos cards): sem permissão, enquanto a promoção atual estiver valendo, nenhuma oferta pode deixar o
+  preço final acima do de hoje (oferta fixa acima não serve; nas de faixa, o preço para no de hoje). Com permissão, pode
+  subir, respeitada a margem máxima. Os limites antigos de aumento por faixa (2%/3%/5%/7%) e a regra da casa de cem foram
+  retirados em 29/10.
+- **Base da margem** (`promo_margin_basis`: `after_ads` | `before_ads`): a margem mínima e a máxima valem sobre o lucro
+  pós Ads ou sobre o lucro antes do Ads. Os dois lucros são calculados e mostrados (coluna "Lucro antes do Ads").
+- **Alvo do preço** (`promo_price_target`: `min` | `max`): o preço final fica mais perto da margem mínima (a máxima é
+  barreira) ou da máxima (a mínima é piso).
+- **Oferta relâmpago** (`promo_allow_lightning`, "Autorizar a adesão de Oferta Relâmpago"): sem autorização, a relâmpago
+  (`LIGHTNING`, `SMART_LIGHTNING`) não é escolhida; com ela, entra como as demais, dentro dos limites de margem.
 - **Para revisar:** anúncio em que nenhuma oferta cabe nas regras e a promoção atual também não (ou não há promoção).
   Nada é aplicado; a guia vermelha "Para revisar" lista cada um com a regra que barrou a atual e as que barraram as
   ofertas (`review` na API), a **melhor oferta barrada** (maior margem entre as que não cabem, com o que faltou) e a
@@ -78,12 +84,12 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   máximo; a margem mínima geral não vale nesse modo).
 - **Margem mínima:** a do anúncio ou, sem ela, a geral de Configurações (`companies.min_margin_pct`). Oferta abaixo
   dela não serve. **Margem máxima** (opcional): a do anúncio ou, sem ela, a geral de Configurações
-  (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto. A máxima é só uma
-  **barreira** (nenhuma oferta passa dela), exceto na oferta relâmpago (`LIGHTNING`, `SMART_LIGHTNING`, cerca de 12
-  horas), que fica fora dela. No relâmpago, o preço não passa do `price` que o ML manda na oferta (acima dele o ML recusa com
-  `ERROR_CREDIBILITY_DISCOUNTED_PRICE`).
-- **Melhor oferta (desde 29/10):** a margem mais perto da **mínima**, ou seja, a de **menor** margem entre as que servem.
-  Nas ofertas de faixa, o preço é o menor que ainda dá a mínima (sem passar do teto). Preferência: primeiro as campanhas do
+  (`companies.max_margin_pct`, "Margem máxima nas promoções"); sem nenhuma, não há teto. Com alvo na mínima, a máxima é
+  só uma **barreira**; com alvo na máxima, a mínima é só piso. No relâmpago, o preço não passa do `price` que o ML manda
+  na oferta (acima dele o ML recusa com `ERROR_CREDIBILITY_DISCOUNTED_PRICE`).
+- **Melhor oferta (desde 29/10):** a margem mais perto do alvo (mínima por padrão), ou seja, a de **menor** margem entre
+  as que servem (a de maior, com alvo na máxima). Nas ofertas de faixa, o preço é o mais perto do alvo que respeita o
+  piso e o teto. Preferência: primeiro as campanhas do
   Mercado Livre (e a promoção atual); o desconto próprio (`PRICE_DISCOUNT`, que o Lunna cria sem nome) só quando
   nenhuma delas cabe. Campanha do vendedor (`SELLER_CAMPAIGN`, criada com nome na Central) não é escolhida para entrar,
   só pela tela; o Lunna nunca cria campanha com nome. Empate: a promoção atual, depois
@@ -144,15 +150,18 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   assim", ou sai da promoção) e confere de novo depois de uma hora; sem ganhar ainda, fica em `ml_catalog_checks` como
   `analise_manual` e aparece no aviso "Catálogo para análise manual" da tela (com "Marcar como visto").
 
-## Rotina das 03:00 (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
+## Rotina automática (`Painel::PromotionRoutine`, `Ml::PromotionsRoutineJob`)
 - **O que a rotina verifica (definido pelo usuário em 29/10):** só (1) anúncio que ficou sem promoção (acabou ou caiu):
   entra na melhor oferta que já começou (campanha do ML ou, se nenhuma couber, desconto próprio sem nome); e (2) campanha
   do ML mais atraente que a atual: troca, ou, se começa depois, entra nela e mantém a atual até lá. Não ajusta o preço da
   promoção atual, não troca por desconto próprio nem por campanha do vendedor, e não mexe em anúncio com promoção
   programada (`pending`): o intervalo entre o fim da atual e o início da programada é coberto na própria rotina do dia
   em que a atual acabar. Ajustes finos ficam para a tela e o lote.
-- Agendada em `config/recurring.yml` (`0 3 * * * America/Sao_Paulo`). Roda para cada conta ativa cuja empresa ligou a
-  rotina em Configurações → Impostos e margem (`companies.promo_routine_enabled` e `promo_routine_mode`).
+- `config/recurring.yml` dispara o job a cada hora cheia (`0 * * * * America/Sao_Paulo`); o job roda para cada conta
+  ativa cuja empresa ligou a rotina e escolheu aquela hora e aquele dia da semana (`companies.promo_routine_enabled`,
+  `promo_routine_mode`, `promo_schedule_hour` 0–23, `promo_schedule_days` 0 = domingo … 6 = sábado; `Company#promo_due?`).
+  Tudo isso muda na tela de Promoções, abaixo dos cards (liga/desliga, Simulação/Aplicação real, horário e dias, com
+  "Todos os dias"); saiu de Configurações em 29/10.
 - **Simulação** (`simulation`): relê a Central, calcula a melhor oferta de cada anúncio com as mesmas regras da tela e
   só registra o que faria. **Aplicação real** (`apply`): aplica pela mesma `Painel::PromotionActions` da tela.
 - Age em: trocar, sem promoção (inclui promoção que acabou ou caiu), acima da máxima e abaixo da mínima com oferta que
@@ -161,9 +170,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Relâmpago e oferta do dia entram reservando o estoque que o ML sugere (`stock.min` da oferta); só servem se o anúncio
   tiver esse estoque disponível.
 - Cada execução fica em `ml_promotion_runs` (modo, origem, totais) e cada anúncio em `ml_promotion_actions` (`run_id`,
-  antes e depois: preço, margem, lucro). Aba "Rotina das 03:00" em Promoções: lista as execuções, mostra o antes e o
+  antes e depois: preço, margem, lucro). Aba "Rotina automática" em Promoções: lista as execuções, mostra o antes e o
   depois e exporta CSV; "Simular agora" (administrador) roda uma simulação na hora.
-- Precisa do Lunna ligado às 03:00 (computador com Docker, ou servidor).
+- Precisa do Lunna ligado no horário escolhido (computador com Docker, ou servidor).
 
 ## Dados e atualização
 - `Ml::Sync::Promotions`, dentro da sincronização do ML, a cada **1 hora** (`PROMOTIONS_EVERY`): promoções da conta

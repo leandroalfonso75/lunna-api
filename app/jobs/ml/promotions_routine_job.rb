@@ -1,5 +1,6 @@
-# Rotina das 03:00 da seção Promoções (agendada em config/recurring.yml) e "Simular agora" da tela.
-# Agendada: roda para cada conta ativa cuja empresa ligou a rotina, no modo escolhido em Configurações.
+# Rotina automática da seção Promoções (config/recurring.yml dispara a cada hora cheia) e "Simular agora" da tela.
+# Agendada: roda para cada conta ativa cuja empresa ligou a rotina e escolheu esta hora e este dia da semana
+# (companies.promo_schedule_hour / promo_schedule_days, horário de Brasília), no modo escolhido.
 # Manual (account_id): roda só naquela conta, sempre em simulação.
 module Ml
   class PromotionsRoutineJob < ApplicationJob
@@ -13,7 +14,7 @@ module Ml
       end
 
       MlAccount.active.includes(:company).find_each do |account|
-        next unless account.company.promo_routine_enabled
+        next unless account.company.promo_due?
 
         Painel::PromotionRoutine.call(account, mode: account.company.promo_routine_mode, trigger: "agendada")
       rescue StandardError => e
