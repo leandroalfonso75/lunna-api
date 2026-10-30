@@ -9,6 +9,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 (pronta): rotina automática agendada por horário e dias, em simulação ou aplicação real (ver "Rotina automática").
 
 ## O que a tela mostra
+- **Cartões** clicáveis: abrem a guia Anúncios já filtrada (Em promoção = todos; Sem promoção; Trocas; Para revisar).
+  "Configurar promoções" (alto da tela) leva a Configurações → Promoções.
 - **Cartões:** anúncios em promoção, sem promoção, trocas que rendem mais (com o ganho somado por unidade) e abaixo
   da margem mínima.
 - **Aba Anúncios:** as variações de um produto (mesmo produto pai no Olist) ficam agrupadas numa linha do produto, com
@@ -54,7 +56,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   são os limites do preço de venda depois do desconto: oferta abaixo da mínima ou acima da máxima não serve, inclusive a
   atual ("Acima da máxima" pede um desconto maior).
 - **Aumento do preço final** (`companies.promo_allow_price_increase`, "Permitir o aumento do preço para adesão de nova
-  promoção", abaixo dos cards): sem permissão, enquanto a promoção atual estiver valendo, nenhuma oferta pode deixar o
+  promoção", Configurações → Promoções): sem permissão, enquanto a promoção atual estiver valendo, nenhuma oferta pode deixar o
   preço final acima do de hoje (oferta fixa acima não serve; nas de faixa, o preço para no de hoje). Com permissão, pode
   subir, respeitada a margem máxima. Os limites antigos de aumento por faixa (2%/3%/5%/7%) e a regra da casa de cem foram
   retirados em 29/10.
@@ -104,7 +106,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   no preço da regra ("ajustar o preço da atual").
 - **Trava de lucro:** quando a situação de hoje está dentro dos limites (a promoção atual ou, sem promoção, o preço do
   anúncio), nenhuma oferta que reduza o lucro por unidade serve ("reduziria o lucro de R$ x para R$ y"). Com "Permitir
-  reduzir o preço mesmo com redução da margem" (abaixo dos cards; `companies.promo_allow_margin_drop` e
+  reduzir o preço mesmo com redução da margem" (Configurações → Promoções; `companies.promo_allow_margin_drop` e
   `promo_margin_drop_tolerance`, em pontos percentuais), a margem pode cair até a tolerância. Fora dos limites (abaixo
   da mínima ou acima da máxima) não há trava: a regra manda mudar, e o preço vai para a margem mais perto da mínima.
 - **Começo da oferta:** só troca na hora se a nova já começou. Se a atual está valendo e a melhor começa depois, o
@@ -153,7 +155,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   leitura manual e no início da rotina; campos `ml_items.catalog_*`). Perdendo: o preço para ganhar, quanto reduzir e a
   sugestão de promoção que chega nele (as de faixa no próprio preço alvo, as fixas já abaixo dele; prefere a que cabe nas
   regras, depois a de maior lucro), com margem e a regra que fere.
-- **Incluir anúncios de catálogo na automatização** (abaixo dos cards; `companies.promo_include_catalog`). Desligado
+- **Incluir anúncios de catálogo na automatização** (Configurações → Promoções; `companies.promo_include_catalog`). Desligado
   (padrão): a rotina e o lote não mexem em anúncio de catálogo (`catalogo_fora`). Ligado: perdendo, a rotina aplica a
   sugestão no preço para ganhar se ela couber nas regras; depois de uma mudança, uma
   hora depois `Painel::CatalogCheck` confere no ML (`/items/{id}/price_to_win`) se está ganhando (`winning` ou
@@ -171,7 +173,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - `config/recurring.yml` dispara o job a cada hora cheia (`0 * * * * America/Sao_Paulo`); o job roda para cada conta
   ativa cuja empresa ligou a rotina e escolheu aquela hora e aquele dia da semana (`companies.promo_routine_enabled`,
   `promo_routine_mode`, `promo_schedule_hour` 0–23, `promo_schedule_days` 0 = domingo … 6 = sábado; `Company#promo_due?`).
-  Tudo isso muda na tela de Promoções, abaixo dos cards (liga/desliga, Simulação/Aplicação real, horário e dias, com
+  Tudo isso muda em Configurações → Promoções (link "Configurar promoções" no alto da seção; liga/desliga, Simulação/Aplicação real, horário e dias, com
   "Todos os dias"); saiu de Configurações em 29/10.
 - **Simulação** (`simulation`): relê a Central, calcula a melhor oferta de cada anúncio com as mesmas regras da tela e
   só registra o que faria. **Aplicação real** (`apply`): aplica pela mesma `Painel::PromotionActions` da tela.

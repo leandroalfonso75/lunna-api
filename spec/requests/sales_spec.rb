@@ -342,4 +342,15 @@ RSpec.describe "/api/sales", type: :request do
     get "/api/sales", params: { account_id: account.id }
     expect(response).to have_http_status(:unauthorized)
   end
+
+  it "período mês até hoje: do dia 1º do mês corrente até hoje" do
+    travel_to(Time.find_zone("America/Sao_Paulo").parse("2026-10-30 15:00")) do
+      get "/api/sales", params: { account_id: account.id, period: "mtd" }, headers: auth_headers(member)
+    end
+
+    expect(response).to have_http_status(:ok)
+    expect(json["period"]["preset"]).to eq("mtd")
+    expect(json["period"]["from"]).to start_with("2026-10-01")
+    expect(json["period"]["to"]).to start_with("2026-10-30")
+  end
 end

@@ -16,6 +16,7 @@ module Olist
       children = load_children
       everyone = @products + children.values.flatten
       full = Olist::FullStock.for_skus(@company, everyone.map(&:sku))
+      @thumbnails = thumbnails_for(everyone.map(&:sku).compact_blank)
       @kits = Olist::KitResolver.for_kits(@company, everyone)
 
       @products.map do |product|
@@ -43,6 +44,7 @@ module Olist
       {
         id: product.olist_id, parent_id: product.parent_olist_id,
         sku: product.sku, description: product.description, kind: product.kind, status: product.status,
+        thumbnail: @thumbnails[product.sku],
         variation_kind: product.variation_kind, unit: product.unit, gtin: product.gtin,
         price: product.price, promo_price: product.promo_price, cost_price: product.cost_price,
         avg_cost_price: product.avg_cost_price,
@@ -52,6 +54,15 @@ module Olist
         olist_created_at: product.olist_created_at, olist_updated_at: product.olist_updated_at,
         synced_at: product.synced_at
       }
+    end
+
+    # Foto: a do anúncio do Mercado Livre com o mesmo SKU (um ativo, se houver), já que o Olist não traz imagem.
+    def thumbnails_for(skus)
+      return {} if skus.empty?
+
+      MlItem.joins(:ml_account).where(ml_accounts: { company_id: @company.id }, sku: skus).where.not(thumbnail: [ nil, "" ])
+        .order(Arel.sql("CASE WHEN ml_items.status = 'active' THEN 0 ELSE 1 END")).pluck(:sku, :thumbnail)
+        .each_with_object({}) { |(sku, thumb), h| h[sku] ||= thumb }
     end
 
     # Custo PEPS (Primeiro que Entra, Primeiro que Sai) calculado das entradas do Controle de Estoque do Olist.

@@ -59,3 +59,5 @@ hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre nã
 - Só leitura: o Lunna não altera campanhas, orçamentos nem metas no Mercado Livre.
 - Não cruza o investimento com o lucro líquido do anúncio (margem depois de Ads) nem mostra Brand Ads/Display.
 - A coluna de desempenho por palavra-chave não existe na API de Product Ads.
+
+- Períodos: Hoje, Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas.

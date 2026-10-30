@@ -5,7 +5,7 @@ Cadastros da empresa e das contas conectadas.
 ## Abas
 - **Empresa:** nome, **Impostos e margem** (`tax_pct`, margem mínima, margem máxima nas promoções (`max_margin_pct`, opcional), cortes da Curva ABC, limites de variação) e a IA
   (chave e modelo do OpenRouter, por empresa). A rotina automática das Promoções (liga/desliga, modo, horário e dias)
-  saiu desta tela em 29/10: fica em Promoções, abaixo dos cards (`companies.promo_routine_*`, `promo_schedule_*`).
+  e as demais regras da automação ficam na aba **Promoções** desta tela (`components/settings/PromocoesTab.vue`, `PATCH /api/company` com `promo_*`), desde 30/10.
 - **Contas:** contas do Mercado Livre conectadas (conectar e remover). A conta é conectada por OAuth.
 - **Usuários:** administradores e membros da empresa.
 

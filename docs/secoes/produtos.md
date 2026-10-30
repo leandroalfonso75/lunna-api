@@ -1,5 +1,7 @@
 # Produtos (Olist ERP)
 
+- A lista mostra à esquerda a foto do anúncio do Mercado Livre com o mesmo SKU (`thumbnail` em `Olist::ProductPayloads`); sem anúncio, um quadrado vazio.
+
 Lista os produtos cadastrados no **Olist ERP (antigo Tiny)**, guardados no banco do Lunna e atualizados sozinhos.
 
 ## O que mostra

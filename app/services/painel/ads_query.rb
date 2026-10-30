@@ -6,7 +6,8 @@
 #   Conversão = unidades vendidas por ads ÷ cliques × 100
 module Painel
   class AdsQuery
-    PRESETS = { "today" => 1, "yesterday" => 1, "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
+    # "mtd" = mês até hoje (do dia 1º do mês corrente até hoje); os demais são dias corridos até hoje
+    PRESETS = { "today" => 1, "yesterday" => 1, "7d" => 7, "mtd" => 31, "30d" => 30, "60d" => 60, "90d" => 90 }.freeze
     STORED_ITEM_WINDOWS = %w[7d 30d 90d].freeze
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 90
@@ -117,6 +118,7 @@ module Painel
 
       return [ @today, @today ] if preset_key == "today"
       return [ @today - 1, @today - 1 ] if preset_key == "yesterday"
+      return [ @today.beginning_of_month, @today ] if preset_key == "mtd"
 
       [ @today - (PRESETS.fetch(preset_key) - 1), @today ]
     end
