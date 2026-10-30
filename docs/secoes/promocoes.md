@@ -6,7 +6,7 @@ Promoções da **Central de Promoções do Mercado Livre** por anúncio: a promo
 
 Fase 1 (pronta): ver, comparar, configurar margens e exportar. Fase 2 (pronta): aplicar a melhor oferta, entrar numa
 oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores e sempre com confirmação na tela**. Fase 3
-(rotina das 03:00) ainda não existe.
+(pronta): rotina automática agendada por horário e dias, em simulação ou aplicação real (ver "Rotina automática").
 
 ## O que a tela mostra
 - **Cartões:** anúncios em promoção, sem promoção, trocas que rendem mais (com o ganho somado por unidade) e abaixo
@@ -112,7 +112,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - **Aplicar às variações:** grava também nos anúncios das outras variações do produto (SKUs com o mesmo produto pai
   no Olist, `olist_products.parent_olist_id`).
 - **Regras específicas do anúncio** (`rules_note`, texto livre até 2.000 caracteres): guardadas com os limites, mostradas
-  na lista ("com regra própria") e no painel; a rotina das 03:00 vai lê-las.
+  na lista ("com regra própria") e no painel; a rotina automática não mexe em anúncio que as tenha.
 - Mudar margens: só administradores.
 
 ## Aplicar no Mercado Livre (`Painel::PromotionActions`)
@@ -130,7 +130,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - No painel do anúncio (ou do produto), "Não automatizar promoções neste anúncio" (`ml_promotion_settings.automation_enabled
   = false`), com opção de levar às outras variações e aos outros anúncios do mesmo SKU (`PATCH .../automation`; só esse
   campo muda, os limites de cada anúncio ficam).
-- Anúncio não automatizado: a rotina das 03:00 não mexe (registra a melhor oferta como sugestão), o lote e "levar ao
+- Anúncio não automatizado: a rotina automática não mexe (registra a melhor oferta como sugestão), o lote e "levar ao
   produto" pulam. Só muda pela tela, um a um. Aparece com a marca "não automatizado" e na guia "Não automatizados".
 
 ## Catálogo
@@ -202,7 +202,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 ## Pendências
 - Fase 2 testada no ML real em 2026-10-27 (2 trocas feitas pela tela). Exige o app do ML com permissão de **leitura e
   escrita em Ofertas/Promoções** (DevCenter); só leitura dá 403 do PolicyAgent, e a tela avisa.
-- Rotina das 03:00: ligada em 2026-10-28 em simulação; passar para aplicação real depois de conferir os relatórios.
+- Rotina automática: em APLICAÇÃO REAL desde 2026-10-29 (LUNNA_SHOP, 03:00, todos os dias); primeira rodada real feita
+  pela tela em 29/10 (107 aplicados).
 - Redução de tarifa do PRICE_MATCHING: confirmar como o ML informa; hoje a conta usa a tarifa de `listing_prices`.
-- Ofertas relâmpago pedem estoque mínimo; a escolha ainda não confere o estoque.
+- Ofertas relâmpago: entram reservando o estoque mínimo do ML e só com "Autorizar a adesão de Oferta Relâmpago".
 - Frete quando a promoção cruza R$ 79: hoje usa o frete do preço cheio.
