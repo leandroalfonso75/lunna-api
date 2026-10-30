@@ -280,8 +280,22 @@ module Painel
       manual ? manual.cost.to_f + manual.extra.to_f : nil
     end
 
+    # O desconto próprio (PRICE_DISCOUNT) sempre pode ser criado: quando o ML não listou a oferta, entra uma candidata
+    # com a faixa usual do ML (20% a 95% do preço cheio), para a escolha e para a "oferta cabível".
+    def with_own_discount(item, offers)
+      return offers if offers.any? { |o| o.promotion_type == "PRICE_DISCOUNT" }
+
+      full = (item.original_price || item.price).to_f
+      return offers unless full.positive?
+
+      offers + [ MlPromotionOffer.new(ml_account: @account, item_id: item.item_id, promotion_type: "PRICE_DISCOUNT", status: "candidate",
+                                      original_price: full, min_price: (full * 0.2).round(2), max_price: (full * 0.95).round(2),
+                                      fees: item.fee_details.presence) ]
+    end
+
     def build_row(item, offers, ctx, with_offers: false)
       evaluator = evaluator_for(item, ctx)
+      offers = with_own_discount(item, offers)
       evaluated = evaluator.evaluate(offers)
       current = evaluator.current
       best = evaluator.best(evaluated)
@@ -366,7 +380,11 @@ module Painel
       blocked = offers.select { |e| e[:margin_pct] && e[:offer].promotion_type != "SELLER_CAMPAIGN" }
         .select { |e| current.nil? || e[:profit] > current[:profit].to_f + GAIN_EPSILON }
         .max_by { |e| [ e[:margin_pct], e[:offer].finish_date.to_i ] }
+      # a oferta que cabe nos limites (outra campanha, ou o desconto próprio), mesmo que fira a trava de lucro ou a regra
+      # de aumento: a tela mostra ao lado da barrada e deixa aplicar
+      fit = evaluator.fitting(evaluated.map { |e| e[:offer] }.uniq)
       {
+        fitting: fit && short(fit).merge(soft_reason: fit[:soft_reason]),
         current_reason: current && current[:reason],
         reasons: tally.first(3).map { |reason, n| { reason: reason, offers: n } },
         label: current&.dig(:reason) || tally.first&.first || "nenhuma oferta disponível",

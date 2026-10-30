@@ -219,6 +219,17 @@ RSpec.describe "/api/promotions", type: :request do
     expect(response).to have_http_status(:unprocessable_entity)
   end
 
+  it "para revisar mostra a oferta cabível: o desconto próprio no preço da mínima, mesmo que suba o preço" do
+    company.update!(min_margin_pct: 22) # hoje: 90 (19,4%); o Evento a 90 dá 21,7%; a mínima pede 94,34 no desconto próprio (sobe o preço)
+
+    get "/api/promotions", params: { account_id: account.id, status: "para_revisar" }, headers: auth_headers(member)
+
+    row = json["items"].find { |r| r["item_id"] == item.item_id }
+    expect(row["status"]["key"]).to eq("para_revisar")
+    expect(row["review"]["fitting"]).to include("type" => "PRICE_DISCOUNT", "valid" => true, "price" => 94.34)
+    expect(row["review"]["fitting"]["soft_reason"]).to start_with("aumentaria o preço de R$ 90,00 para R$ 94,34")
+  end
+
   it "filtro Catálogo: ganhando ou perdendo, o preço para ganhar e a oferta que chega nele" do
     item.update!(catalog_listing: true, catalog_status: "competing", catalog_price_to_win: 85, catalog_winner_price: 86)
 

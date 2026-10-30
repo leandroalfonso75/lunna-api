@@ -70,6 +70,12 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   sugestão do que mudar nos limites para ela caber ("Para caber", com o botão "Usar a sugestão" que preenche o campo).
   No painel, o quadro de custos mostra "Hoje" ao lado da melhor oferta barrada; na lista, ela aparece riscada.
   Anúncio marcado para não automatizar fica fora da guia "Para revisar" e da contagem (segue na guia "Não automatizados").
+- **Oferta cabível** (`review.fitting`, `PromotionEvaluator#fitting`): quando a melhor oferta está barrada, o Lunna
+  procura outra promoção disponível que caiba nos limites (campanhas do ML primeiro) ou o desconto próprio (sempre
+  avaliado: se o ML não listou a oferta, entra uma candidata com a faixa usual, 20% a 95% do preço cheio). Ela pode ferir
+  a trava de lucro ou a regra de aumento (`soft_reason`); nesse caso não é aplicada sozinha, mas aparece no painel
+  (colunas "Hoje", "Melhor oferta barrada" e "Oferta cabível") e na lista, com o botão "Aplicar a cabível" (registra a
+  regra ferida no Histórico).
 - **Aplicar fora das regras** (só administradores, só em "Para revisar"): o painel tem "Aplicar mesmo assim" (a melhor
   oferta barrada no preço dela) e "Outro valor" (preço final em R$ ou % de desconto sobre o preço cheio, só nas ofertas
   de faixa, com margem e lucro aproximados na tela). A API recebe `force` e `price` em `POST .../apply`; o preço precisa

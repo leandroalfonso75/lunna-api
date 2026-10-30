@@ -118,8 +118,10 @@ module Painel
       economics(price.to_f, nil)
     end
 
-    def evaluate_offer(offer, price: nil, as_is: false)
-      out = { offer: offer, as_is: as_is, label: TYPE_LABELS.fetch(offer.promotion_type, offer.promotion_type.to_s.tr("_", " ").capitalize),
+    # relaxed: só os limites (margem, valor, preço cheio, faixa do ML), sem a trava de lucro nem a regra de aumento;
+    # serve para achar a "oferta cabível" quando nenhuma passa com as regras todas. O que ela feriria vai em :soft_reason.
+    def evaluate_offer(offer, price: nil, as_is: false, relaxed: false)
+      out = { offer: offer, as_is: as_is, relaxed: relaxed, label: TYPE_LABELS.fetch(offer.promotion_type, offer.promotion_type.to_s.tr("_", " ").capitalize),
               price: nil, profit: nil, margin_pct: nil, profit_before_ads: nil, margin_before_ads_pct: nil, meli_amount: 0.0, fee: nil,
               valid: false, reason: nil }
       return out.merge(reason: "não muda o preço (soma no checkout)") unless PRICE_TYPES.include?(offer.promotion_type)
@@ -130,7 +132,7 @@ module Painel
         return out.merge(reason: why)
       end
 
-      price ||= choose_price(offer)
+      price ||= choose_price(offer, relaxed: relaxed)
       return out.merge(reason: "sem preço permitido") if price.nil?
 
       eco = economics(price, offer)
@@ -139,10 +141,20 @@ module Painel
         return out.merge(reason: why)
       end
       if !as_is && (why = increase_reason(price) || guard_reason(eco))
-        return out.merge(reason: why)
+        return relaxed ? out.merge(valid: true, soft_reason: why) : out.merge(reason: why)
       end
 
       out.merge(valid: true)
+    end
+
+    # A oferta que cabe nos limites quando nenhuma passa com as regras todas: campanhas do ML primeiro, depois o
+    # desconto próprio; a mais perto do alvo. Pode ferir a trava de lucro ou a regra de aumento (:soft_reason).
+    def fitting(offers)
+      candidates = offers.select { |o| PRICE_TYPES.include?(o.promotion_type) && o.status != "pending" && o.promotion_type != "SELLER_CAMPAIGN" }
+      evaluated = candidates.map { |o| evaluate_offer(o, relaxed: true) }.select { |e| e[:valid] }
+      ml = evaluated.reject { |e| e[:offer].promotion_type == "PRICE_DISCOUNT" }
+      sign = @rules.target_max? ? -1 : 1
+      (ml.presence || evaluated).min_by { |e| [ sign * rule_margin(e).round(2), e[:soft_reason] ? 1 : 0, -e[:offer].finish_date.to_i ] }
     end
 
     private
@@ -212,11 +224,11 @@ module Painel
     # Faixa: o preço mais perto do alvo. Teto = faixa do ML, valor máximo, preço cheio, margem máxima e, sem permissão de
     # aumento, o preço de hoje. Piso = faixa do ML, valor mínimo, margem mínima e a trava de lucro. Alvo na mínima: fica
     # no piso; alvo na máxima: fica no teto. Se o piso passa do teto, fica no teto e a regra ferida aparece no motivo.
-    def choose_price(offer)
+    def choose_price(offer, relaxed: false)
       return (offer.price || offer.max_price)&.to_f unless offer.flexible?
 
       high = [ offer.max_price.to_f, @rules.max_price&.to_f, @rules.price_cap&.to_f ].compact.min
-      high = [ high, @current[:price].to_f ].min if !@rules.allow_increase && @current
+      high = [ high, @current[:price].to_f ].min if !@rules.allow_increase && @current && !relaxed
       if @rules.max_pct && (top = price_for_margin(@rules.max_pct, offer))
         high = [ high, top.floor(2) ].min
       end
@@ -227,7 +239,7 @@ module Painel
 
       floors = [ offer.min_price.to_f, @rules.min_price.to_f ]
       floors << price_for_margin(@rules.min_pct, offer) if @rules.min_pct
-      if @guard
+      if @guard && !relaxed
         floors << if @rules.allow_margin_drop
           price_for_margin(rule_margin(@guard) - @rules.margin_drop_tol.to_f, offer)
         else
