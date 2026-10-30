@@ -230,6 +230,26 @@ RSpec.describe "/api/promotions", type: :request do
     expect(row["review"]["fitting"]["soft_reason"]).to start_with("aumentaria o preço de R$ 90,00 para R$ 94,34")
   end
 
+  it "aplicar às variações leva só o anúncio equivalente de cada variação; com o SKU junto, todos os anúncios delas" do
+    parent = create(:olist_product, company: company, sku: "PAI", status: "A", kind: "V", variation_kind: "P")
+    OlistProduct.where(company_id: company.id, sku: "SKU-A").update_all(parent_olist_id: parent.olist_id, variation_kind: "V")
+    create(:olist_product, company: company, sku: "SKU-B", status: "A", kind: "S", variation_kind: "V", parent_olist_id: parent.olist_id)
+    item.update!(title: "Base Stick Pele Multifuncional Br19 - Rosado")
+    twin = create(:ml_item, ml_account: account, sku: "SKU-B", title: "Base Stick Pele Multifuncional Br42 - Oliva")
+    other = create(:ml_item, ml_account: account, sku: "SKU-B", title: "Boca Rosa Base Bastão Vegana 3 Em 1 Br42 - Oliva")
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+
+    get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["variation_items"].map { |v| v["item_id"] }).to eq([ twin.item_id ])
+    expect(json["variation_total"]).to eq(2)
+
+    post "/api/promotions/items/#{item.item_id}/apply", params: { account_id: account.id, promotion_id: "P-2", promotion_type: "DEAL", also_variations: true }, headers: auth_headers(admin)
+    expect(Ml::PromotionsApplyJob).to have_been_enqueued.with(account.id, [ twin.item_id ], admin.id, anything)
+
+    post "/api/promotions/items/#{item.item_id}/apply", params: { account_id: account.id, promotion_id: "P-2", promotion_type: "DEAL", also_variations: true, also_sku: true }, headers: auth_headers(admin)
+    expect(Ml::PromotionsApplyJob).to have_been_enqueued.with(account.id, match_array([ sibling.item_id, twin.item_id, other.item_id ]), admin.id, anything)
+  end
+
   it "filtro Catálogo: ganhando ou perdendo, o preço para ganhar e a oferta que chega nele" do
     item.update!(catalog_listing: true, catalog_status: "competing", catalog_price_to_win: 85, catalog_winner_price: 86)
 

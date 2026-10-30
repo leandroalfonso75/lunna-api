@@ -55,6 +55,21 @@ module Painel
     end
 
     # Anúncios (ativos ou pausados) das outras variações do mesmo produto: SKUs com o mesmo produto pai no Olist.
+    # O anúncio equivalente em cada outra variação do produto (a mesma "versão" do anúncio em outra cor/tamanho): entre os
+    # anúncios do SKU irmão, o de título mais parecido com o deste (os títulos seguem o mesmo modelo, só muda a variação).
+    def counterpart_item_ids(account, item)
+      ids = variation_item_ids(account, item)
+      return [] if ids.empty?
+
+      mine = title_tokens(item.title)
+      account.ml_items.where(item_id: ids, status: "active").pluck(:item_id, :sku, :title).group_by { |_, sku, _| sku }
+        .filter_map do |_, rows|
+          rows.max_by { |_, _, title| t = title_tokens(title); (mine & t).size.to_f / [ (mine | t).size, 1 ].max }&.first
+        end
+    end
+
+    def title_tokens(title) = title.to_s.downcase.scan(/[[:alnum:]]+/)
+
     def variation_item_ids(account, item)
       return [] if item.sku.blank?
 

@@ -29,7 +29,8 @@ module Painel
       item = account.ml_items.find(item_id)
       ids = []
       ids += account.ml_items.where(sku: item.sku, status: "active").where.not(item_id: item.item_id).pluck(:item_id) if sku && item.sku.present?
-      ids += PromotionSettings.variation_item_ids(account, item) if variations
+      # variações: só o anúncio equivalente de cada outra variação; com o SKU junto, todos os anúncios delas
+      ids += (sku ? PromotionSettings.variation_item_ids(account, item) : PromotionSettings.counterpart_item_ids(account, item)) if variations
       ids = account.ml_items.where(item_id: ids.uniq, status: "active").pluck(:item_id)
       ids -= account.ml_promotion_settings.where(item_id: ids, automation_enabled: false).pluck(:item_id) # "não automatizar"
       return 0 if ids.empty?

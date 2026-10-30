@@ -118,6 +118,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - **Aplicar ao SKU:** grava os mesmos limites nos outros anúncios do mesmo SKU (`Painel::PromotionSettings`).
 - **Aplicar às variações:** grava também nos anúncios das outras variações do produto (SKUs com o mesmo produto pai
   no Olist, `olist_products.parent_olist_id`).
+- **Ao aplicar uma promoção**, "às outras variações" leva só o anúncio **equivalente** de cada variação
+  (`PromotionSettings.counterpart_item_ids`: entre os anúncios do SKU irmão, o de título mais parecido com o deste); com
+  "aos outros anúncios do SKU" marcado junto, vai a todos os anúncios das variações. Na confirmação, variações vem
+  antes do SKU. Os limites e "não automatizar" seguem valendo para todos os anúncios das variações (`variation_total`).
 - **Regras específicas do anúncio** (`rules_note`, texto livre até 2.000 caracteres): guardadas com os limites, mostradas
   na lista ("com regra própria") e no painel; a rotina automática não mexe em anúncio que as tenha.
 - Mudar margens: só administradores.

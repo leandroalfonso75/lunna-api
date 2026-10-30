@@ -77,7 +77,8 @@ module Painel
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]), with_offers: true)
       row.merge(offers: evaluated.sort_by { |e| [ e[:valid] ? 0 : 1, -(e[:margin_pct] || -999) ] }.map { |e| offer_payload(e) },
                 sku_items: sku_siblings(item),
-                variation_items: PromotionSettings.variation_item_ids(@account, item).then do |ids|
+                variation_total: PromotionSettings.variation_item_ids(@account, item).size,
+                variation_items: PromotionSettings.counterpart_item_ids(@account, item).then do |ids|
                   @account.ml_items.where(item_id: ids).pluck(:item_id, :title, :sku).map { |id, title, sku| { item_id: id, title: title, sku: sku } }
                 end)
     end
