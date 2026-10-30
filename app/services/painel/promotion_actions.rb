@@ -34,7 +34,8 @@ module Painel
       ids -= account.ml_promotion_settings.where(item_id: ids, automation_enabled: false).pluck(:item_id) # "não automatizar"
       return 0 if ids.empty?
 
-      Ml::PromotionsApplyJob.perform_later(account.id, ids, user&.id, target.slice(:promotion_id, :promotion_type).transform_keys(&:to_s))
+      # com force ("mesmo assim" / "cabível"), cada anúncio entra no preço que cabe nos limites dele
+      Ml::PromotionsApplyJob.perform_later(account.id, ids, user&.id, target.slice(:promotion_id, :promotion_type, :force).transform_keys(&:to_s))
       ids.size
     end
 
@@ -69,6 +70,11 @@ module Painel
         chosen = ev[:evaluator].evaluate_offer(chosen[:offer], price: price)
       end
       return Result.new(ok: true, message: "O anúncio já está na melhor oferta.") if chosen[:as_is] || (current && chosen.equal?(current))
+      if force && !chosen[:valid] && target[:price].blank?
+        # "mesmo assim" sem preço informado: prefere o preço que cabe nos limites (ferindo só a trava de lucro ou o aumento)
+        relaxed = ev[:evaluator].evaluate_offer(chosen[:offer], relaxed: true)
+        chosen = relaxed.merge(valid: false, reason: relaxed[:soft_reason]) if relaxed[:valid] && relaxed[:soft_reason]
+      end
       unless chosen[:valid] || (force && !HARD_REASONS.any? { |r| chosen[:reason].to_s.start_with?(r) })
         return Result.new(ok: false, message: "Esta oferta não serve: #{chosen[:reason]}.")
       end

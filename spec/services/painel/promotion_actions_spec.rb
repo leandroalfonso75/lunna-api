@@ -97,6 +97,18 @@ RSpec.describe Painel::PromotionActions do
       expect(MlPromotionAction.last).to have_attributes(ok: true, to_promotion_id: "P-2", forced_reason: "abaixo da margem mínima")
     end
 
+    it "mesmo assim sem preço: entra no preço que cabe nos limites, ferindo só a regra de aumento" do
+      company.update!(min_margin_pct: 20) # hoje 80 (lucro 10, 12,5%); a mínima pede 87,28 no Evento (o ML banca 2%)
+      join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 87.28 }.to_json)
+        .to_return(status: 201, body: "{}")
+
+      result = described_class.apply(account, item.item_id, user: user, target: p2.merge(force: true))
+
+      expect(result.ok).to be true
+      expect(join).to have_been_requested
+      expect(MlPromotionAction.last).to have_attributes(to_price: 87.28, forced_reason: a_string_starting_with("aumentaria o preço de R$ 80,00 para R$ 87,28"))
+    end
+
     it "aplica outro preço informado, mesmo passando do limite de aumento" do
       join = stub_request(:post, base).with(query: { app_version: "v2" }, body: { promotion_id: "P-2", promotion_type: "DEAL", deal_price: 90.0 }.to_json)
         .to_return(status: 201, body: "{}")
