@@ -33,6 +33,13 @@ module Painel
       "posicao" => "Ganhar posição", "ajuste" => "Ajuste fino"
     }.freeze
     CLASS_ORDER = CLASSES.keys.freeze
+    # O que o valor em jogo significa: perdido (dinheiro gasto sem retorno) ou que deixou de ganhar (receita que não veio)
+    VALUE_KIND = {
+      "destravar" => [ "deixou_de_ganhar", "receita que parou de entrar" ], "desperdicio" => [ "perdido", "investimento desperdiçado" ],
+      "alocacao" => [ "deixou_de_ganhar", "receita que a verba mal alocada deixou de render" ],
+      "orcamento" => [ "deixou_de_ganhar", "receita que a verba a mais traria (estimativa)" ],
+      "posicao" => [ "deixou_de_ganhar", "receita perdida por classificação (estimativa)" ], "ajuste" => [ "deixou_de_ganhar", "não estimável" ]
+    }.freeze
 
     def self.call(account, max_actions: MAX_ACTIONS) = new(account, max_actions: max_actions).call
 
@@ -343,6 +350,7 @@ module Painel
         items << campaign_rank_entry(c) if c[:auction][:lost_by_ad_rank].to_f >= 0.50
       end
       items = items.compact
+      items.each { |i| i[:value_kind], i[:value_label] = VALUE_KIND.fetch(i[:class]) }
       numbered, watch = items.partition { |i| i[:value].to_f.positive? }
       numbered = numbered.sort_by { |i| [ CLASS_ORDER.index(i[:class]), -i[:value] ] }
       queue = numbered.first(@max_actions).each_with_index.map { |i, idx| i.merge(n: idx + 1) }
