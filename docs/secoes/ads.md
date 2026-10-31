@@ -28,6 +28,12 @@ de 7, 30 e 90 dias; os outros períodos (Hoje, Ontem, 60 dias e datas escolhidas
 hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre não responder, a tela avisa.
 
 ## Dados e atualização
+- **Leilão por campanha** (`ml_ad_campaigns.auction`, lido no detalhe de cada campanha a cada sync completa): impression
+  share, perdas por orçamento e por classificação, `acos_benchmark`, custo e receita, nas janelas `7d` (últimos 7 dias
+  fechados), `7d_prev` (os 7 anteriores) e `30d`; `consistent` confere que os três shares somam 1. Só esse endpoint traz
+  essas métricas (em `ads/search` dá 400).
+- **Anúncios:** `family_id`/`family_name` (produto do ML), `image_quality` e `domain_id`, que a API devolve sem documentar.
+  A unidade da análise de Ads é a família, não o anúncio.
 - Fonte: API de publicidade do Mercado Livre (`/advertising/...`, somente leitura, `api-version` 1 e 2). A conta de
   anunciante vem de `/advertising/advertisers?product_id=PADS`.
 - `Ml::Sync::Ads` lê campanhas (`campaigns/search`), a série diária de cada campanha (`ads/search` com

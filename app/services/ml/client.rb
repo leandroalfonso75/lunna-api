@@ -162,6 +162,16 @@ module Ml
         { date_from: from.iso8601, date_to: to.iso8601, limit: limit, offset: offset, metrics: ADS_METRICS }, { "api-version" => "2" })
     end
 
+    # Só o detalhe da campanha traz as métricas de leilão (impression share, perdas por orçamento/classificação,
+    # acos_benchmark); pedi-las em ads/search ou campaigns/search devolve 400.
+    AUCTION_METRICS = %w[impression_share top_impression_share lost_impression_share_by_budget lost_impression_share_by_ad_rank
+                         acos_benchmark cost total_amount].join(",")
+
+    def ads_campaign_detail(campaign_id, from:, to:)
+      get("/advertising/MLB/product_ads/campaigns/#{campaign_id}",
+        { date_from: from.iso8601, date_to: to.iso8601, metrics: AUCTION_METRICS }, { "api-version" => "2" })
+    end
+
     # Anúncios em campanha com as métricas do período; `daily: true` devolve uma linha por dia
     # (agregada, sem item) — usado com `campaign_id` para a série diária de cada campanha.
     def ads_items(advertiser_id, from:, to:, offset: 0, limit: 100, campaign_id: nil, daily: false)

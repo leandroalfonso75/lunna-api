@@ -20,6 +20,15 @@ RSpec.describe Ml::Sync::Ads do
     }.to_json)
   end
 
+  # detalhe da campanha: as métricas de leilão (qualquer janela)
+  def stub_auction
+    stub_request(:get, %r{https://api\.mercadolibre\.com/advertising/MLB/product_ads/campaigns/\d+}).with(query: hash_including({}))
+      .to_return(status: 200, body: { id: 111, metrics: { impression_share: 0.09, top_impression_share: 3.86, lost_impression_share_by_budget: 0.12,
+                                                            lost_impression_share_by_ad_rank: 0.79, acos_benchmark: 12.29, cost: 10.0, total_amount: 100.0 } }.to_json)
+  end
+
+  before { stub_auction }
+
   def stub_ads(window_params, results, total: results.size)
     stub_request(:get, "#{base}/ads/search").with(query: hash_including(window_params))
       .to_return(status: 200, body: { paging: { total: total, offset: 0, limit: 100 }, results: results }.to_json)
@@ -29,6 +38,7 @@ RSpec.describe Ml::Sync::Ads do
     { item_id: "MLB1", campaign_id: 111, ad_group_id: 9, title: "Batom", status: "active", price: 30.0, thumbnail: "http://x/t.jpg",
       permalink: "https://p", listing_type_id: "gold_special", logistic_type: "fulfillment", catalog_listing: false,
       buy_box_winner: false, recommended: false, has_discount: false, condition: "new", date_created: "2026-09-30T15:49:23Z",
+      family_id: 55_001, family_name: "Batom Vegano", image_quality: "good_quality_thumbnail", domain_id: "MLB-LIPSTICKS",
       metrics: { clicks: 10, prints: 1000, cost: 5.0, total_amount: 60.0, units_quantity: 2 } }
   end
 
@@ -51,9 +61,13 @@ RSpec.describe Ml::Sync::Ads do
     expect(result).to have_attributes(campaigns: 1, items: 1, days: 2, ok: true)
     campaign = MlAdCampaign.find_by!(ml_account_id: account.id, campaign_id: 111)
     expect(campaign).to have_attributes(name: "Maquiagens", status: "active", acos_target: 9.09, daily_budget: 110.0)
+    expect(campaign.auction.keys).to match_array(%w[7d 7d_prev 30d])
+    expect(campaign.auction["7d"]).to include("impression_share" => 0.09, "lost_by_budget" => 0.12, "lost_by_ad_rank" => 0.79, "acos_benchmark" => 12.29, "consistent" => true)
+    expect(a_request(:get, "https://api.mercadolibre.com/advertising/MLB/product_ads/campaigns/111").with(query: hash_including("date_from" => "2026-10-10", "date_to" => "2026-10-16"))).to have_been_made
     expect(MlAdDailyMetric.where(ml_account_id: account.id).sum(:cost)).to eq(5.0)
     item = MlAdItem.find_by!(ml_account_id: account.id, item_id: "MLB1")
     expect(item.title).to eq("Batom")
+    expect(item).to have_attributes(family_id: "55001", family_name: "Batom Vegano", image_quality: "good_quality_thumbnail", domain_id: "MLB-LIPSTICKS")
     expect(item.metrics.keys).to match_array(%w[7d 30d 90d])
     expect(item.metrics["7d"]["clicks"]).to eq(1)
     expect(item.metrics["90d"]["clicks"]).to eq(10)

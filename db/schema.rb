@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_020001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -136,6 +136,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_010001) do
     t.datetime "synced_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.jsonb "auction", default: {}, null: false
+    t.datetime "auction_synced_at"
   end
 
   create_table "ml_ad_daily_metrics", force: :cascade do |t|
@@ -199,7 +201,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_010001) do
     t.datetime "synced_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "family_id"
+    t.string "family_name"
+    t.string "image_quality"
+    t.string "domain_id"
     t.index ["ml_account_id", "campaign_id"], name: "index_ml_ad_items_on_ml_account_id_and_campaign_id"
+    t.index ["ml_account_id", "family_id"], name: "index_ml_ad_items_on_ml_account_id_and_family_id"
   end
 
   create_table "ml_catalog_checks", force: :cascade do |t|

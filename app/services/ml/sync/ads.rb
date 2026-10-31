@@ -23,6 +23,7 @@ module Ml
         now = Time.current
 
         campaigns = campaigns(client, account, advertiser_id, from, to, now, notes)
+        auction(client, account, campaigns, today, now, notes)
         days = daily(client, account, advertiser_id, campaigns, from, to, notes)
         items = items(client, account, advertiser_id, today, now, notes)
         account.update_columns(ads_synced_at: now, ads_recent_synced_at: now, ads_advertiser_id: advertiser_id)
@@ -151,6 +152,28 @@ module Ml
       end
       private_class_method :campaigns
 
+      # Leilão por campanha, nas janelas da análise: últimos 7 dias fechados, os 7 anteriores e 30 dias. Os três shares
+      # (aparece + perdido por orçamento + perdido por classificação) somam 1; `consistent` guarda essa conferência.
+      AUCTION_WINDOWS = { "7d" => [ 6, 0 ], "7d_prev" => [ 13, 7 ], "30d" => [ 29, 0 ] }.freeze
+
+      def self.auction(client, account, campaign_ids, today, now, notes)
+        last = today - 1 # o dia corrente só consolida às 10:00
+        campaign_ids.each do |campaign_id|
+          data = AUCTION_WINDOWS.to_h do |key, (back, skip)|
+            m = client.ads_campaign_detail(campaign_id, from: last - back, to: last - skip)["metrics"] || {}
+            shares = %w[impression_share lost_impression_share_by_budget lost_impression_share_by_ad_rank].map { |k| m[k].to_f }
+            [ key, { "impression_share" => m["impression_share"], "top_impression_share" => m["top_impression_share"],
+                     "lost_by_budget" => m["lost_impression_share_by_budget"], "lost_by_ad_rank" => m["lost_impression_share_by_ad_rank"],
+                     "acos_benchmark" => m["acos_benchmark"], "cost" => m["cost"], "total_amount" => m["total_amount"],
+                     "consistent" => m["impression_share"].nil? ? nil : (shares.sum - 1.0).abs <= 0.02 } ]
+          end
+          MlAdCampaign.where(ml_account_id: account.id, campaign_id: campaign_id).update_all(auction: data, auction_synced_at: now)
+        rescue Ml::Client::Error => e
+          notes << "leilão da campanha #{campaign_id}: #{e.message}"
+        end
+      end
+      private_class_method :auction
+
       def self.daily(client, account, advertiser_id, campaign_ids, from, to, notes)
         total = 0
         campaign_ids.each do |campaign_id|
@@ -210,6 +233,7 @@ module Ml
           listing_type_id: ad["listing_type_id"], logistic_type: ad["logistic_type"], catalog_listing: ad["catalog_listing"],
           buy_box_winner: ad["buy_box_winner"], recommended: ad["recommended"], has_discount: ad["has_discount"],
           condition: ad["condition"], date_created: ad["date_created"], metrics: entry[:metrics], synced_at: now,
+          family_id: ad["family_id"]&.to_s, family_name: ad["family_name"], image_quality: ad["image_quality"], domain_id: ad["domain_id"],
           created_at: now, updated_at: now
         }
       end
