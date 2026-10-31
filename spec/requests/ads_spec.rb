@@ -203,4 +203,63 @@ RSpec.describe "/api/ads", type: :request do
     expect(json["period"]["from"]).to start_with("2026-10-01")
     expect(json["period"]["to"]).to start_with("2026-10-30")
   end
+
+  describe "GET /api/ads/analysis" do
+    def item_day(item_id, campaign_id, date, cost:, amount:, clicks: 10, prints: 1000, units: 1)
+      MlAdItemDaily.create!(ml_account_id: account.id, item_id: item_id, campaign_id: campaign_id, date: date, cost: cost, total_amount: amount,
+        clicks: clicks, prints: prints, units: units)
+    end
+
+    it "saúde com TACOS, famílias com sinais, intocáveis e a fila por dinheiro em jogo" do
+      campaign(1, name: "Maquiagens")
+      MlAdCampaign.where(campaign_id: 1).update_all(auction: { "7d" => { "impression_share" => 0.5, "lost_by_budget" => 0.3, "lost_by_ad_rank" => 0.2, "acos_benchmark" => 12.0, "consistent" => true } })
+      yesterday = Date.current - 1
+      # orgânico da conta no período
+      MlAdDailyMetric.create!(ml_account_id: account.id, campaign_id: 1, date: yesterday, cost: 0, total_amount: 0, organic_amount: 1000)
+      # família A: um anúncio ativo (vende) e um fora do ar com receita no período
+      ad("MLB1", 1, {}, title: "Batom A ativo").update!(family_id: "F1", family_name: "Batom Vegano", date_created: 90.days.ago)
+      ad("MLB2", 1, {}, title: "Batom A hold", status: "hold").update!(family_id: "F1", date_created: 90.days.ago)
+      item_day("MLB1", 1, yesterday, cost: 20, amount: 300, clicks: 40, prints: 2000, units: 3)
+      item_day("MLB2", 1, yesterday - 2, cost: 5, amount: 150)
+      # família B: gastou e não vendeu
+      ad("MLB3", 1, {}, title: "Pincel").update!(family_id: "F2", family_name: "Pincel", date_created: 90.days.ago)
+      item_day("MLB3", 1, yesterday, cost: 12, amount: 0, clicks: 3, prints: 600, units: 0)
+      # família C: anúncio novo (intocável)
+      ad("MLB4", 1, {}, title: "Novo").update!(family_id: "F3", family_name: "Novo", date_created: 5.days.ago)
+      item_day("MLB4", 1, yesterday, cost: 15, amount: 0)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(response).to have_http_status(:ok)
+      h = json["health"]
+      expect(h).to include("cost" => 52.0, "revenue" => 450.0, "organic" => 1000.0)
+      expect(h["tacos"]).to be_within(0.01).of(52.0 / 1450 * 100)
+      fam = json["families"].to_h { |f| [ f["key"], f ] }
+      expect(fam["F1"]["signals"].map { |s| s["type"] }).to include("saiu_do_ar_com_historico")
+      expect(fam["F2"]["signals"].map { |s| s["type"] }).to eq([ "gasto_sem_receita" ])
+      expect(fam["F3"]["untouchable"]["reason"]).to include("em maturação")
+      expect(json["untouchables"].map { |u| u["key"] }).to eq([ "F3" ])
+      classes = json["queue"].map { |q| q["class"] }
+      expect(classes.first).to eq("destravar") # receita parada vem antes do desperdício
+      expect(json["queue"].first).to include("title" => "Batom Vegano", "value" => 150.0)
+      expect(json["queue"].find { |q| q["class"] == "desperdicio" }).to include("title" => "Pincel", "value" => 12.0)
+      expect(json["queue"].find { |q| q["class"] == "orcamento" }).to include("title" => "Campanha Maquiagens") # perde 30% por orçamento com ROAS acima da referência
+      expect(json["closing"]["text"]).to include("TACOS")
+    end
+
+    it "respeita o máximo de ações e manda o resto para a próxima rodada" do
+      campaign(1)
+      yesterday = Date.current - 1
+      3.times do |i|
+        ad("MLB#{i}", 1, {}, title: "P#{i}").update!(family_id: "G#{i}", family_name: "Família #{i}", date_created: 90.days.ago)
+        item_day("MLB#{i}", 1, yesterday, cost: 20 + i, amount: 0, clicks: 5, prints: 600)
+      end
+
+      get "/api/ads/analysis", params: { account_id: account.id, max_actions: 2 }, headers: auth_headers(member)
+
+      expect(json["queue"].size).to eq(2)
+      expect(json["queue"].map { |q| q["value"] }).to eq([ 22.0, 21.0 ])
+      expect(json["next_round"].size).to eq(1)
+    end
+  end
 end

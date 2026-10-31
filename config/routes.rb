@@ -48,6 +48,7 @@ Rails.application.routes.draw do
     delete "items/:id/ai-plan", to: "ai_plans#destroy"
     get "ads", to: "ads#index"
     get "ads/items", to: "ads#items"
+    get "ads/analysis", to: "ads#analysis"
     post "ads/sync", to: "ads#sync"
     get "promotions", to: "promotions#index"
     get "promotions/export", to: "promotions#export"
