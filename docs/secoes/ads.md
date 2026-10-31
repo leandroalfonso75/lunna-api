@@ -51,6 +51,15 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
   TACOS e a direção esperada.
 - **Leilão por campanha:** aparece / perde por orçamento / perde por classificação (somam 1), `acos_benchmark` contra o
   ACOS praticado, ROAS Objetivo e equilíbrio (o maior das famílias ativas).
+- **Diagnóstico** (`Painel::AdsDiagnosis`, `GET /api/ads/diagnosis?family=` ou `?campaign_id=`): bloqueadores primeiro
+  (fora do ar com histórico, amostra), depois a árvore por sintoma (gasta e não vende, CTR baixo, clica e não compra,
+  ROAS caiu, abaixo do equilíbrio, vários ativos, possível canibalização; na campanha: perde por orçamento, perde por
+  classificação, não gasta o orçamento). Devolve veredito em uma frase, evidência, descartados, o que fazer em ordem com
+  prazo, o que não fazer e incerteza.
+- **Decisões** (`ml_ad_decisions`, `POST /api/ads/decisions`, `DELETE /api/ads/decisions/:id`, só administradores): cada
+  item da fila pode ser marcado como feito ou ignorado; o "antes" é gravado na hora e o "depois" (7 dias fechados
+  seguintes, parcial até completar) aparece no bloco "Decisões dos últimos 30 dias". Item decidido nos últimos 7 dias
+  fica marcado na fila.
 
 ## Dados e atualização
 - **Leilão por campanha** (`ml_ad_campaigns.auction`, lido no detalhe de cada campanha a cada sync completa): impression

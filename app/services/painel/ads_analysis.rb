@@ -489,7 +489,7 @@ module Painel
         text: "TACOS de #{health[:tacos] || '—'}% (antes #{health.dig(:previous, :tacos) || '—'}%; alvo #{TACOS_TARGET.join(' a ')}%). Executando a fila, tende a #{direction}." }
     end
 
-    def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v.to_f, unit: "R$ ", separator: ",", delimiter: ".")
+    def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v.to_f, unit: "R$", separator: ",", delimiter: ".")
     def pct(v) = "#{(v.to_f * 100).round}%"
   end
 end

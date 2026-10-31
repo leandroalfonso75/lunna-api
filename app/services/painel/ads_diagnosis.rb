@@ -165,7 +165,7 @@ module Painel
     end
 
     def act(text, reassess) = { action: text, reassess: reassess }
-    def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v.to_f, unit: "R$ ", separator: ",", delimiter: ".")
+    def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v.to_f, unit: "R$", separator: ",", delimiter: ".")
     def pct(v) = v.nil? ? "—" : "#{(v.to_f * 100).round}%"
   end
 end
