@@ -14,7 +14,6 @@ module Painel
       "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ]
     }.freeze
     GAIN_EPSILON = 0.01
-    ADS_DAYS = 15
 
     def self.call(account, params) = new(account, params).call
     def self.detail(account, item_id) = new(account, {}).detail(item_id)
@@ -223,20 +222,7 @@ module Painel
 
     # Custo de Ads por unidade de cada anúncio nos últimos 15 dias fechados: gasto ÷ unidades vendidas (vendas não
     # canceladas). Sem gasto, ou gasto sem nenhuma venda, fica zero (o gasto sem venda aparece à parte).
-    def ads_per_unit(item_ids)
-      zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
-      last = zone.today - 1
-      first = last - (ADS_DAYS - 1)
-      spend = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: first..last).group(:item_id).sum(:cost)
-      units = MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
-        .where(o: { ml_account_id: @account.id }).where.not(o: { status: %w[cancelled invalid] })
-        .where(item_id: spend.keys).where("o.date_created BETWEEN ? AND ?", first.in_time_zone(zone).beginning_of_day, last.in_time_zone(zone).end_of_day)
-        .group("ml_order_items.item_id").sum("ml_order_items.quantity")
-      spend.to_h do |id, cost|
-        sold = units[id].to_i
-        [ id, { spend: cost.to_f.round(2), units: sold, unit: sold.positive? ? (cost.to_f / sold).round(2) : 0.0, days: ADS_DAYS } ]
-      end
-    end
+    def ads_per_unit(item_ids) = AdsUnitCost.for_items(@account, item_ids)
 
     def build_rows(items)
       ctx = context(items)
@@ -317,7 +303,7 @@ module Painel
         catalog_info: catalog_info(item, current, evaluated, evaluator),
         full_price: full_price, cost: cost,
         base: evaluator.base(full_price)&.slice(:price, :profit, :margin_pct, :profit_before_ads, :margin_before_ads_pct, :costs),
-        ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: ADS_DAYS },
+        ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: @company.ads_cost_days },
         current: current && short(current), best: best && short(best),
         gain: gain(current, best),
         offers_count: evaluated.count { |e| e[:valid] },

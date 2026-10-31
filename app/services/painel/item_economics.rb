@@ -29,13 +29,14 @@ module Painel
       skus = @metrics.map(&:sku).compact_blank
       olist = Olist::UnitCost.for_skus(@company, skus)
       manual = @company.ml_costs.where(sku: skus).index_by(&:sku)
+      ads = AdsUnitCost.for_items(@account, @metrics.map(&:item_id))
 
-      @metrics.to_h { |metric| [ metric.item_id, build(metric, items[metric.item_id], olist[metric.sku], manual[metric.sku]) ] }
+      @metrics.to_h { |metric| [ metric.item_id, build(metric, items[metric.item_id], olist[metric.sku], manual[metric.sku], ads[metric.item_id]) ] }
     end
 
     private
 
-    def build(metric, item, olist_cost, manual_cost)
+    def build(metric, item, olist_cost, manual_cost, ads = nil)
       price = metric.price&.to_f
       return nil if price.nil? || price <= 0
 
@@ -48,6 +49,8 @@ module Painel
       tax = price * tax_pct / 100.0
 
       profit = cost.nil? ? nil : price - cost - fees[:commission] - shipping_fees - fixed_expenses - tax
+      ads_unit = ads ? ads[:unit].to_f : 0.0
+      after_ads = profit.nil? ? nil : profit - ads_unit
 
       {
         price: price,
@@ -57,6 +60,9 @@ module Painel
         fixed_expenses: fixed_expenses, fixed_expenses_pct: fixed_pct,
         tax: tax, tax_pct: tax_pct,
         net_profit: profit, net_profit_pct: profit.nil? ? nil : profit / price * 100.0,
+        # Ads por unidade (gasto ÷ unidades vendidas nos últimos N dias fechados) e o lucro depois dele
+        ads_unit: ads_unit, ads_spend: ads ? ads[:spend] : 0.0, ads_units: ads ? ads[:units] : 0, ads_days: @company.ads_cost_days,
+        net_profit_after_ads: after_ads, net_profit_after_ads_pct: after_ads.nil? ? nil : after_ads / price * 100.0,
         fees_known: fees[:known], fees_split: fees[:split]
       }
     end

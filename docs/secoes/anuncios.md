@@ -44,3 +44,11 @@ Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
 - Anúncio sem custo é o de produto sem nenhuma entrada com valor no Olist; preencher o preço de custo no cadastro do produto
   (aba Custos) resolve na próxima leitura.
 - Campo "Despesas fixas" editável em outra página.
+
+## Custo de Ads e lucro pós Ads (30/10)
+- **Custo Ads** por unidade = gasto do anúncio em Product Ads nos últimos N dias fechados ÷ unidades vendidas dele no
+  período (vendas não canceladas), com N em Configurações → Anúncios (`companies.ads_cost_days`: 7, 15 ou 30; padrão
+  15). Sem gasto, ou gasto sem venda, fica zero. Código em `Painel::AdsUnitCost` (também usado pelas Promoções).
+- **Lucro pós Ads** = lucro líquido − custo Ads por unidade (`Painel::ItemEconomics`, `net_profit_after_ads`); ordenável.
+- Na tabela, os custos (custo, comissão, frete/taxas, despesas fixas, imposto, custo Ads) mostram o valor em R$ em
+  vermelho e, abaixo, o % sobre o preço de venda; os lucros mostram R$ em cima e % embaixo.

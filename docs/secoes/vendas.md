@@ -90,3 +90,5 @@ Implementado em `Painel::SalesQuery#economics`.
 - Despesas fixas (3%) ainda sem campo de edição em Configurações.
 - Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.
 - Custo Ads é um rateio pelo período: o Mercado Livre não informa qual venda veio de qual clique.
+- Formato (30/10): valores em R$; sob cada custo (tarifa, frete, imposto, despesas fixas, custo Ads) o % sobre a receita da
+  venda (R$ em vermelho, % em preto); lucro líquido e lucro pós Ads com R$ em cima e % embaixo.

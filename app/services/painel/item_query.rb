@@ -12,7 +12,7 @@ module Painel
     NUMERIC_FILTERS = %i[price stock visits_7d units_7d conversion_7d units_delta revenue_7d coverage_days quality_score].freeze
     # Ordenações calculadas em Ruby (não são colunas de item_metrics): o lucro depende do custo do Olist, das
     # tarifas e dos parâmetros da empresa, então tudo é ordenado antes de montar a página.
-    COMPUTED_SORTS = %i[net_profit_pct].freeze
+    COMPUTED_SORTS = %i[net_profit_pct net_profit_after_ads_pct].freeze
     SORTABLE_COLUMNS = (NUMERIC_FILTERS + %i[title status sku] + COMPUTED_SORTS).freeze
     ASC_DEFAULT_COLUMNS = %i[title status sku coverage_days].freeze
 
@@ -57,23 +57,23 @@ module Painel
 
     # [metrics da página, economics já calculada ou nil]. Ordenação em SQL, ou em Ruby quando a coluna é calculada.
     def page_of(relation, sort_column, dir, page, per_page)
-      return sorted_by_economics(relation, dir, page, per_page) if COMPUTED_SORTS.include?(sort_column)
+      return sorted_by_economics(relation, sort_column, dir, page, per_page) if COMPUTED_SORTS.include?(sort_column)
 
       [ relation.order(order_clause(sort_column, dir)).offset((page - 1) * per_page).limit(per_page).to_a, nil ]
     end
 
-    def sorted_by_economics(relation, dir, page, per_page)
+    def sorted_by_economics(relation, column, dir, page, per_page)
       metrics = relation.to_a
       economics = Painel::ItemEconomics.for_page(@account, metrics)
-      ranked = metrics.sort_by { |metric| economics_sort_key(metric, economics[metric.item_id], dir) }
+      ranked = metrics.sort_by { |metric| economics_sort_key(metric, economics[metric.item_id], column, dir) }
 
       [ ranked.slice((page - 1) * per_page, per_page) || [], economics ]
     end
 
     # Sem lucro calculado (sem custo ou sem preço) vai sempre para o fim; desempate por visitas e id, como no SQL.
-    def economics_sort_key(metric, economics, dir)
+    def economics_sort_key(metric, economics, column, dir)
       tie = [ -metric.visits_7d.to_i, metric.item_id ]
-      value = economics&.dig(:net_profit_pct)
+      value = economics&.dig(column)
       return [ 1, 0, *tie ] if value.nil?
 
       [ 0, dir == "desc" ? -value : value, *tie ]
