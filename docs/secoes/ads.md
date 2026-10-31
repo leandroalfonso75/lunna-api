@@ -27,6 +27,31 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 de 7, 30 e 90 dias; os outros períodos (Hoje, Ontem, 60 dias e datas escolhidas) são consultados no Mercado Livre na
 hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre não responder, a tela avisa.
 
+## Análise (aba "Análise", `Painel::AdsAnalysis`, `GET /api/ads/analysis`)
+Ferramenta de decisão baseada no plugin "Agente ads ml" (referência, não cópia). **Só recomenda**: nunca altera campanha;
+a execução é no Seller Center. Decisões do usuário (30/10): só recomendar; janela de 7 dias; até 7 ações; TACOS alvo 3% a 4%.
+- **Janela:** os últimos 7 dias fechados (o dia corrente consolida às 10:00) e os 7 anteriores para comparar; 30 dias
+  para maturação. Anúncios: `ml_ad_item_dailies`; orgânico: `ml_ad_daily_metrics.organic_amount`; leilão: `ml_ad_campaigns.auction`.
+- **Unidade:** a família (`family_id`); um produto com 4 anúncios não são 4 produtos.
+- **Saúde:** investimento, receita por Ads, ROAS, ACOS, **TACOS** = investimento ÷ (receita por Ads + orgânica), share de
+  Ads, cada um contra os 7 dias anteriores. TACOS: até 4% ok, até 6% atenção, acima ruim.
+- **ROAS de Equilíbrio** por família = 100 ÷ margem bruta (%), com `Painel::ItemEconomics` (custo Olist/manual, tarifa,
+  frete, imposto, despesas). Sem custo, não se afirma lucro (fica "—"). Referência das fontes sem custo: 3,33.
+- **Regras da casa** (declaradas na tela): 30 cliques para julgar conversão, 500 impressões para CTR; gasto relevante
+  ≥ R$ 10; anúncio com menos de 30 dias e família com amostra insuficiente são **intocáveis** (não entram em sinal nem fila).
+- **Sinais por família:** `saiu_do_ar_com_historico` (hold/delegated/revoked com receita), `gasto_sem_receita`,
+  `impressao_sem_clique`, `abaixo_do_equilibrio` (só com receita > 0), `familia_com_multiplos_anuncios_ativos` (verba no
+  pior ROAS), `capa_suspeita` (sem selo de imagem, CTR abaixo da média da conta com amostra), `idle_recomendado`,
+  `exposicao_perdida_por_orcamento` (≥ 20%) e `_por_ad_rank` (≥ 50%) só quando a campanha tem uma família ativa (share
+  exato); com várias famílias, esses dois viram itens no nível da campanha.
+- **Fila ("O que mexer agora"):** classes em ordem: destravar receita parada → estancar desperdício → corrigir alocação
+  → abrir verba onde há retorno (só com ROAS ≥ equilíbrio) → ganhar posição → ajuste fino; dentro da classe, por valor em
+  jogo. Até `max_actions` (7); o resto vai para "próxima rodada"; sem valor estimável vai para "observar". Cada item: uma
+  ação, evidência em números, o que checar antes (estoque, reputação, preço) e prazo de reavaliação. Fecha com a linha do
+  TACOS e a direção esperada.
+- **Leilão por campanha:** aparece / perde por orçamento / perde por classificação (somam 1), `acos_benchmark` contra o
+  ACOS praticado, ROAS Objetivo e equilíbrio (o maior das famílias ativas).
+
 ## Dados e atualização
 - **Leilão por campanha** (`ml_ad_campaigns.auction`, lido no detalhe de cada campanha a cada sync completa): impression
   share, perdas por orçamento e por classificação, `acos_benchmark`, custo e receita, nas janelas `7d` (últimos 7 dias
