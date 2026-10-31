@@ -182,6 +182,7 @@ module Painel
           key: key, family_id: group.first.family_id, name: group.first.family_name.presence || lead[:title],
           domain: group.first.domain_id, thumbnail: lead[:thumbnail],
           n_items: rows.size, n_active: active.size, campaigns: group.map(&:campaign_id).compact.uniq,
+          campaign_names: rows.filter_map { |r| r[:campaign] }.uniq,
           metrics: m, previous: prev, month: month,
           variation: { cost: pct_change(m[:cost], prev[:cost]), revenue: pct_change(m[:revenue], prev[:revenue]), roas: pct_change(m[:roas], prev[:roas]) },
           economics: eco,
@@ -360,7 +361,8 @@ module Painel
     def queue_entry(f, s)
       name = f[:name]
       ids = s[:item_ids] || f[:items].select { |r| r[:cost].positive? }.map { |r| r[:item_id] }.first(5)
-      base = { key: f[:key], family_name: name, signal: s[:type], value: s[:value], evidence: s[:detail], reassess: "7 dias", item_ids: ids }
+      campaigns = f[:items].select { |r| ids.include?(r[:item_id]) }.filter_map { |r| r[:campaign] }.uniq
+      base = { key: f[:key], family_name: name, signal: s[:type], value: s[:value], evidence: s[:detail], reassess: "7 dias", item_ids: ids, campaigns: campaigns }
       case s[:type]
       when "saiu_do_ar_com_historico"
         base.merge(class: "destravar", class_label: CLASSES["destravar"], title: name, value_how: "receita por Ads do período dos anúncios fora do ar",
@@ -403,7 +405,7 @@ module Painel
       ok = c[:equilibrium] ? c[:metrics][:roas].to_f >= c[:equilibrium] : c[:metrics][:roas].to_f >= REFERENCE_EQUILIBRIUM
       return nil unless ok
 
-      { key: "campaign:#{c[:id]}", campaign_id: c[:id], item_ids: [], class: "orcamento", class_label: CLASSES["orcamento"], title: "Campanha #{c[:name]}",
+      { key: "campaign:#{c[:id]}", campaign_id: c[:id], item_ids: [], campaigns: [ c[:name] ], class: "orcamento", class_label: CLASSES["orcamento"], title: "Campanha #{c[:name]}",
         signal: "exposicao_perdida_por_orcamento", value: value, value_how: "receita do período × impressões perdidas por orçamento ÷ impressões obtidas (estimativa; campanha com #{c[:families]} famílias)",
         evidence: "perde #{pct(a[:lost_by_budget])} das impressões por orçamento; aparece em #{pct(a[:impression_share])}; ROAS #{c[:metrics][:roas]} #{c[:equilibrium] ? "acima do equilíbrio #{c[:equilibrium]}" : "acima da referência #{REFERENCE_EQUILIBRIUM} (sem custo nas famílias)"}; orçamento diário #{brl(c[:daily_budget])}.",
         action: "Aumentar o orçamento diário da campanha #{c[:name]} de #{brl(c[:daily_budget])} para #{brl((c[:daily_budget].to_f * 1.3).round(0))} (+30%) e reavaliar; não mexer no ROAS Objetivo.",
@@ -414,7 +416,7 @@ module Painel
       a = c[:auction]
       share = a[:impression_share].to_f
       value = share.positive? && c[:metrics][:revenue].positive? ? [ c[:metrics][:revenue] * a[:lost_by_ad_rank].to_f / share, c[:metrics][:revenue] ].min.round(2) : nil
-      { key: "campaign:#{c[:id]}", campaign_id: c[:id], item_ids: [], class: "posicao", class_label: CLASSES["posicao"], title: "Campanha #{c[:name]}",
+      { key: "campaign:#{c[:id]}", campaign_id: c[:id], item_ids: [], campaigns: [ c[:name] ], class: "posicao", class_label: CLASSES["posicao"], title: "Campanha #{c[:name]}",
         signal: "exposicao_perdida_por_ad_rank", value: value, value_how: "receita do período × parcela perdida por classificação (estimativa, teto: dobrar a receita)",
         evidence: "aparece em #{pct(share)} das oportunidades; perde #{pct(a[:lost_by_ad_rank])} por classificação e #{pct(a[:lost_by_budget])} por orçamento; ACOS #{c[:metrics][:acos] || '—'}% contra benchmark #{a[:acos_benchmark]}%; ROAS Objetivo #{c[:roas_target] || '—'}.",
         action: "Baixar o ROAS Objetivo da campanha #{c[:name]}#{c[:roas_target] ? " de #{c[:roas_target]} para #{(c[:roas_target] * 0.8).round(1)}" : ''} para o lance subir, e melhorar capa/ficha dos anúncios de maior gasto; aumentar orçamento não compra posição.",
