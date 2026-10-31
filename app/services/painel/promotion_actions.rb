@@ -237,6 +237,7 @@ module Painel
       rescue Ml::Client::Error => e
         back = current && rejoin(client, item.item_id, current)
         note = current ? (back ? " O anúncio voltou para #{name_of(current)}." : " Atenção: o anúncio ficou sem promoção.") : ""
+        note += retry_later(item, chosen) if current && !back
         return failed(log, "O Mercado Livre recusou a entrada em #{name_of(chosen)}: #{ml_message(e)}.#{note}", e)
       end
 
@@ -245,6 +246,17 @@ module Painel
       Result.new(ok: true, message: success_message(kind, current, chosen), action: log)
     ensure
       Ml::Sync::Promotions.call(client, @account, item_ids: [ item.item_id ])
+    end
+
+    # O anúncio saiu da promoção e o ML recusou tanto a nova quanto a volta (ex.: "No candidates found" logo depois
+    # de sair): deixa uma nova tentativa agendada para não ficar no preço cheio.
+    RETRY_AFTER = 1.hour
+
+    def retry_later(item, chosen)
+      target = { "promotion_id" => chosen[:offer].promotion_id.to_s, "promotion_type" => chosen[:offer].promotion_type }
+      target["force"] = true if @forced_reason
+      Ml::PromotionsApplyJob.set(wait: RETRY_AFTER).perform_later(@account.id, [ item.item_id ], @user&.id, target)
+      " Nova tentativa agendada para daqui a 1 hora."
     end
 
     def rejoin(client, item_id, current)

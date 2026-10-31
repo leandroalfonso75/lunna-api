@@ -138,7 +138,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - **Sair:** `DELETE /seller-promotions/items/{id}?promotion_type=…&promotion_id=…` (ou `offer_id`).
 - **Trocar** = sair da atual e entrar na nova; **ajustar o preço** = sair e entrar de novo na mesma. Se a entrada falhar
   depois de sair, tenta voltar para a anterior com o preço de antes e avisa se não conseguiu.
-- Escrita sem retentativa automática (`Ml::Client#write`), para não aplicar duas vezes. Relâmpago e oferta do dia (pedem
+- Escrita sem retentativa automática (`Ml::Client#write`), para não aplicar duas vezes. Exceção: se o anúncio saiu da promoção
+  e o ML recusou tanto a nova quanto a volta (ex.: "No candidates found for item" logo após sair), fica agendada uma nova
+  tentativa em 1 hora (`PromotionActions#retry_later`), para o anúncio não ficar no preço cheio. Relâmpago e oferta do dia (pedem
   estoque reservado) entram com o estoque mínimo que o ML sugere (`stock`), se o anúncio tiver esse estoque.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 

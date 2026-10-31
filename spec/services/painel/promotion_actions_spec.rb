@@ -48,6 +48,17 @@ RSpec.describe Painel::PromotionActions do
     expect(MlPromotionAction.last).to have_attributes(ok: false)
   end
 
+  it "se o ML recusar a entrada e a volta, agenda nova tentativa em 1 hora" do
+    stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}")
+    stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "No candidates found for item" }.to_json)
+
+    result = nil
+    expect { result = described_class.apply(account, item.item_id, user: user) }.to have_enqueued_job(Ml::PromotionsApplyJob)
+      .with(account.id, [ item.item_id ], user.id, { "promotion_id" => "P-2", "promotion_type" => "DEAL" })
+    expect(result.ok).to be false
+    expect(result.message).to include("ficou sem promoção", "Nova tentativa agendada")
+  end
+
   it "não aplica oferta abaixo da margem mínima" do
     company.update!(min_margin_pct: 40)
 
