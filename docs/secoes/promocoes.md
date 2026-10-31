@@ -72,6 +72,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   sugestão do que mudar nos limites para ela caber ("Para caber", com o botão "Usar a sugestão" que preenche o campo).
   No painel, o quadro de custos mostra "Hoje" ao lado da melhor oferta barrada; na lista, ela aparece riscada.
   Anúncio marcado para não automatizar fica fora da guia "Para revisar" e da contagem (segue na guia "Não automatizados").
+- Desconto próprio ativo vem do ML sem faixa de preço; `Ml::Sync::Promotions` guarda a faixa usual (20% a 95% do preço cheio)
+  para o Lunna poder recriá-lo em outro preço (ajustar). Nas faixas, o preço arredondado a centavos sobe 1 centavo se a
+  margem ficar um centésimo abaixo da mínima.
 - **Oferta cabível** (`review.fitting`, `PromotionEvaluator#fitting`): quando a melhor oferta está barrada, o Lunna
   procura outra promoção disponível que caiba nos limites (campanhas do ML primeiro) ou o desconto próprio (sempre
   avaliado: se o ML não listou a oferta, entra uma candidata com a faixa usual, 20% a 95% do preço cheio). Ela pode ferir

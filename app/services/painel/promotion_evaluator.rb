@@ -247,6 +247,8 @@ module Painel
         end
       end
       low = (floors.compact.max - 1e-9).ceil(2)
+      # o arredondamento a centavos pode deixar a margem um centésimo abaixo da mínima: sobe um centavo se for o caso
+      low += 0.01 if @rules.min_pct && low <= high && rule_margin(economics(low, offer)) < @rules.min_pct
       chosen = @rules.target_max? ? high : [ low, high ].min
       [ chosen, offer.min_price.to_f ].max.round(2)
     end

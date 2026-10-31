@@ -95,12 +95,22 @@ module Ml
           ml_account_id: account.id, item_id: item_id, promotion_id: offer["id"], promotion_type: offer["type"],
           sub_type: offer["sub_type"], name: offer["name"].presence, status: offer["status"],
           price: positive(offer["price"]), original_price: positive(offer["original_price"]),
-          min_price: positive(offer["min_discounted_price"]), max_price: positive(offer["max_discounted_price"]),
+          min_price: positive(offer["min_discounted_price"]) || own_range(offer)&.first,
+          max_price: positive(offer["max_discounted_price"]) || own_range(offer)&.last,
           max_top_price: positive(offer["max_top_discounted_price"]), suggested_price: positive(offer["suggested_discounted_price"]),
           fixed_amount: positive(offer["fixed_amount"]), meli_percentage: offer["meli_percentage"], seller_percentage: offer["seller_percentage"],
           start_date: offer["start_date"], finish_date: offer["finish_date"] || offer["end_date"],
           fees: offer["_fees"], payload: offer.except("_fees"), synced_at: now, created_at: now, updated_at: now
         }
+      end
+
+      # Desconto próprio ativo vem sem faixa; o Lunna pode recriá-lo em outro preço, então vale a faixa usual do ML
+      # (20% a 95% do preço cheio) para a escolha e para a "oferta cabível".
+      def self.own_range(offer)
+        return nil unless offer["type"] == "PRICE_DISCOUNT"
+
+        full = positive(offer["original_price"])
+        full && [ (full * 0.2).round(2), (full * 0.95).round(2) ]
       end
 
       def self.positive(value) = value.to_f.positive? ? value : nil
