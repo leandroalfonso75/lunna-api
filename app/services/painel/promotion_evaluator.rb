@@ -163,8 +163,9 @@ module Painel
     def limit_reason(eco)
       price = eco[:price]
       margin = rule_margin(eco)
-      return "abaixo da margem mínima" if @rules.min_pct && margin < @rules.min_pct - 0.005
-      return "acima da margem máxima" if @rules.max_pct && margin > @rules.max_pct + 0.005
+      # tolerância de um centésimo de ponto: o arredondamento a centavos do preço pode deixar 24,99% para uma mínima de 25%
+      return "abaixo da margem mínima" if @rules.min_pct && margin < @rules.min_pct - 0.0101
+      return "acima da margem máxima" if @rules.max_pct && margin > @rules.max_pct + 0.0101
       return "abaixo do valor mínimo" if @rules.min_price && price < @rules.min_price.to_f - 0.005
       return "acima do valor máximo" if @rules.max_price && price > @rules.max_price.to_f + 0.005
       return "acima do preço cheio do anúncio" if @rules.price_cap && price > @rules.price_cap.to_f + 0.005
