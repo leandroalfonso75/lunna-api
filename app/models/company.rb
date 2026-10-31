@@ -29,6 +29,7 @@ class Company < ApplicationRecord
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
   validates :max_margin_pct, numericality: { greater_than: -100, less_than: 100 }, allow_nil: true
   validates :promo_routine_mode, inclusion: { in: %w[simulation apply] }
+  validates :ads_daily_budget_max, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   validates :ads_cost_days, inclusion: { in: Painel::AdsUnitCost::DAYS_OPTIONS }
   validates :promo_schedule_hour, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 23 }
   validates :promo_margin_basis, inclusion: { in: %w[after_ads before_ads] }

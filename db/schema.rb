@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_040001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_050001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -51,6 +51,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_040001) do
     t.boolean "promo_allow_price_increase", default: false, null: false
     t.boolean "promo_allow_lightning", default: false, null: false
     t.integer "ads_cost_days", default: 15, null: false
+    t.decimal "ads_daily_budget_max", precision: 12, scale: 2
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|

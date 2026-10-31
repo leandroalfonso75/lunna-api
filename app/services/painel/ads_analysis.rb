@@ -97,6 +97,7 @@ module Painel
       health = health_block(days)
       decisions = decisions_block(families, campaign_rows)
       mark_decided!(queue + next_round + watch, decisions)
+      structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows })
 
       {
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
@@ -110,6 +111,7 @@ module Painel
         untouchables: families.filter_map { |f| f[:untouchable] && { key: f[:key], name: f[:name], reason: f[:untouchable][:reason], until: f[:untouchable][:until] } },
         closing: closing(health, queue),
         decisions: decisions,
+        structure: structure,
         generated_at: Time.current
       }
     end

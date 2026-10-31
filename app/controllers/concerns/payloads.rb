@@ -21,6 +21,7 @@ module Payloads
       promo_margin_drop_tolerance: company.promo_margin_drop_tolerance&.to_f,
       promo_include_catalog: company.promo_include_catalog,
       ads_cost_days: company.ads_cost_days,
+      ads_daily_budget_max: company.ads_daily_budget_max&.to_f,
       promo_schedule_hour: company.promo_schedule_hour,
       promo_schedule_days: company.promo_schedule_days,
       promo_margin_basis: company.promo_margin_basis,

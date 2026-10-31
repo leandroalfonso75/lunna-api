@@ -293,5 +293,78 @@ RSpec.describe "/api/ads", type: :request do
       expect(json["queue"].map { |q| q["value"] }).to eq([ 22.0, 21.0 ])
       expect(json["next_round"].size).to eq(1)
     end
+
+    it "estrutura de campanhas: dividir família dominante, ativar fora de campanha, reativar pausado e respeitar o limite diário" do
+      company.update!(ads_daily_budget_max: 60)
+      yesterday = Date.current - 1
+      # campanha compartilhada (3 famílias) perdendo por classificação; família F1 concentra a verba com ROAS alto
+      campaign(1, name: "Geral")
+      MlAdCampaign.where(campaign_id: 1).update_all(auction: { "7d" => { "impression_share" => 0.3, "lost_by_budget" => 0.1, "lost_by_ad_rank" => 0.6, "consistent" => true } })
+      %w[F1 F2 F3].each_with_index do |f, i|
+        ad("MLB#{i + 1}", 1, {}, title: "Produto #{f}").update!(family_id: f, family_name: "Família #{f}", date_created: 90.days.ago)
+      end
+      item_day("MLB1", 1, yesterday, cost: 80, amount: 1600, clicks: 200, prints: 5000, units: 20)
+      item_day("MLB2", 1, yesterday, cost: 10, amount: 100, clicks: 40, prints: 1000, units: 2)
+      item_day("MLB3", 1, yesterday, cost: 10, amount: 90, clicks: 40, prints: 1000, units: 2)
+      # fora de campanha (idle) vendendo sozinho, com margem e estoque
+      ad("MLB9", nil, {}, title: "Sozinho", status: "idle")
+      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 6, revenue_30d: 600, stock: 12)
+      create(:ml_item, ml_account: account, item_id: "MLB9", fee_now: 16.5, ship_cost: 8.0)
+      MlCost.create!(company: company, sku: "SKU-9", cost: 30, extra: 0)
+      # pausado na publicidade que rendia nos 90 dias
+      ad("MLB8", 1, { "cost" => 90, "total_amount" => 900, "units_quantity" => 9 }, title: "Pausado", status: "paused")
+      create(:item_metric, ml_account: account, item_id: "MLB8", sku: "SKU-8", price: 100, stock: 5)
+      create(:ml_item, ml_account: account, item_id: "MLB8", fee_now: 16.5, ship_cost: 8.0)
+      MlCost.create!(company: company, sku: "SKU-8", cost: 30, extra: 0)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+
+      st = json["structure"]
+      expect(st["daily_max"]).to eq(60.0)
+      expect(st["current_daily"]).to eq(50.0)
+      by_type = st["suggestions"].group_by { |x| x["type"] }
+      split = by_type.fetch("dividir").first
+      expect(split).to include("title" => "Família F1", "from_campaign" => "Geral", "daily_budget" => 40, "within_limit" => true)
+      expect(split["to_campaign"]).to include("exclusiva")
+      expect(split["rationale"]).to include("80%").and include("perde 60% por classificação")
+      activate = by_type.fetch("ativar").first
+      expect(activate).to include("item_ids" => [ "MLB9" ], "daily_budget" => 1, "within_limit" => true, "from_campaign" => nil)
+      expect(activate["rationale"]).to include("Vende 6 un. em 30 dias sem Ads")
+      reactivate = by_type.fetch("reativar").first
+      expect(reactivate).to include("item_ids" => [ "MLB8" ], "to_campaign" => "Geral", "within_limit" => true)
+      expect(reactivate["rationale"]).to include("ROAS 10.0")
+      # dividir só realoca (sai dos R$ 50 da Geral); ativar e reativar são dinheiro novo dentro do teto de R$ 60
+      expect(st["plan"]).to include("reallocated_daily" => 40.0, "fits" => true)
+      expect(st["plan"]["after_daily"]).to be <= 60.0
+      expect(by_type).not_to have_key("reduzir")
+    end
+
+    it "sem limite diário o plano avisa; com teto apertado o dinheiro novo fica marcado e uma campanha abaixo do equilíbrio cede verba" do
+      yesterday = Date.current - 1
+      campaign(1, name: "Ruim")
+      ad("MLB1", 1, {}, title: "Perde").update!(family_id: "F1", family_name: "Perde", date_created: 90.days.ago)
+      create(:item_metric, ml_account: account, item_id: "MLB1", sku: "SKU-1", price: 100)
+      create(:ml_item, ml_account: account, item_id: "MLB1", fee_now: 16.5, ship_cost: 8.0)
+      MlCost.create!(company: company, sku: "SKU-1", cost: 60, extra: 0) # margem baixa → equilíbrio alto
+      item_day("MLB1", 1, yesterday, cost: 50, amount: 60, clicks: 40, prints: 1000, units: 1)
+      ad("MLB9", nil, {}, title: "Sozinho", status: "idle")
+      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 30, revenue_30d: 3000, stock: 12)
+      create(:ml_item, ml_account: account, item_id: "MLB9", fee_now: 16.5, ship_cost: 8.0)
+      MlCost.create!(company: company, sku: "SKU-9", cost: 30, extra: 0)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["structure"]["plan"]["note"]).to include("Configurações")
+      expect(json["structure"]["suggestions"].map { |x| x["type"] }).to eq([ "ativar" ])
+
+      company.update!(ads_daily_budget_max: 50) # já está no teto: o anúncio novo (R$ 4/dia) só cabe com redução
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      st = json["structure"]
+      activate = st["suggestions"].find { |x| x["type"] == "ativar" }
+      reduce = st["suggestions"].find { |x| x["type"] == "reduzir" }
+      expect(reduce).to include("from_campaign" => "Ruim", "daily_budget" => -25) # ROAS 1,2 < metade do equilíbrio: cede metade
+      expect(activate).to include("within_limit" => true)
+      expect(activate["note"]).to include("redução sugerida em Ruim")
+      expect(st["plan"]).to include("after_daily" => 29.0, "fits" => true)
+    end
   end
 end

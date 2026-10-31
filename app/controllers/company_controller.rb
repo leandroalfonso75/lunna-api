@@ -28,7 +28,7 @@ class CompanyController < ApplicationController
   def company_params
     params.permit(:name, :tax_pct, :min_margin_pct, :abc_cut_a, :abc_cut_b, :group_up_pct, :group_down_pct, :fixed_expenses_pct, :max_margin_pct, :promo_routine_enabled,
                   :promo_routine_mode, :promo_allow_margin_drop, :promo_margin_drop_tolerance, :promo_include_catalog, :ai_model,
-                  :promo_schedule_hour, :ads_cost_days, :promo_margin_basis, :promo_price_target, :promo_allow_price_increase, :promo_allow_lightning,
+                  :promo_schedule_hour, :ads_cost_days, :ads_daily_budget_max, :promo_margin_basis, :promo_price_target, :promo_allow_price_increase, :promo_allow_lightning,
                   promo_schedule_days: [])
   end
 
