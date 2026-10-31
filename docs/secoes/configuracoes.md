@@ -7,9 +7,11 @@ Cadastros da empresa e das contas conectadas.
   (chave e modelo do OpenRouter, por empresa). A rotina automática das Promoções (liga/desliga, modo, horário e dias)
   e as demais regras da automação ficam na aba **Promoções** desta tela (`components/settings/PromocoesTab.vue`, `PATCH /api/company` com `promo_*`), desde 30/10.
 - **Anúncios:** base do custo de Ads por unidade (últimos 7, 15 ou 30 dias fechados; `companies.ads_cost_days`),
-  usada em Anúncios (Custo Ads, Lucro pós Ads) e em Promoções (margem pós Ads); e o limite máximo de investimento
-  diário em Ads (`companies.ads_daily_budget_max`, R$, opcional), teto que as sugestões de estrutura de campanhas da
-  aba Análise de Ads respeitam.
+  usada em Anúncios (Custo Ads, Lucro pós Ads) e em Promoções (margem pós Ads).
+- **Ads:** limite máximo de investimento diário em Product Ads (`companies.ads_daily_budget_max`, R$, opcional, soma
+  dos orçamentos diários das campanhas ativas), teto que as sugestões de estrutura de campanhas (Ads → Análise)
+  respeitam: campanha nova sempre com orçamento diário e ROAS Objetivo a preencher; se não cabe, redução de orçamento
+  de outra campanha.
 - **Contas:** contas do Mercado Livre conectadas (conectar e remover). A conta é conectada por OAuth.
 - **Usuários:** administradores e membros da empresa.
 

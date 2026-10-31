@@ -6,7 +6,7 @@
 #     numa campanha compatível ou exclusiva, com orçamento dimensionado pelo TACOS alvo;
 #   - reativar: anúncio pausado na publicidade que rendia acima do equilíbrio nos 90 dias;
 #   - reduzir: campanha abaixo do equilíbrio cedendo verba quando o plano passa do limite diário.
-# Tudo respeita o limite máximo de investimento diário (`companies.ads_daily_budget_max`): o que não cabe fica marcado
+# Tudo respeita o limite máximo de investimento diário (`companies.ads_daily_budget_max`, Configurações → Ads): o que não cabe fica marcado
 # "só com realocação". Estimativas declaradas como tal (ver docs/secoes/ads.md).
 module Painel
   class AdsStructure
@@ -216,7 +216,7 @@ module Painel
       { current_daily: current.round(2), new_daily: new_money.select { |s| s[:within_limit] }.sum { |s| s[:daily_budget].to_f }.round(2),
         reallocated_daily: suggestions.select { |s| s[:frees_from] }.sum { |s| s[:daily_budget].to_f }.round(2),
         after_daily: after.round(2), daily_max: @max, fits: @max.nil? || after <= @max + 0.01,
-        note: @max.nil? ? "Informe o limite máximo de investimento diário em Configurações → Anúncios para o plano respeitar o teto." : nil }
+        note: @max.nil? ? "Informe o limite máximo de investimento diário em Configurações → Ads para o plano respeitar o teto." : nil }
     end
 
     def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v.to_f, unit: "R$", separator: ",", delimiter: ".")

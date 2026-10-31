@@ -76,7 +76,7 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
   - `reduzir`: só quando o plano estoura o teto: campanha ativa com ROAS abaixo do equilíbrio cede verba (metade do
     orçamento se o ROAS é menor que metade do equilíbrio, senão só o necessário).
   ROAS Objetivo sugerido: crescimento = 1,2× o equilíbrio (mín. 3,3); rentabilidade = 1,5× (mín. 6); ambos entre 1 e 35.
-  **Limite diário** (`companies.ads_daily_budget_max`, Configurações → Anúncios): soma dos orçamentos diários das
+  **Limite diário** (`companies.ads_daily_budget_max`, Configurações → Ads): soma dos orçamentos diários das
   campanhas ativas + dinheiro novo (ativar/reativar, por valor em jogo) nunca passa do teto; `dividir`/`mover` só realocam.
   O que não cabe fica `within_limit: false` com nota; se uma redução libera verba, passa a caber "só com a redução". Sem
   limite informado, o plano avisa (`plan.note`) e não aplica teto.
