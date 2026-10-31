@@ -247,6 +247,38 @@ RSpec.describe "/api/ads", type: :request do
       expect(json["closing"]["text"]).to include("TACOS")
     end
 
+    it "diagnostica uma família e uma campanha, e guarda decisões com o antes e o depois" do
+      campaign(1, name: "Maquiagens")
+      MlAdCampaign.where(campaign_id: 1).update_all(auction: { "7d" => { "impression_share" => 0.1, "lost_by_budget" => 0.05, "lost_by_ad_rank" => 0.85, "acos_benchmark" => 12.0, "consistent" => true } }, daily_budget: 50)
+      yesterday = Date.current - 1
+      ad("MLB3", 1, {}, title: "Pincel").update!(family_id: "F2", family_name: "Pincel", date_created: 90.days.ago)
+      item_day("MLB3", 1, yesterday, cost: 12, amount: 0, clicks: 3, prints: 600, units: 0)
+
+      get "/api/ads/diagnosis", params: { account_id: account.id, family: "F2" }, headers: auth_headers(member)
+      expect(json).to include("symptom" => "gasta_e_nao_vende")
+      expect(json["avoid"]).to include("Manter o anúncio ativo esperando melhora natural.")
+      expect(json["actions"].first["action"]).to include("Comparar preço")
+
+      get "/api/ads/diagnosis", params: { account_id: account.id, campaign_id: 1 }, headers: auth_headers(member)
+      expect(json).to include("symptom" => "perde_por_ad_rank")
+      expect(json["avoid"].first).to include("Aumentar o orçamento")
+
+      post "/api/ads/decisions", params: { account_id: account.id, key: "F2", signal: "gasto_sem_receita", status: "feito" }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+      post "/api/ads/decisions", params: { account_id: account.id, key: "F2", signal: "gasto_sem_receita", status: "feito" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+      expect(json).to include("status" => "feito", "class" => "desperdicio", "title" => "Pincel")
+      expect(json["before"]).to include("cost" => 12.0)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["decisions"].size).to eq(1)
+      expect(json["decisions"].first["after"]).to be_nil # ainda não passou um dia fechado
+      expect(json["queue"].find { |q| q["key"] == "F2" }["decided"]).to include("status" => "feito")
+
+      delete "/api/ads/decisions/#{MlAdDecision.last.id}", params: { account_id: account.id }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:no_content)
+    end
+
     it "respeita o máximo de ações e manda o resto para a próxima rodada" do
       campaign(1)
       yesterday = Date.current - 1

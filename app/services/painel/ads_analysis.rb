@@ -36,6 +36,34 @@ module Painel
 
     def self.call(account, max_actions: MAX_ACTIONS) = new(account, max_actions: max_actions).call
 
+    # Marca um item da fila (família/campanha + sinal) como feito ou ignorado, guardando o "antes".
+    def self.decide(account, attrs, user: nil)
+      analysis = call(account)
+      item = (analysis[:queue] + analysis[:next_round] + analysis[:watch]).find { |q| q[:key] == attrs[:key].to_s && q[:signal] == attrs[:signal].to_s }
+      return nil unless item
+
+      before = snapshot(analysis, item[:key])
+      account.ml_ad_decisions.create!(key: item[:key], signal: item[:signal], klass: item[:class], title: item[:title], action: item[:action],
+                                      value: item[:value], status: attrs[:status].to_s, before: before, user: user, decided_at: Time.current)
+    end
+
+    # Métricas da família/campanha no momento da decisão (os 7 dias fechados de então).
+    def self.snapshot(analysis, key)
+      row = if key.start_with?("campaign:")
+        analysis[:campaigns].find { |c| "campaign:#{c[:id]}" == key }
+      else
+        analysis[:families].find { |f| f[:key] == key }
+      end
+      m = row ? row[:metrics] : {}
+      { cost: m[:cost], revenue: m[:revenue], roas: m[:roas], clicks: m[:clicks], prints: m[:prints], tacos: analysis.dig(:health, :tacos),
+        period: analysis[:period].slice(:from, :to) }
+    end
+
+    def self.decision_payload(d, after: nil)
+      { id: d.id, key: d.key, signal: d.signal, class: d.klass, class_label: CLASSES.fetch(d.klass, d.klass), title: d.title, action: d.action,
+        value: d.value&.to_f, status: d.status, decided_at: d.decided_at, user: d.user&.name, before: d.before, after: after }
+    end
+
     def initialize(account, max_actions: MAX_ACTIONS)
       @account = account
       @company = account.company
@@ -60,6 +88,8 @@ module Painel
       attach_auction_signals(families, campaign_rows)
       queue, next_round, watch = build_queue(families, campaign_rows)
       health = health_block(days)
+      decisions = decisions_block(families, campaign_rows)
+      mark_decided!(queue + next_round + watch, decisions)
 
       {
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
@@ -72,6 +102,7 @@ module Painel
         queue: queue, next_round: next_round, watch: watch,
         untouchables: families.filter_map { |f| f[:untouchable] && { key: f[:key], name: f[:name], reason: f[:untouchable][:reason], until: f[:untouchable][:until] } },
         closing: closing(health, queue),
+        decisions: decisions,
         generated_at: Time.current
       }
     end
@@ -379,6 +410,40 @@ module Painel
         evidence: "aparece em #{pct(share)} das oportunidades; perde #{pct(a[:lost_by_ad_rank])} por classificação e #{pct(a[:lost_by_budget])} por orçamento; ACOS #{c[:metrics][:acos] || '—'}% contra benchmark #{a[:acos_benchmark]}%; ROAS Objetivo #{c[:roas_target] || '—'}.",
         action: "Baixar o ROAS Objetivo da campanha #{c[:name]}#{c[:roas_target] ? " de #{c[:roas_target]} para #{(c[:roas_target] * 0.8).round(1)}" : ''} para o lance subir, e melhorar capa/ficha dos anúncios de maior gasto; aumentar orçamento não compra posição.",
         check_before: "margem das famílias (ROAS Objetivo não pode ficar abaixo do equilíbrio)", reassess: "7 dias" }
+    end
+
+    # --- histórico de decisões ---
+
+    # Decisões dos últimos 30 dias com o "depois": as métricas da família/campanha nos 7 dias fechados seguintes à
+    # decisão (parcial enquanto não completam 7 dias), para ver se surtiu efeito.
+    def decisions_block(families, campaign_rows)
+      @account.ml_ad_decisions.where("decided_at > ?", 30.days.ago).order(decided_at: :desc).includes(:user).map do |d|
+        start = d.decided_at.in_time_zone(@zone).to_date + 1
+        finish = [ start + (DAYS - 1), @last ].min
+        after = start <= @last ? after_metrics(d.key, families, campaign_rows, start, finish) : nil
+        self.class.decision_payload(d, after: after)
+      end
+    end
+
+    def after_metrics(key, families, campaign_rows, from, to)
+      item_ids = if key.start_with?("campaign:")
+        cid = key.delete_prefix("campaign:").to_i
+        @account.ml_ad_items.where(campaign_id: cid).pluck(:item_id)
+      else
+        (families.find { |f| f[:key] == key }&.dig(:items) || []).map { |i| i[:item_id] }
+      end
+      rows = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: from..to).to_a
+      m = sum_metrics(rows)
+      m.slice(:cost, :revenue, :roas, :clicks, :prints).merge(from: from.iso8601, to: to.iso8601, days: (to - from).to_i + 1, partial: (to - from).to_i + 1 < DAYS)
+    end
+
+    # Item já decidido nos últimos 7 dias: fica marcado na fila (a tela mostra "feito em…" e não repete sem avisar).
+    def mark_decided!(entries, decisions)
+      recent = decisions.select { |d| d[:decided_at] > 7.days.ago }
+      entries.each do |e|
+        d = recent.find { |x| x[:key] == e[:key] && x[:signal] == e[:signal] }
+        e[:decided] = d && { id: d[:id], status: d[:status], at: d[:decided_at] }
+      end
     end
 
     # --- saúde da conta ---

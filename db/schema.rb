@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_020001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_31_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -163,6 +163,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_020001) do
     t.date "date", null: false
     t.datetime "fetched_at", null: false
     t.index ["ml_account_id", "date"], name: "index_ml_ad_day_syncs_unique", unique: true
+  end
+
+  create_table "ml_ad_decisions", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "key", null: false
+    t.string "signal", null: false
+    t.string "klass", null: false
+    t.string "title"
+    t.text "action"
+    t.decimal "value", precision: 12, scale: 2
+    t.string "status", null: false
+    t.jsonb "before", default: {}, null: false
+    t.uuid "user_id"
+    t.datetime "decided_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "key", "signal", "decided_at"], name: "idx_on_ml_account_id_key_signal_decided_at_1d40952a75"
+    t.index ["ml_account_id"], name: "index_ml_ad_decisions_on_ml_account_id"
+    t.index ["user_id"], name: "index_ml_ad_decisions_on_user_id"
   end
 
   create_table "ml_ad_item_dailies", force: :cascade do |t|
@@ -825,6 +844,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_020001) do
   add_foreign_key "ml_ad_campaigns", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_daily_metrics", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_day_syncs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_ad_decisions", "ml_accounts"
+  add_foreign_key "ml_ad_decisions", "users"
   add_foreign_key "ml_ad_item_dailies", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_catalog_checks", "ml_accounts"
