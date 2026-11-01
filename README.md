@@ -42,7 +42,7 @@ Pré-requisito: Docker. Não é preciso Ruby na máquina.
 
 ```bash
 cp .env.example .env                        # preencha ML_CLIENT_ID/SECRET
-docker compose up -d                        # postgres + api (http://localhost:3100) + jobs (Solid Queue)
+docker compose up -d                        # postgres + api (http://localhost:3100) + jobs (Solid Queue, com watchdog)
 docker compose exec api bin/rails db:seed   # empresa demo com dados fictícios (opcional)
 docker compose --profile web up -d          # também sobe o lunna-web (repo irmão em ../lunna-web) em :3101
 ```

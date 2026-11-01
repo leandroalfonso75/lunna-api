@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Roda o Solid Queue (bin/jobs) e vigia os Workers. Se nenhum Worker der heartbeat por 5 minutos (processo travado
+# depois de uma falha do Ruby, como em 01/11/2026), encerra tudo com erro para o Docker reiniciar o container
+# (restart: unless-stopped). Banco fora do ar (código 2) não derruba: só registra e tenta de novo.
+set -u
+cd "$(dirname "$0")/.."
+
+bin/jobs "$@" &
+JOBS_PID=$!
+trap 'kill -TERM "$JOBS_PID" 2>/dev/null; wait "$JOBS_PID"; exit 0' TERM INT
+
+sleep "${JOBS_WATCHDOG_GRACE:-180}" # tempo para o supervisor subir os workers
+while kill -0 "$JOBS_PID" 2>/dev/null; do
+  bundle exec ruby bin/jobs-heartbeat
+  status=$?
+  if [ "$status" -eq 1 ]; then
+    echo "[jobs-watchdog] $(date -u +%FT%TZ) nenhum Worker com heartbeat recente: reiniciando o container" >&2
+    kill -TERM "$JOBS_PID" 2>/dev/null
+    sleep 30
+    kill -KILL "$JOBS_PID" 2>/dev/null
+    exit 1
+  fi
+  sleep "${JOBS_WATCHDOG_INTERVAL:-120}"
+done
+wait "$JOBS_PID"
+exit $?

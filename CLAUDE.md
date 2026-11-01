@@ -28,6 +28,11 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 
 ## Comandos
 - Subir: `docker compose up` (api na 3000, `jobs`, postgres). No Windows, a porta é publicada só em IPv4.
+- Ruby 3.4.12 (Dockerfile e `.ruby-version`). As versões 3.3.12 e 3.3.10 derrubavam api e worker com `[BUG] Segmentation
+  fault` / `cfp consistency error`; ao trocar de Ruby, rode `docker compose run --rm api bundle install` (o volume
+  `gem_cache` guarda extensões nativas compiladas para a versão anterior).
+- O serviço `jobs` roda `bin/jobs-watchdog`: sobe o Solid Queue e, se nenhum Worker der heartbeat por 5 minutos
+  (`bin/jobs-heartbeat`), sai com erro para o Docker reiniciar (`restart: unless-stopped`).
 - Testes: `docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"`.
   Nunca rode o rspec sem `RAILS_ENV=test`: ele cairia no banco de desenvolvimento.
 - Estilo: `bundle exec rubocop`.

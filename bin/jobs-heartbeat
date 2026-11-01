@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# Sai com 0 se algum Worker do Solid Queue deu heartbeat nos últimos N minutos (padrão 5), 1 se não.
+# Leve de propósito (só a gem pg, sem carregar o Rails): roda a cada 2 minutos no bin/jobs-watchdog.
+require "bundler/setup"
+require "pg"
+
+begin
+  minutes = Integer(ENV.fetch("JOBS_HEARTBEAT_MINUTES", 5))
+  conn =
+    if ENV["DATABASE_URL"].to_s != ""
+      PG.connect(ENV["DATABASE_URL"])
+    else
+      PG.connect(host: ENV.fetch("DB_HOST", "localhost"), user: ENV.fetch("DB_USER", "postgres"), password: ENV["DB_PASSWORD"],
+                 dbname: "lunna_api_#{ENV.fetch("RAILS_ENV", "development")}")
+    end
+  alive = conn.exec_params(
+    "SELECT count(*) FROM solid_queue_processes WHERE kind = 'Worker' AND last_heartbeat_at > now() - make_interval(mins => $1)",
+    [ minutes ]
+  ).getvalue(0, 0).to_i
+  conn.close
+  exit(alive.positive? ? 0 : 1)
+rescue PG::Error => e
+  warn "[jobs-heartbeat] banco indisponível: #{e.message}"
+  exit 2
+end

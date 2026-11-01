@@ -95,6 +95,7 @@ GEM
       bigdecimal
       rexml
     crass (1.0.7)
+    csv (3.3.7)
     date (3.5.1)
     debug (1.11.1)
       irb (~> 1.10)
@@ -351,6 +352,7 @@ DEPENDENCIES
   bootsnap
   brakeman
   bundler-audit
+  csv
   debug
   factory_bot_rails
   faraday
