@@ -83,6 +83,7 @@ module Painel
       sorted = sort(rows)
       page, per = paging
       slice = sorted.slice((page - 1) * per, per) || []
+      attach_carts!(slice)
 
       {
         period: { from: from.iso8601, to: to.iso8601, preset: preset_key },
@@ -429,6 +430,18 @@ module Painel
     end
 
     # --- totais ---
+
+    # Pedidos do mesmo carrinho (pack_id com 2+ pedidos), sem olhar filtros nem página: cada linha ganha
+    # `cart: { pack_id, size, position, order_ids }` para a lista indicar que pertencem à mesma venda; `nil` fora disso.
+    def attach_carts!(rows)
+      packs = rows.filter_map { |r| r[:pack_id] }.uniq
+      groups = packs.empty? ? {} : @account.ml_orders.where(pack_id: packs).order(:date_created, :order_id).pluck(:pack_id, :order_id)
+        .group_by(&:first).transform_values { |list| list.map(&:last) }
+      rows.each do |r|
+        ids = groups[r[:pack_id]]
+        r[:cart] = ids && ids.size > 1 ? { pack_id: r[:pack_id], size: ids.size, position: ids.index(r[:order_id]).to_i + 1, order_ids: ids } : nil
+      end
+    end
 
     # Uma venda = um carrinho do ML (pack_id) quando houver, senão o pedido. Carrinho com 2 produtos são 2 pedidos no
     # ML e 1 venda no Olist e na tela de vendas do ML; a lista continua por pedido.

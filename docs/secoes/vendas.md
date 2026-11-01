@@ -8,8 +8,10 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   fixas e custo dos produtos. Vendas canceladas ficam fora dos totais (só aparecem contadas).
 - **Contagem de vendas:** uma venda = um carrinho do Mercado Livre (`pack_id`) quando houver, senão o pedido. Carrinho
   com dois produtos são dois pedidos no ML e uma venda no Olist e na tela de vendas do ML; o Lunna conta igual nos
-  totais, no ticket médio, nas barras por dia, no gráfico da Visão geral e no card "Hoje". A lista segue por pedido
-  (pedido a pedido, com o carrinho visível pelo `pack_id`). Decisão do usuário em 01/11/2026.
+  totais, no ticket médio, nas barras por dia, no gráfico da Visão geral e no card "Hoje". A lista segue por pedido;
+  pedidos do mesmo carrinho ganham o selo "Mesmo pedido · 1/2" (balão com o carrinho e os outros pedidos) e um filete
+  azul à esquerda (`cart` em cada linha de `GET /api/sales`, calculado sem filtros nem página). Decisão do usuário em
+  01/11/2026.
 - **Gráfico:** faturamento por dia, com vendas e lucro no balão.
 - **Filtros:** situação da venda (todas, pagas, canceladas), situação do envio (preparando, a caminho, entregues, com
   problema), logística (Full, Flex, Coleta, Agência, outras), com contagens, e **busca** por nº da venda, produto, SKU,

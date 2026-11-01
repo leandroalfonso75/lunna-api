@@ -365,5 +365,10 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["summary"]).to include("orders" => 2, "units" => 6, "revenue" => 600.0)
     expect(json["summary"]["ticket"]).to eq(300.0)
     expect(json["daily"].sum { |d| d["orders"] }).to eq(2)
+    carts = json["sales"].to_h { |r| [ r["order_id"], r["cart"] ] }
+    expect(carts[1]).to include("pack_id" => 900, "size" => 2, "order_ids" => [ 1, 2 ])
+    expect(carts[2]["order_ids"]).to eq([ 1, 2 ])
+    expect(carts.values_at(1, 2).map { |c| c["position"] }).to contain_exactly(1, 2)
+    expect(carts[3]).to be_nil
   end
 end
