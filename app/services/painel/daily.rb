@@ -40,9 +40,11 @@ module Painel
 
     def orders_by_day
       sql = <<~SQL
-        SELECT order_day, SUM(quantity) AS units, SUM(quantity * unit_price) AS revenue, COUNT(DISTINCT order_id) AS orders
+        SELECT order_day, SUM(quantity) AS units, SUM(quantity * unit_price) AS revenue, COUNT(DISTINCT sale_key) AS orders
         FROM (
+          -- venda = carrinho (pack_id) quando houver, senão o pedido: como o Olist e a tela de vendas do ML contam
           SELECT ml_order_items.order_id, ml_order_items.quantity, ml_order_items.unit_price,
+                 COALESCE(ml_orders.pack_id, ml_orders.order_id) AS sale_key,
                  (ml_orders.date_created AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::date AS order_day
           FROM ml_order_items
           INNER JOIN ml_orders ON ml_orders.order_id = ml_order_items.order_id

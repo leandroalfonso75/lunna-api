@@ -19,7 +19,7 @@ module Painel
     def today_card
       {
         key: "today", label: "Hoje até agora", value: @today[:revenue], value_type: "money",
-        sub_label: "#{@today[:units]} un. · #{@today[:orders]} pedidos", delta: nil
+        sub_label: "#{@today[:units]} un. · #{@today[:orders]} vendas", delta: nil
       }
     end
 

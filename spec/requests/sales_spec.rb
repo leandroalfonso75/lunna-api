@@ -353,4 +353,17 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["period"]["from"]).to start_with("2026-10-01")
     expect(json["period"]["to"]).to start_with("2026-10-30")
   end
+
+  it "carrinho com dois produtos (mesmo pack_id) é uma venda nos totais; a lista segue por pedido" do
+    sale(1).update!(pack_id: 900)
+    sale(2).update!(pack_id: 900)
+    sale(3)
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(json["sales"].size).to eq(3)
+    expect(json["summary"]).to include("orders" => 2, "units" => 6, "revenue" => 600.0)
+    expect(json["summary"]["ticket"]).to eq(300.0)
+    expect(json["daily"].sum { |d| d["orders"] }).to eq(2)
+  end
 end

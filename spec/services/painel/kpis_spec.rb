@@ -17,7 +17,7 @@ RSpec.describe Painel::Kpis do
   it "'hoje até agora' vem do daily, sem delta" do
     card = described_class.call(metrics, daily).first
 
-    expect(card).to include(value: 150.0, value_type: "money", sub_label: "3 un. · 2 pedidos", delta: nil)
+    expect(card).to include(value: 150.0, value_type: "money", sub_label: "3 un. · 2 vendas", delta: nil)
   end
 
   it "delta em % pra vendas/faturado/visitas, direção flat/up/down" do

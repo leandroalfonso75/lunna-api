@@ -6,6 +6,18 @@ RSpec.describe Painel::Daily do
 
   def sp_time(date, hour) = Time.zone.local(date.year, date.month, date.day, hour)
 
+  it "carrinho com dois produtos (dois pedidos no mesmo pack_id) conta como uma venda, como no Olist" do
+    item = create(:ml_item, ml_account: account, item_id: "MLB1", price: 10)
+    [ [ 1, 77 ], [ 2, 77 ], [ 3, nil ] ].each do |id, pack|
+      MlOrder.create!(order_id: id, pack_id: pack, ml_account: account, status: "paid", date_created: sp_time(today - 1, 10), total_amount: 10, synced_at: Time.current)
+      MlOrderItem.create!(order_id: id, item_id: item.item_id, quantity: 1, unit_price: 10, sale_fee: 1)
+    end
+
+    day = described_class.call(account, today: today)[:daily].find { |d| d[:day] == (today - 1).iso8601 }
+
+    expect(day).to include(units: 3, orders: 2)
+  end
+
   it "monta os 15 dias (D-14..D) com unidades, faturamento, pedidos distintos e visitas" do
     item = create(:ml_item, ml_account: account, item_id: "MLB1", price: 10)
 

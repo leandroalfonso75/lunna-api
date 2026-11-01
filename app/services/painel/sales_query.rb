@@ -430,6 +430,10 @@ module Painel
 
     # --- totais ---
 
+    # Uma venda = um carrinho do ML (pack_id) quando houver, senão o pedido. Carrinho com 2 produtos são 2 pedidos no
+    # ML e 1 venda no Olist e na tela de vendas do ML; a lista continua por pedido.
+    def sales_count(rows) = rows.map { |r| r[:pack_id] || r[:order_id] }.uniq.size
+
     # filtered: com filtro ou busca na tela, o gasto de anúncios sem venda não tem como ser atribuído e fica de fora.
     def summary(rows, filtered: false)
       active = rows.select { |r| r[:economics] }
@@ -442,9 +446,9 @@ module Painel
       after_ads = known.sum { |r| r[:economics][:net_profit_after_ads] } - unsold.to_f
 
       {
-        orders: active.size, units: active.sum { |r| r[:units] },
-        cancelled: rows.size - active.size,
-        revenue: revenue, ticket: active.empty? ? nil : revenue / active.size,
+        orders: sales_count(active), units: active.sum { |r| r[:units] },
+        cancelled: sales_count(rows - active),
+        revenue: revenue, ticket: active.empty? ? nil : revenue / sales_count(active),
         fee: active.sum { |r| r[:economics][:fee] },
         shipping_cost: active.sum { |r| r[:economics][:shipping_cost] },
         tax: active.sum { |r| r[:economics][:tax] },
@@ -464,7 +468,7 @@ module Painel
       by_day = rows.select { |r| r[:economics] }.group_by { |r| r[:date_created].in_time_zone(@zone).to_date }
       (from.to_date..to.to_date).map do |day|
         list = by_day[day] || []
-        { date: day.iso8601, orders: list.size, units: list.sum { |r| r[:units] },
+        { date: day.iso8601, orders: sales_count(list), units: list.sum { |r| r[:units] },
           revenue: list.sum { |r| r[:economics][:revenue] },
           net_profit: list.sum { |r| r[:economics][:net_profit].to_f } }
       end

@@ -6,6 +6,10 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
 - **Período:** Hoje (padrão ao abrir), Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas (no máximo 92 dias para trás).
 - **Resumo:** vendas, faturamento (e ticket médio), lucro líquido (e % do faturamento), tarifas + frete, imposto + despesas
   fixas e custo dos produtos. Vendas canceladas ficam fora dos totais (só aparecem contadas).
+- **Contagem de vendas:** uma venda = um carrinho do Mercado Livre (`pack_id`) quando houver, senão o pedido. Carrinho
+  com dois produtos são dois pedidos no ML e uma venda no Olist e na tela de vendas do ML; o Lunna conta igual nos
+  totais, no ticket médio, nas barras por dia, no gráfico da Visão geral e no card "Hoje". A lista segue por pedido
+  (pedido a pedido, com o carrinho visível pelo `pack_id`). Decisão do usuário em 01/11/2026.
 - **Gráfico:** faturamento por dia, com vendas e lucro no balão.
 - **Filtros:** situação da venda (todas, pagas, canceladas), situação do envio (preparando, a caminho, entregues, com
   problema), logística (Full, Flex, Coleta, Agência, outras), com contagens, e **busca** por nº da venda, produto, SKU,
