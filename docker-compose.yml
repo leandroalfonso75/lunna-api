@@ -19,6 +19,10 @@ x-app: &app
     API_URL: http://localhost:3100
     FRONT_URL: http://localhost:3101
     CORS_ORIGINS: http://localhost:3101
+    # Cache do bootsnap dentro de cada container, fora da pasta montada do Windows: api e jobs gravando no mesmo
+    # tmp/cache/bootsnap corrompiam o bytecode (quedas com [BUG] Segmentation fault / cfp consistency error e
+    # NoMethodError sem sentido dentro do Rails, em 31/10 a 02/11).
+    BOOTSNAP_CACHE_DIR: /tmp/bootsnap
   volumes:
     - .:/app
     - gem_cache:/usr/local/bundle

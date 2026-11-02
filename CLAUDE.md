@@ -31,6 +31,9 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 - Ruby 3.4.12 (Dockerfile e `.ruby-version`). As versões 3.3.12 e 3.3.10 derrubavam api e worker com `[BUG] Segmentation
   fault` / `cfp consistency error`; ao trocar de Ruby, rode `docker compose run --rm api bundle install` (o volume
   `gem_cache` guarda extensões nativas compiladas para a versão anterior).
+- `BOOTSNAP_CACHE_DIR=/tmp/bootsnap` no compose: cada container (api, jobs) tem o próprio cache do bootsnap. Com o cache
+  em `tmp/cache` da pasta montada do Windows, os dois gravando juntos corrompiam o bytecode (quedas com `[BUG]` e
+  `NoMethodError` sem sentido dentro do Rails, mesmo no Ruby 3.4). Não volte o cache para a pasta montada.
 - O serviço `jobs` roda `bin/jobs-watchdog`: sobe o Solid Queue e, se nenhum Worker der heartbeat por 5 minutos
   (`bin/jobs-heartbeat`), sai com erro para o Docker reiniciar (`restart: unless-stopped`).
 - Testes: `docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"`.
