@@ -16,6 +16,9 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
 - **Filtros:** situação da venda (todas, pagas, canceladas), situação do envio (preparando, a caminho, entregues, com
   problema), logística (Full, Flex, Coleta, Agência, outras), com contagens, e **busca** por nº da venda, produto, SKU,
   anúncio, comprador ou rastreio.
+- **Coluna Envio:** situação do envio e, abaixo, o oval do logotipo do Mercado Livre (origem da venda) seguido do selo da
+  forma de envio: imagem para Full e Agência (`public/logistica/` no lunna-web-radar: `ml-oval.png`, `full.png` com
+  fundo transparente, `agencia.png`); Flex, Coleta e as demais ficam em texto. Pedido do usuário em 02/11/2026.
 - **Tabela:** data, produto (foto, SKU, unidades), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
   Colunas de valores: valor, tarifa, frete, imposto, despesas fixas, custo, **lucro líquido**, **Custo Ads** e **Lucro pós
   Ads** (% em cima, R$ embaixo). Resumo com os cartões "Custo com Ads" e "Lucro pós Ads". Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
