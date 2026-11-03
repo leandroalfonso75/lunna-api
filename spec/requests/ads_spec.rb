@@ -306,63 +306,70 @@ RSpec.describe "/api/ads", type: :request do
       expect(json["structure"]["current_daily"]).to eq(55.0)
     end
 
-    it "estrutura de campanhas: dividir família dominante, ativar fora de campanha, reativar pausado e respeitar o limite diário" do
+    it "estrutura de campanhas: rodada coerente (dividir pelo gasto real, ROAS gradual, ativar, sem reativar pausado) e trava de 7 dias" do
       company.update!(ads_daily_budget_max: 60)
       yesterday = Date.current - 1
-      # campanha compartilhada (3 famílias) perdendo por classificação; família F1 concentra a verba com ROAS alto
+      # campanha compartilhada (3 famílias) perdendo por classificação; família F1 concentra o gasto com ROAS alto
       campaign(1, name: "Geral")
-      MlAdCampaign.where(campaign_id: 1).update_all(auction: { "7d" => { "impression_share" => 0.3, "lost_by_budget" => 0.1, "lost_by_ad_rank" => 0.6, "consistent" => true } })
+      MlAdCampaign.where(campaign_id: 1).update_all(roas_target: 20, auction: { "7d" => { "impression_share" => 0.3, "lost_by_budget" => 0.1, "lost_by_ad_rank" => 0.6, "consistent" => true } })
       %w[F1 F2 F3].each_with_index do |f, i|
         ad("MLB#{i + 1}", 1, {}, title: "Produto #{f}").update!(family_id: f, family_name: "Família #{f}", date_created: 90.days.ago)
       end
+      # custo real da F1: margem ~31% → equilíbrio 3,21
+      create(:item_metric, ml_account: account, item_id: "MLB1", sku: "SKU-1", price: 100)
+      create(:ml_item, ml_account: account, item_id: "MLB1", fee_now: 16.5, ship_cost: 8.0)
+      MlCost.create!(company: company, sku: "SKU-1", cost: 30, extra: 0)
       item_day("MLB1", 1, yesterday, cost: 80, amount: 1600, clicks: 200, prints: 5000, units: 20)
       item_day("MLB2", 1, yesterday, cost: 10, amount: 100, clicks: 40, prints: 1000, units: 2)
       item_day("MLB3", 1, yesterday, cost: 10, amount: 90, clicks: 40, prints: 1000, units: 2)
-      # fora de campanha (idle) vendendo sozinho, com margem e estoque
+      # fora de campanha (idle) vendendo sozinho, com margem, custo e estoque
       ad("MLB9", nil, {}, title: "Sozinho", status: "idle")
-      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 6, revenue_30d: 600, stock: 12)
+      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 60, revenue_30d: 6000, stock: 12)
       create(:ml_item, ml_account: account, item_id: "MLB9", fee_now: 16.5, ship_cost: 8.0)
       MlCost.create!(company: company, sku: "SKU-9", cost: 30, extra: 0)
-      # pausado na publicidade que rendia nos 90 dias
+      # pausado na publicidade que rendia: a pausa é decisão do vendedor, não vira sugestão
       ad("MLB8", 1, { "cost" => 90, "total_amount" => 900, "units_quantity" => 9 }, title: "Pausado", status: "paused")
-      create(:item_metric, ml_account: account, item_id: "MLB8", sku: "SKU-8", price: 100, stock: 5)
+      create(:item_metric, ml_account: account, item_id: "MLB8", sku: "SKU-8", price: 100, stock: 50)
       create(:ml_item, ml_account: account, item_id: "MLB8", fee_now: 16.5, ship_cost: 8.0)
       MlCost.create!(company: company, sku: "SKU-8", cost: 30, extra: 0)
 
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
 
       st = json["structure"]
-      expect(st["daily_max"]).to eq(60.0)
       expect(st["current_daily"]).to eq(50.0)
       by_type = st["suggestions"].group_by { |x| x["type"] }
+      expect(by_type.keys).to contain_exactly("dividir", "ativar")
       split = by_type.fetch("dividir").first
-      expect(split).to include("title" => "Família F1", "from_campaign" => "Geral", "daily_budget" => 40, "within_limit" => true)
-      expect(split["to_campaign"]).to include("exclusiva")
-      expect(split["rationale"]).to include("80%").and include("perde 60% por classificação")
+      # as outras famílias gastam ~R$ 2,86/dia → a Geral fica com R$ 5 e o resto vai para a exclusiva, sem dinheiro novo
+      expect(split).to include("title" => "Família F1", "from_campaign" => "Geral", "daily_budget" => 45.0, "new_money" => 0.0,
+                               "origin_budget_after" => 5.0, "keep_origin_roas" => 20.0)
+      # ROAS Objetivo: começa 20% abaixo do praticado (20 → 16) e o piso é equilíbrio × 1,35
+      expect(split).to include("roas_target" => 16.0, "roas_floor" => 4.3)
       activate = by_type.fetch("ativar").first
-      expect(activate).to include("item_ids" => [ "MLB9" ], "daily_budget" => 1, "within_limit" => true, "from_campaign" => nil)
-      expect(activate["rationale"]).to include("Vende 6 un. em 30 dias sem Ads")
-      reactivate = by_type.fetch("reativar").first
-      expect(reactivate).to include("item_ids" => [ "MLB8" ], "to_campaign" => "Geral", "within_limit" => true)
-      expect(reactivate["rationale"]).to include("ROAS 10.0")
-      # dividir só realoca (sai dos R$ 50 da Geral); ativar e reativar são dinheiro novo dentro do teto de R$ 60
-      expect(st["plan"]).to include("reallocated_daily" => 40.0, "fits" => true)
-      expect(st["plan"]["after_daily"]).to be <= 60.0
-      expect(by_type).not_to have_key("reduzir")
+      # R$ 200/dia orgânicos × 3,5% = R$ 7/dia; a Geral já foi mexida nesta rodada → campanha exclusiva
+      expect(activate).to include("item_ids" => [ "MLB9" ], "daily_budget" => 7, "within_limit" => true, "roas_target" => 6.4, "roas_floor" => 4.3)
+      expect(activate["to_campaign"]).to include("exclusiva")
+      ledger = st["plan"]["campaigns"].to_h { |c| [ c["name"], c ] }
+      expect(ledger["Geral"]).to include("budget_before" => 50.0, "budget_after" => 5.0, "roas_after" => 20.0)
+      expect(ledger[split["to_campaign"]]).to include("new" => true, "budget_after" => 45.0, "roas_after" => 16.0)
+      expect(st["plan"]).to include("after_daily" => 57.0, "fits" => true, "reallocated_daily" => 45.0, "new_daily" => 7.0)
+      expect(st["round"]).to include("cadence_days" => 7, "locked" => [])
 
-      # Feito/Ignorar também nas sugestões de estrutura
+      # Feito na divisão: a Geral (e a família) ficam travadas por 7 dias e saem da rodada
       post "/api/ads/decisions", params: { account_id: account.id, key: split["key"], signal: "estrutura_dividir", status: "feito" }, headers: auth_headers(admin)
       expect(response).to have_http_status(:created)
       expect(json).to include("status" => "feito", "class" => "estrutura", "class_label" => "Estrutura de campanhas", "title" => "Família F1")
-      expect(json["action"]).to include("De Geral para nova:").and include("Orçamento +R$ 40/dia")
-      expect(json["before"]).to include("cost" => 80.0)
+      expect(json["action"]).to include("De Geral para nova:").and include("Orçamento +R$ 45/dia").and include("ROAS Objetivo 16.0 (piso 4.3)")
+      expect(json["before"]).to include("cost" => 80.0, "campaign_ids" => [ 1 ])
       post "/api/ads/decisions", params: { account_id: account.id, key: "item:MLB9", signal: "estrutura_ativar", status: "ignorado" }, headers: auth_headers(admin)
       expect(response).to have_http_status(:created)
 
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
-      marked = json["structure"]["suggestions"].to_h { |x| [ x["key"], x["decided"] ] }
-      expect(marked[split["key"]]).to include("status" => "feito")
-      expect(marked["item:MLB9"]).to include("status" => "ignorado")
+      st = json["structure"]
+      expect(st["round"]["locked"].map { |l| l["name"] }).to eq([ "Geral" ])
+      expect(st["round"]["next_round_on"]).to eq((Time.current.in_time_zone("America/Sao_Paulo").to_date + 7).iso8601)
+      expect(st["suggestions"].map { |x| x["type"] }).to eq([ "ativar" ]) # ignorado não trava; segue marcado
+      expect(st["suggestions"].first["decided"]).to include("status" => "ignorado")
     end
 
     it "sem limite diário o plano avisa; com teto apertado o dinheiro novo fica marcado e uma campanha abaixo do equilíbrio cede verba" do
@@ -374,7 +381,7 @@ RSpec.describe "/api/ads", type: :request do
       MlCost.create!(company: company, sku: "SKU-1", cost: 60, extra: 0) # margem baixa → equilíbrio alto
       item_day("MLB1", 1, yesterday, cost: 50, amount: 60, clicks: 40, prints: 1000, units: 1)
       ad("MLB9", nil, {}, title: "Sozinho", status: "idle")
-      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 30, revenue_30d: 3000, stock: 12)
+      create(:item_metric, ml_account: account, item_id: "MLB9", sku: "SKU-9", price: 100, units_30d: 60, revenue_30d: 6000, stock: 12)
       create(:ml_item, ml_account: account, item_id: "MLB9", fee_now: 16.5, ship_cost: 8.0)
       MlCost.create!(company: company, sku: "SKU-9", cost: 30, extra: 0)
 
@@ -382,15 +389,15 @@ RSpec.describe "/api/ads", type: :request do
       expect(json["structure"]["plan"]["note"]).to include("Configurações")
       expect(json["structure"]["suggestions"].map { |x| x["type"] }).to eq([ "ativar" ])
 
-      company.update!(ads_daily_budget_max: 50) # já está no teto: o anúncio novo (R$ 4/dia) só cabe com redução
+      company.update!(ads_daily_budget_max: 50) # já está no teto: o anúncio novo (R$ 7/dia) só cabe com redução
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
       st = json["structure"]
       activate = st["suggestions"].find { |x| x["type"] == "ativar" }
       reduce = st["suggestions"].find { |x| x["type"] == "reduzir" }
-      expect(reduce).to include("from_campaign" => "Ruim", "daily_budget" => -25) # ROAS 1,2 < metade do equilíbrio: cede metade
+      expect(reduce).to include("from_campaign" => "Ruim", "daily_budget" => -7) # só o necessário
       expect(activate).to include("within_limit" => true)
       expect(activate["note"]).to include("redução sugerida em Ruim")
-      expect(st["plan"]).to include("after_daily" => 29.0, "fits" => true)
+      expect(st["plan"]).to include("after_daily" => 50.0, "fits" => true)
     end
   end
 end

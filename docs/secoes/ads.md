@@ -64,25 +64,38 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
   seguintes, parcial até completar) aparece no bloco "Decisões dos últimos 30 dias". Item decidido nos últimos 7 dias
   fica marcado na fila.
 - **Estrutura de campanhas** (`Painel::AdsStructure`, bloco "Estrutura de campanhas", chave `structure` da análise; só
-  recomendação, a execução é no Seller Center). Sugestões, cada uma com campanha de origem/destino, orçamento diário,
-  ROAS Objetivo sugerido, valor em jogo, racional em números, efeito esperado (declarado como estimativa) e o que checar:
-  - `dividir`: campanha ativa com ≥ 3 famílias, gasto relevante e leilão consistente perdendo ≥ 50% por classificação ou
-    ≥ 20% por orçamento, em que uma família concentra ≥ 25% da verba, rende ≥ o seu equilíbrio e tem amostra de conversão
-    → campanha exclusiva (share exato, orçamento e ROAS Objetivo próprios), levando a parcela da verba (realocação);
-  - `mover`: família com sinal `abaixo_do_equilibrio` numa campanha compartilhada cujo ROAS Objetivo não é de
-    rentabilidade para ela (< 1,5× o equilíbrio) → campanha de rentabilidade com ROAS Objetivo ≥ 1,5× o equilíbrio (mín. 6);
-  - `ativar`: anúncio fora de campanha (`idle`) com margem positiva, estoque e (≥ 3 vendas orgânicas em 30 dias ou
-    recomendado pelo ML) → campanha ativa do mesmo `domain_id` que rende ≥ o equilíbrio dele, senão exclusiva; orçamento
-    = receita diária orgânica × TACOS 3,5% (mín. R$ 1); valor = +27% das vendas em 7 dias (média citada pela plataforma);
-  - `reativar`: anúncio pausado na publicidade cujo ROAS dos 90 dias (`metrics["90d"]`) ≥ equilíbrio, com estoque →
-    volta na campanha atual com a média diária de gasto dos 90 dias (mín. R$ 2);
-  - `reduzir`: só quando o plano estoura o teto: campanha ativa com ROAS abaixo do equilíbrio cede verba (metade do
-    orçamento se o ROAS é menor que metade do equilíbrio, senão só o necessário).
-  ROAS Objetivo sugerido: crescimento = 1,2× o equilíbrio (mín. 3,3); rentabilidade = 1,5× (mín. 6); ambos entre 1 e 35.
-  **Limite diário** (`companies.ads_daily_budget_max`, Configurações → Ads): soma dos orçamentos diários das
-  campanhas ativas + dinheiro novo (ativar/reativar, por valor em jogo) nunca passa do teto; `dividir`/`mover` só realocam.
-  O que não cabe fica `within_limit: false` com nota; se uma redução libera verba, passa a caber "só com a redução". Sem
-  limite informado, o plano avisa (`plan.note`) e não aplica teto.
+  recomendação, a execução é no Seller Center). Montada como **uma rodada semanal coerente** (regras do usuário em
+  03/11/2026, depois de conflitos entre sugestões): cada sugestão é lançada num razão por campanha (orçamento e ROAS
+  Objetivo antes → depois, `plan.campaigns`) e só entra se não conflitar com o que a rodada já mudou.
+  - **Rodada e travas:** decisão "Feito" (fila ou estrutura) trava a família/anúncio e as campanhas envolvidas por 7 dias
+    (aprendizado do ML e janela do "depois"); as campanhas do momento da decisão ficam em `before.campaign_ids`, então a
+    trava continua mesmo depois que o anúncio muda de campanha. `round`: `cadence_days` 7, `last_round_at` (último
+    "Feito" de estrutura), `next_round_on` (+7 dias) e `locked` (campanha + `until_on`). Uma mudança estrutural por
+    campanha por rodada; até 7 sugestões por rodada, por valor (o resto em `next_round`).
+  - `dividir`: campanha ativa livre com ≥ 3 famílias, gasto relevante e leilão consistente perdendo ≥ 50% por
+    classificação ou ≥ 20% por orçamento; família só nessa campanha, com **equilíbrio real** (custo conhecido; nunca a
+    referência 3,33), ≥ 25% do gasto, ROAS ≥ equilíbrio e amostra de conversão. A origem fica com o que as outras
+    famílias gastam de fato (média diária, arredondada para cima em R$ 5) e mantém o ROAS Objetivo; a exclusiva recebe o
+    resto (ou o gasto real da família, se maior: a diferença é dinheiro novo, `new_money`). ROAS Objetivo da exclusiva:
+    começa 20% abaixo do menor entre o praticado e o da origem e desce até 20% por semana; piso = equilíbrio × 1,35
+    (`roas_floor`, ≈ 5% de lucro depois do Ads).
+  - `mover`: família com sinal `abaixo_do_equilibrio` (equilíbrio real) numa campanha livre cujo ROAS Objetivo é menor
+    que equilíbrio × 1,35 → campanha de rentabilidade com ROAS Objetivo 1,5× o equilíbrio, levando o gasto dela.
+  - `ativar`: anúncio fora de campanha (`idle`) com custo conhecido, margem positiva, estoque ≥ 10 e (≥ 3 vendas orgânicas
+    em 30 dias ou recomendado pelo ML); família que já tem anúncio ativo não ganha outro (nem dois na mesma rodada).
+    Destino: a exclusiva da mesma família criada nesta rodada; senão uma campanha ativa livre do mesmo `domain_id` cujo
+    ROAS Objetivo ≥ 1,2× o equilíbrio do anúncio (vale o ROAS da campanha, sem ROAS por anúncio); senão exclusiva só se o
+    orçamento for ≥ R$ 5 (ROAS 2× o equilíbrio, mín. 3,3). Orçamento = receita diária orgânica × TACOS 3,5% (mín. R$ 1);
+    valor = +27% das vendas em 7 dias (média citada pela plataforma).
+  - **Não há "reativar":** anúncio pausado na publicidade foi pausado pelo vendedor (estoque, preço, venda no prejuízo
+    para girar caixa) e não é sugerido.
+  - `reduzir`: só quando o total depois da rodada passa do limite: campanha livre com ROAS abaixo do equilíbrio cede
+    só o necessário (até metade do orçamento).
+  **Limite diário** (`companies.ads_daily_budget_max`, Configurações → Ads) sobre o total das campanhas depois da rodada:
+  dinheiro novo que não cabe fica `within_limit: false` (e sai do razão); se uma redução libera verba, passa a caber "só
+  com a redução". Sem limite informado, o plano avisa (`plan.note`).
+  **Periodicidade:** a análise é recalculada ao abrir a aba, com os dados de Ads lidos a cada 30 minutos (ontem e hoje) e
+  completos a cada 3 horas; as mudanças de estrutura seguem a rodada semanal (data em `round.next_round_on`).
 
 ## Dados e atualização
 - **Leilão por campanha** (`ml_ad_campaigns.auction`, lido no detalhe de cada campanha a cada sync completa): impression

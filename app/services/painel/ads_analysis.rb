@@ -62,8 +62,8 @@ module Painel
       (analysis.dig(:structure, :suggestions) || []).map do |s|
         { key: s[:key], signal: "estrutura_#{s[:type]}", class: "estrutura", title: s[:title],
           action: [ s[:from_campaign] && s[:to_campaign] ? "De #{s[:from_campaign]} para #{s[:to_campaign]}." : (s[:to_campaign] && "Para #{s[:to_campaign]}."),
-                    s[:daily_budget] ? "Orçamento #{s[:daily_budget].negative? ? '−' : '+'}R$ #{s[:daily_budget].abs}/dia" : nil,
-                    s[:roas_target] ? "ROAS Objetivo #{s[:roas_target]}." : nil ].compact.join(" "),
+                    s[:daily_budget] ? "Orçamento #{s[:daily_budget].negative? ? '−' : '+'}R$ #{format('%.0f', s[:daily_budget].abs)}/dia" : nil,
+                    s[:roas_target] ? "ROAS Objetivo #{s[:roas_target]}#{s[:roas_floor] && s[:roas_floor] != s[:roas_target] ? " (piso #{s[:roas_floor]})" : ''}." : nil ].compact.join(" "),
           value: s[:value] }
       end
     end
@@ -77,8 +77,10 @@ module Painel
           (key.start_with?("item:") && analysis[:families].find { |f| f[:items].any? { |i| "item:#{i[:item_id]}" == key } })
       end
       m = row ? row[:metrics] : {}
+      # campanhas envolvidas no momento da decisão: travam a rodada mesmo depois que o anúncio muda de campanha
+      campaign_ids = key.start_with?("campaign:") ? [ key.delete_prefix("campaign:").to_i ] : (row ? row[:campaigns] : [])
       { cost: m[:cost], revenue: m[:revenue], roas: m[:roas], clicks: m[:clicks], prints: m[:prints], tacos: analysis.dig(:health, :tacos),
-        period: analysis[:period].slice(:from, :to) }
+        period: analysis[:period].slice(:from, :to), campaign_ids: campaign_ids }
     end
 
     def self.decision_payload(d, after: nil)
@@ -112,7 +114,7 @@ module Painel
       health = health_block(days)
       decisions = decisions_block(families, campaign_rows)
       mark_decided!(queue + next_round + watch, decisions)
-      structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows })
+      structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows, decisions: decisions })
       structure[:suggestions].each { |s| s[:signal] = "estrutura_#{s[:type]}" }
       mark_decided!(structure[:suggestions], decisions)
 
