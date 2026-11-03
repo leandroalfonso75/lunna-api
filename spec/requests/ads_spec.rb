@@ -349,6 +349,20 @@ RSpec.describe "/api/ads", type: :request do
       expect(st["plan"]).to include("reallocated_daily" => 40.0, "fits" => true)
       expect(st["plan"]["after_daily"]).to be <= 60.0
       expect(by_type).not_to have_key("reduzir")
+
+      # Feito/Ignorar também nas sugestões de estrutura
+      post "/api/ads/decisions", params: { account_id: account.id, key: split["key"], signal: "estrutura_dividir", status: "feito" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+      expect(json).to include("status" => "feito", "class" => "estrutura", "class_label" => "Estrutura de campanhas", "title" => "Família F1")
+      expect(json["action"]).to include("De Geral para nova:").and include("Orçamento +R$ 40/dia")
+      expect(json["before"]).to include("cost" => 80.0)
+      post "/api/ads/decisions", params: { account_id: account.id, key: "item:MLB9", signal: "estrutura_ativar", status: "ignorado" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      marked = json["structure"]["suggestions"].to_h { |x| [ x["key"], x["decided"] ] }
+      expect(marked[split["key"]]).to include("status" => "feito")
+      expect(marked["item:MLB9"]).to include("status" => "ignorado")
     end
 
     it "sem limite diário o plano avisa; com teto apertado o dinheiro novo fica marcado e uma campanha abaixo do equilíbrio cede verba" do

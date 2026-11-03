@@ -33,6 +33,8 @@ module Painel
       "posicao" => "Ganhar posição", "ajuste" => "Ajuste fino"
     }.freeze
     CLASS_ORDER = CLASSES.keys.freeze
+    # Decisões vindas do bloco "Estrutura de campanhas" (fora da ordem da fila)
+    STRUCTURE_CLASS = { "estrutura" => "Estrutura de campanhas" }.freeze
     # O que o valor em jogo significa: perdido (dinheiro gasto sem retorno) ou que deixou de ganhar (receita que não veio)
     VALUE_KIND = {
       "destravar" => [ "deixou_de_ganhar", "receita que parou de entrar" ], "desperdicio" => [ "perdido", "investimento desperdiçado" ],
@@ -46,7 +48,8 @@ module Painel
     # Marca um item da fila (família/campanha + sinal) como feito ou ignorado, guardando o "antes".
     def self.decide(account, attrs, user: nil)
       analysis = call(account)
-      item = (analysis[:queue] + analysis[:next_round] + analysis[:watch]).find { |q| q[:key] == attrs[:key].to_s && q[:signal] == attrs[:signal].to_s }
+      item = (analysis[:queue] + analysis[:next_round] + analysis[:watch] + structure_entries(analysis))
+        .find { |q| q[:key] == attrs[:key].to_s && q[:signal] == attrs[:signal].to_s }
       return nil unless item
 
       before = snapshot(analysis, item[:key])
@@ -54,12 +57,24 @@ module Painel
                                       value: item[:value], status: attrs[:status].to_s, before: before, user: user, decided_at: Time.current)
     end
 
+    # Sugestões de estrutura no formato da fila (key + signal "estrutura_<tipo>"), para "Feito"/"Ignorar".
+    def self.structure_entries(analysis)
+      (analysis.dig(:structure, :suggestions) || []).map do |s|
+        { key: s[:key], signal: "estrutura_#{s[:type]}", class: "estrutura", title: s[:title],
+          action: [ s[:from_campaign] && s[:to_campaign] ? "De #{s[:from_campaign]} para #{s[:to_campaign]}." : (s[:to_campaign] && "Para #{s[:to_campaign]}."),
+                    s[:daily_budget] ? "Orçamento #{s[:daily_budget].negative? ? '−' : '+'}R$ #{s[:daily_budget].abs}/dia" : nil,
+                    s[:roas_target] ? "ROAS Objetivo #{s[:roas_target]}." : nil ].compact.join(" "),
+          value: s[:value] }
+      end
+    end
+
     # Métricas da família/campanha no momento da decisão (os 7 dias fechados de então).
     def self.snapshot(analysis, key)
       row = if key.start_with?("campaign:")
         analysis[:campaigns].find { |c| "campaign:#{c[:id]}" == key }
       else
-        analysis[:families].find { |f| f[:key] == key }
+        analysis[:families].find { |f| f[:key] == key } ||
+          (key.start_with?("item:") && analysis[:families].find { |f| f[:items].any? { |i| "item:#{i[:item_id]}" == key } })
       end
       m = row ? row[:metrics] : {}
       { cost: m[:cost], revenue: m[:revenue], roas: m[:roas], clicks: m[:clicks], prints: m[:prints], tacos: analysis.dig(:health, :tacos),
@@ -67,7 +82,7 @@ module Painel
     end
 
     def self.decision_payload(d, after: nil)
-      { id: d.id, key: d.key, signal: d.signal, class: d.klass, class_label: CLASSES.fetch(d.klass, d.klass), title: d.title, action: d.action,
+      { id: d.id, key: d.key, signal: d.signal, class: d.klass, class_label: CLASSES.merge(STRUCTURE_CLASS).fetch(d.klass, d.klass), title: d.title, action: d.action,
         value: d.value&.to_f, status: d.status, decided_at: d.decided_at, user: d.user&.name, before: d.before, after: after }
     end
 
@@ -98,6 +113,8 @@ module Painel
       decisions = decisions_block(families, campaign_rows)
       mark_decided!(queue + next_round + watch, decisions)
       structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows })
+      structure[:suggestions].each { |s| s[:signal] = "estrutura_#{s[:type]}" }
+      mark_decided!(structure[:suggestions], decisions)
 
       {
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
@@ -442,8 +459,12 @@ module Painel
       item_ids = if key.start_with?("campaign:")
         cid = key.delete_prefix("campaign:").to_i
         @account.ml_ad_items.where(campaign_id: cid).pluck(:item_id)
+      elsif (family = families.find { |f| f[:key] == key })
+        family[:items].map { |i| i[:item_id] }
+      elsif key.start_with?("item:")
+        [ key.delete_prefix("item:") ] # anúncio ativado/reativado: o depois é o dele
       else
-        (families.find { |f| f[:key] == key }&.dig(:items) || []).map { |i| i[:item_id] }
+        []
       end
       rows = MlAdItemDaily.where(ml_account_id: @account.id, item_id: item_ids, date: from..to).to_a
       m = sum_metrics(rows)
