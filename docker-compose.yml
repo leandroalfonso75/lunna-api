@@ -56,6 +56,10 @@ services:
     <<: *app
     command: bin/jobs-watchdog
     restart: unless-stopped
+    # Teste de 02/11: worker com 1 thread para ver se as quedas do Ruby ([BUG] / sinais 6 e 11) param.
+    environment:
+      <<: *app_env
+      JOB_THREADS: "1"
 
   web:
     profiles: ["web"]
