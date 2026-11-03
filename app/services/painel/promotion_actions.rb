@@ -129,6 +129,21 @@ module Painel
       offer.start_date || account.ml_promotions.where(promotion_id: offer.promotion_id).pick(:start_date)
     end
 
+    # Período da oferta [início, fim]: o da oferta do anúncio ou, sem ele, o da campanha (desconto próprio novo: nil).
+    def self.period_of(account, offer)
+      return [ nil, nil ] if offer.nil?
+
+      campaign = offer.promotion_id.present? ? account.ml_promotions.where(promotion_id: offer.promotion_id).pick(:start_date, :finish_date) : nil
+      [ offer.start_date || campaign&.first, offer.finish_date || campaign&.last ]
+    end
+
+    # Colunas de período para ml_promotion_actions (antes e depois).
+    def self.period_columns(account, from, to)
+      fs, ff = period_of(account, from&.dig(:offer))
+      ts, tf = period_of(account, to&.dig(:offer))
+      { from_start: fs, from_finish: ff, to_start: ts, to_finish: tf }
+    end
+
     # Depois que a nova promoção começou: sai da anterior (Ml::PromotionsHandoffJob).
     def handoff(item_id, from_target, to_target)
       client = fresh_client
@@ -295,7 +310,9 @@ module Painel
     end
 
     def record(kind, item_id, from, to)
+      effective = kind == "agendar" && to ? self.class.start_of(@account, to[:offer]) : nil
       @account.ml_promotion_actions.create!(
+        **self.class.period_columns(@account, from, to), effective_at: effective,
         item_id: item_id, kind: kind, source: @source, user: @user, run: @run,
         from_profit: from&.dig(:profit), to_profit: to&.dig(:profit),
         from_promotion_id: from&.dig(:offer)&.promotion_id, from_type: from&.dig(:offer)&.promotion_type, from_name: from && name_of(from),

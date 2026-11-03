@@ -12,7 +12,10 @@
 #   Não ajusta o preço da promoção atual, não troca por desconto próprio nem por campanha do vendedor e não mexe em
 #   anúncio que já tem promoção programada (pending).
 # Além disso:
-#   - para revisar: não mexe e registra a regra que barrou;
+#   - para revisar com OFERTA CABÍVEL (cabe nos limites; pedido do usuário em 03/11/2026): aplica sozinha, sem esperar
+#     confirmação. Se ela só fere a regra de aumento (aumentaria o preço com a promoção atual valendo), fica PROGRAMADA
+#     para quando a atual acabar (Ml::PromotionsApplyJob no fim dela); se feriria a trava de lucro, não aplica;
+#   - para revisar sem cabível: não mexe e registra a regra que barrou;
 #   - na melhor, sem custo: não mexe;
 #   - anúncio com regra própria em texto, ou com a automação desligada: não mexe e registra o motivo (o texto é para
 #     quem opera ler; a rotina não interpreta regras escritas).
@@ -76,6 +79,9 @@ module Painel
         return skip(run, ev, "sem_mudanca", "já tem promoção programada para começar depois; a atual segue até lá")
       end
       if status == "para_revisar"
+        fit = fitting_for(ev)
+        return fitting(run, ev, fit) if fit && setting&.rules_note.blank?
+
         return skip(run, ev, "revisar", row.dig(:review, :label) || "nenhuma oferta cabe nas regras", kind: "revisar")
       end
       return "sem_mudanca" unless ACT_ON.include?(status) && ev[:best] && !ev[:best][:as_is]
@@ -98,6 +104,52 @@ module Painel
 
       ev = ev.merge(best: entry)
       @mode == "apply" ? apply(run, ev, price: entry[:offer].flexible? ? entry[:price] : nil) : simulate(run, ev)
+    end
+
+    # Oferta cabível do anúncio (cabe nos limites), quando muda algo em relação a hoje.
+    def fitting_for(ev)
+      return nil unless ev[:evaluator]
+
+      fit = ev[:evaluator].fitting((ev[:evaluated] || []).map { |e| e[:offer] }.uniq)
+      return nil unless fit
+
+      cur = ev[:current]
+      same = cur && cur[:offer].promotion_id == fit[:offer].promotion_id && cur[:offer].promotion_type == fit[:offer].promotion_type &&
+             (cur[:price].to_f - fit[:price].to_f).abs < 0.005
+      same ? nil : fit
+    end
+
+    INCREASE_PREFIX = "aumentaria o preço".freeze
+
+    # Aplica a cabível: na hora (sem regra ferida) ou programada para o fim da promoção atual (só a regra de aumento
+    # ferida). A trava de lucro não é furada pela rotina.
+    def fitting(run, ev, fit)
+      soft = fit[:soft_reason].to_s
+      ev = ev.merge(best: fit)
+      if soft.blank?
+        return @mode == "apply" ? apply(run, ev, force: true) : simulate(run, ev)
+      end
+      unless soft.start_with?(INCREASE_PREFIX) && ev[:current]
+        return skip(run, ev, "revisar", "oferta cabível não aplicada: #{soft}", kind: "revisar")
+      end
+
+      finish = ev[:current][:offer].finish_date || PromotionActions.period_of(@account, ev[:current][:offer]).last
+      return skip(run, ev, "revisar", "oferta cabível aumentaria o preço e a promoção atual não tem data de fim", kind: "revisar") unless finish
+
+      if @account.ml_promotion_actions.where(item_id: ev[:item].item_id, kind: "agendar", ok: true, to_type: fit[:offer].promotion_type,
+                                             to_promotion_id: fit[:offer].promotion_id).where("effective_at > ?", Time.current).exists?
+        return skip(run, ev, "sem_mudanca", "oferta cabível já programada para quando a promoção atual acabar")
+      end
+
+      at = finish + 5.minutes
+      when_text = finish.in_time_zone("America/Sao_Paulo").strftime("%d/%m %H:%M")
+      if @mode == "apply"
+        target = { "promotion_id" => fit[:offer].promotion_id.to_s, "promotion_type" => fit[:offer].promotion_type, "force" => true }
+        Ml::PromotionsApplyJob.set(wait_until: at).perform_later(@account.id, [ ev[:item].item_id ], nil, target)
+      end
+      record(run, ev, "agendar", ok: true, effective_at: at,
+             error: "#{@mode == 'apply' ? 'programada' : 'seria programada'} para quando a promoção atual acabar (#{when_text}): #{soft}")
+      @mode == "apply" ? "aplicado" : "simulado"
     end
 
     # O que a rotina pode aplicar: => [oferta, nil] ou [nil, motivo de não mexer].
@@ -126,10 +178,11 @@ module Painel
       "simulado"
     end
 
-    def apply(run, ev, price: nil)
+    def apply(run, ev, price: nil, force: false)
       o = ev[:best][:offer]
       target = { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type, action: o.active? ? "editar_preco" : "aderir" }
       target[:price] = price if price
+      target[:force] = true if force
       result = PromotionActions.apply(@account, ev[:item].item_id, source: "rotina", run: run, target: target)
       CatalogCheck.schedule(@account, ev[:item], result.action) if result.ok && ev[:item].catalog_listing && result.action
       result.ok ? "aplicado" : "erro"
@@ -143,10 +196,13 @@ module Painel
       key
     end
 
-    def record(run, ev, kind, ok:, error: nil, to: true)
+    def record(run, ev, kind, ok:, error: nil, to: true, effective_at: nil)
       from = ev[:current]
       best = to ? ev[:best] : ev[:row].dig(:review, :blocked_best)
+      effective_at ||= kind == "agendar" && best&.dig(:offer) ? PromotionActions.start_of(@account, best[:offer]) : nil
+      periods = PromotionActions.period_columns(@account, from, best&.dig(:offer) ? best : nil)
       @account.ml_promotion_actions.create!(
+        **periods, effective_at: effective_at,
         run: run, item_id: ev[:item].item_id, kind: kind, source: @mode == "apply" ? "rotina" : "simulacao", user: @user,
         ok: ok, error: error&.truncate(500),
         from_promotion_id: from&.dig(:offer)&.promotion_id, from_type: from&.dig(:offer)&.promotion_type,

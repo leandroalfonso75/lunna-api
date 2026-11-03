@@ -53,11 +53,30 @@ module Painel
         item_id: a.item_id, title: item[:title], sku: item[:sku], thumbnail: item[:thumbnail],
         kind: a.kind, kind_label: RESULT_LABELS.fetch(a.kind, a.kind), changes: changes, ok: a.ok,
         reason: a.error,
-        before: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f, profit: a.from_profit&.to_f },
-        after: a.to_type && { name: a.to_name, price: a.to_price&.to_f, margin_pct: a.to_margin_pct&.to_f, profit: a.to_profit&.to_f },
+        before: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f, profit: a.from_profit&.to_f,
+                                 start: a.from_start, finish: a.from_finish },
+        after: a.to_type && { name: a.to_name, price: a.to_price&.to_f, margin_pct: a.to_margin_pct&.to_f, profit: a.to_profit&.to_f,
+                              start: a.to_start, finish: a.to_finish },
+        effect: changes && a.ok ? effect(a) : nil,
         price_change_pct: a.from_price.to_f.positive? && a.to_price ? ((a.to_price.to_f / a.from_price.to_f - 1) * 100).round(2) : nil,
         gain: a.gain&.to_f
       }
+    end
+
+    # Em vigor (aplicada na hora) ou Programada (passa a valer depois: a nova começa depois ou espera a atual acabar).
+    def effect(a)
+      if a.effective_at && a.effective_at > a.created_at + 1.minute
+        { key: "programada", label: "Programada", at: a.effective_at }
+      else
+        { key: "em_vigor", label: "Em vigor", at: a.created_at }
+      end
+    end
+
+    def period_text(start, finish)
+      fmt = ->(t) { t.in_time_zone("America/Sao_Paulo").strftime("%d/%m %H:%M") }
+      return nil if start.nil? && finish.nil?
+
+      [ start && fmt.(start), finish && fmt.(finish) ].map { |x| x || "—" }.join(" até ")
     end
 
     def csv(account, run)
@@ -65,12 +84,15 @@ module Painel
       CSV.generate(col_sep: ";") do |out|
         out << [ "Execução", "Modo", "Anúncio", "Título", "SKU", "Resultado", "Promoção antes", "Preço antes", "Margem antes (%)",
                  "Lucro antes (R$)", "Promoção depois", "Preço depois", "Margem depois (%)", "Lucro depois (R$)",
-                 "Variação do preço (%)", "Ganho por unidade (R$)", "Motivo" ]
+                 "Variação do preço (%)", "Ganho por unidade (R$)", "Aplicação", "Passa a valer", "Período antes", "Período depois", "Motivo" ]
         data[:rows].each do |r|
           out << [ run.started_at.in_time_zone.strftime("%d/%m/%Y %H:%M"), data[:mode_label], r[:item_id], r[:title], r[:sku],
                    r[:ok] ? r[:kind_label] : "Falhou", r.dig(:before, :name), num(r.dig(:before, :price)), num(r.dig(:before, :margin_pct)),
                    num(r.dig(:before, :profit)), r.dig(:after, :name), num(r.dig(:after, :price)), num(r.dig(:after, :margin_pct)),
-                   num(r.dig(:after, :profit)), num(r[:price_change_pct]), num(r[:gain]), r[:reason] ]
+                   num(r.dig(:after, :profit)), num(r[:price_change_pct]), num(r[:gain]), r.dig(:effect, :label),
+                   r.dig(:effect, :at)&.in_time_zone("America/Sao_Paulo")&.strftime("%d/%m/%Y %H:%M"),
+                   period_text(r.dig(:before, :start), r.dig(:before, :finish)), period_text(r.dig(:after, :start), r.dig(:after, :finish)),
+                   r[:reason] ]
         end
       end
     end

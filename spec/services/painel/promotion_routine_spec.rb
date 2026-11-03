@@ -93,4 +93,37 @@ RSpec.describe Painel::PromotionRoutine do
 
     expect(run.actions.find_by(item_id: item.item_id)).to have_attributes(kind: "pular", error: a_string_including("programada"))
   end
+
+  it "oferta cabível que só aumentaria o preço fica programada para o fim da promoção atual (Em vigor x Programada)" do
+    include ActiveJob::TestHelper
+    finish = 3.days.from_now.change(sec: 0)
+    MlPromotionOffer.where(item_id: item.item_id).delete_all
+    # hoje: desconto próprio a R$ 70 (margem abaixo da mínima de 15%); a cabível é o desconto próprio mais caro
+    MlPromotionOffer.create!(ml_account: account, item_id: item.item_id, promotion_id: nil, promotion_type: "PRICE_DISCOUNT",
+      status: "started", price: 70, original_price: 100, min_price: 20, max_price: 95, fees: fees, start_date: 2.days.ago, finish_date: finish)
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+
+    run = nil
+    expect { run = described_class.call(account, mode: "apply", trigger: "agendada") }
+      .to have_enqueued_job(Ml::PromotionsApplyJob)
+      .with(account.id, [ item.item_id ], nil, { "promotion_id" => "", "promotion_type" => "PRICE_DISCOUNT", "force" => true })
+      .at(finish + 5.minutes)
+
+    action = run.actions.find_by(item_id: item.item_id)
+    expect(action).to have_attributes(kind: "agendar", ok: true, from_price: 70, from_type: "PRICE_DISCOUNT", to_type: "PRICE_DISCOUNT")
+    expect(action.to_price).to be > 70
+    expect(action.effective_at).to be_within(1.second).of(finish + 5.minutes)
+    expect(action.from_finish).to be_within(1.second).of(finish)
+    expect(action.error).to include("programada para quando a promoção atual acabar")
+
+    row = Painel::PromotionRunReport.detail(account, run.id)[:rows].find { |r| r[:item_id] == item.item_id }
+    expect(row[:effect]).to include(key: "programada", label: "Programada")
+    expect(row[:before][:finish]).to be_within(1.second).of(finish)
+    sim = described_class.call(account, mode: "simulation", trigger: "manual")
+    other_row = Painel::PromotionRunReport.detail(account, sim.id)[:rows].find { |r| r[:item_id] == other.item_id }
+    expect(other_row[:effect]).to include(key: "em_vigor", label: "Em vigor") # troca na hora
+
+    # a rodada seguinte não programa de novo
+    expect { described_class.call(account, mode: "apply", trigger: "agendada") }.not_to have_enqueued_job(Ml::PromotionsApplyJob)
+  end
 end

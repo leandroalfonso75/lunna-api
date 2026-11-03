@@ -175,6 +175,14 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   promoção atual, não troca por desconto próprio nem por campanha do vendedor, e não mexe em anúncio com promoção
   programada (`pending`): o intervalo entre o fim da atual e o início da programada é coberto na própria rotina do dia
   em que a atual acabar. Ajustes finos ficam para a tela e o lote.
+- **Oferta cabível automática (pedido do usuário em 03/11/2026):** anúncio "para revisar" com oferta cabível (cabe nos
+  limites; `PromotionEvaluator#fitting`), mesmo com a melhor barrada, é aplicado pela rotina sem esperar confirmação:
+  - sem regra ferida: aplica na hora ("Em vigor");
+  - ferindo só a regra de aumento (aumentaria o preço com a promoção atual valendo): fica **programada** para quando a
+    atual acabar (`Ml::PromotionsApplyJob` no fim dela + 5 min, com `force`); o registro é `agendar` com `effective_at`.
+    Já programada (mesma oferta, `effective_at` futuro) não programa de novo. Atual sem data de fim: não programa;
+  - ferindo a trava de lucro: não aplica (registra como "para revisar"); anúncio com regra própria em texto, "não
+    automatizar" e catálogo fora da automação seguem as regras de sempre.
 - `config/recurring.yml` dispara o job a cada hora cheia (`0 * * * * America/Sao_Paulo`); o job roda para cada conta
   ativa cuja empresa ligou a rotina e escolheu aquela hora e aquele dia da semana (`companies.promo_routine_enabled`,
   `promo_routine_mode`, `promo_schedule_hour` 0–23, `promo_schedule_days` 0 = domingo … 6 = sábado; `Company#promo_due?`).
@@ -188,7 +196,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Relâmpago e oferta do dia entram reservando o estoque que o ML sugere (`stock.min` da oferta); só servem se o anúncio
   tiver esse estoque disponível.
 - Cada execução fica em `ml_promotion_runs` (modo, origem, totais) e cada anúncio em `ml_promotion_actions` (`run_id`,
-  antes e depois: preço, margem, lucro). Aba "Rotina automática" em Promoções: lista as execuções, mostra o antes e o
+  antes e depois: preço, margem, lucro, período de cada promoção `from_start/from_finish/to_start/to_finish`, e
+  `effective_at` quando a mudança passa a valer depois). Na lista do antes e depois, cada mudança mostra **"Em vigor"**
+  (aplicada na hora) ou **"Programada"** (com a data em que passa a valer: a nova começa depois ou espera a atual
+  acabar) e o período de cada promoção; o CSV traz as mesmas colunas. Aba "Rotina automática" em Promoções: lista as execuções, mostra o antes e o
   depois e exporta CSV; "Simular agora" (administrador) roda uma simulação na hora.
 - Precisa do Lunna ligado no horário escolhido (computador com Docker, ou servidor).
 
