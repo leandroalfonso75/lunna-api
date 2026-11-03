@@ -10,7 +10,9 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
   conforme subir seja bom ou ruim).
 - **Gráfico:** vendas por Ads e investimento, dia a dia.
 - **Aba Campanhas:** nome, situação, estratégia, investimento, vendas, ACOS (com a meta da campanha), ROAS, cliques,
-  CTR, CPC, conversão e orçamento diário. O ACOS fica verde dentro da meta, amarelo até 20% acima e vermelho acima disso.
+  CTR, CPC, conversão e orçamento diário. Ao lado do investimento, "Qtde Vendas c/Ads" (unidades atribuídas ao Ads,
+  diretas + indiretas: `units`) e, ao lado de Vendas por Ads, "Qtde Vendas s/Ads" (unidades orgânicas dos anúncios da
+  campanha: `organic_units`), como o ML informa (quantidade de unidades, não de pedidos). O ACOS fica verde dentro da meta, amarelo até 20% acima e vermelho acima disso.
   **Orçamento diário** = o configurado na campanha (`budget`, o que o Seller Center mostra); o `daily_budget` do ML é o
   teto do dia (pode passar do configurado) e vai como `daily_cap`. Campanha que o ML deixa de devolver numa leitura
   completa sem erro fica `removed` ("Removida no ML") e sai do orçamento ativo (caso "11.11", 02/11/2026).
