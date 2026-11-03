@@ -294,6 +294,18 @@ RSpec.describe "/api/ads", type: :request do
       expect(json["next_round"].size).to eq(1)
     end
 
+    it "orçamento diário é o configurado no ML (budget), não o teto do dia; campanha removida fica fora do total" do
+      campaign(1, name: "Novos Anúncios")
+      MlAdCampaign.where(campaign_id: 1).update_all(budget: 55, daily_budget: 110)
+      campaign(2, name: "11.11", status: "removed")
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+
+      row = json["campaigns"].find { |c| c["id"] == 1 }
+      expect(row).to include("daily_budget" => 55.0, "daily_cap" => 110.0)
+      expect(json["structure"]["current_daily"]).to eq(55.0)
+    end
+
     it "estrutura de campanhas: dividir família dominante, ativar fora de campanha, reativar pausado e respeitar o limite diário" do
       company.update!(ads_daily_budget_max: 60)
       yesterday = Date.current - 1

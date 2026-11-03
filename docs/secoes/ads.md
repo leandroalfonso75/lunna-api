@@ -11,6 +11,9 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 - **Gráfico:** vendas por Ads e investimento, dia a dia.
 - **Aba Campanhas:** nome, situação, estratégia, investimento, vendas, ACOS (com a meta da campanha), ROAS, cliques,
   CTR, CPC, conversão e orçamento diário. O ACOS fica verde dentro da meta, amarelo até 20% acima e vermelho acima disso.
+  **Orçamento diário** = o configurado na campanha (`budget`, o que o Seller Center mostra); o `daily_budget` do ML é o
+  teto do dia (pode passar do configurado) e vai como `daily_cap`. Campanha que o ML deixa de devolver numa leitura
+  completa sem erro fica `removed` ("Removida no ML") e sai do orçamento ativo (caso "11.11", 02/11/2026).
   Ao clicar abre a configuração (metas, orçamento, datas), o resultado (vendas diretas, indiretas e orgânicas) e um
   gráfico por dia, com o atalho "Ver os anúncios ativos desta campanha" (abre a aba Anúncios já filtrada pela campanha e
   por "Ativos").

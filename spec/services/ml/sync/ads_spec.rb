@@ -87,6 +87,19 @@ RSpec.describe Ml::Sync::Ads do
     expect(MlAdItem.where(ml_account_id: account.id).pluck(:item_id)).to eq([ "MLB1" ])
   end
 
+  it "campanha que o ML não devolve mais fica removida (sai do orçamento ativo)" do
+    stub_advertiser
+    stub_campaigns
+    stub_ads({ aggregation_type: "DAILY" }, [])
+    stub_ads({}, [ ad ])
+    MlAdCampaign.create!(ml_account_id: account.id, campaign_id: 999, name: "11.11", status: "active", daily_budget: 916)
+
+    described_class.call(client, account, today: today)
+
+    expect(MlAdCampaign.find_by(campaign_id: 999).status).to eq("removed")
+    expect(MlAdCampaign.find_by(campaign_id: 111)).to have_attributes(status: "active", budget: 55.0, daily_budget: 110.0)
+  end
+
   it "leitura rápida: só ontem e hoje das campanhas já conhecidas" do
     allow(described_class).to receive(:item_days)
     MlAdCampaign.create!(ml_account_id: account.id, campaign_id: 111, name: "Maquiagens", status: "active")

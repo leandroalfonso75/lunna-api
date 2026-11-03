@@ -292,7 +292,7 @@ module Painel
         eq = active_fams.filter_map { |f| f.dig(:economics, :roas_equilibrio) }.max
         {
           id: c.campaign_id, name: c.name, status: c.status, strategy: c.strategy, roas_target: c.roas_target&.to_f,
-          acos_target: c.acos_target&.to_f, budget: c.budget&.to_f, daily_budget: c.daily_budget&.to_f,
+          acos_target: c.acos_target&.to_f, budget: c.budget&.to_f, daily_budget: (c.budget || c.daily_budget)&.to_f, daily_cap: c.daily_budget&.to_f,
           families: active_fams.size, attribution: active_fams.size == 1 ? "exata" : "compartilhada",
           metrics: m, equilibrium: eq,
           auction: { impression_share: a["impression_share"], top_impression_share: a["top_impression_share"],

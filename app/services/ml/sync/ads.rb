@@ -148,6 +148,12 @@ module Ml
           }
         end
         MlAdCampaign.upsert_all(records, unique_by: [ :ml_account_id, :campaign_id ])
+        # Campanha que o ML parou de devolver (excluída/encerrada) não pode seguir "ativa" com o orçamento antigo:
+        # numa leitura completa sem falha, marca como removida.
+        if notes.none? { |n| n.include?("campanhas") }
+          account.ml_ad_campaigns.where.not(campaign_id: rows.map { |c| c["id"] }).where.not(status: "removed")
+            .update_all(status: "removed", synced_at: now, updated_at: now)
+        end
         rows.map { |c| c["id"] }
       end
       private_class_method :campaigns

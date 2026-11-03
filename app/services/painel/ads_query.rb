@@ -17,7 +17,8 @@ module Painel
 
     CAMPAIGN_STATUS = {
       "active" => [ "Ativa", "ok" ], "paused" => [ "Pausada", "warn" ], "hold" => [ "Em espera", "warn" ],
-      "idle" => [ "Sem anúncios", "neutral" ], "delegated" => [ "Delegada", "neutral" ]
+      "idle" => [ "Sem anúncios", "neutral" ], "delegated" => [ "Delegada", "neutral" ],
+      "removed" => [ "Removida no ML", "neutral" ]
     }.freeze
 
     STRATEGIES = {
@@ -182,7 +183,7 @@ module Painel
         id: campaign.campaign_id, name: campaign.name, status: { key: campaign.status, label: label, tone: tone },
         strategy: STRATEGIES.fetch(campaign.strategy, campaign.strategy), channel: campaign.channel,
         acos_target: campaign.acos_target&.to_f, roas_target: campaign.roas_target&.to_f,
-        daily_budget: campaign.daily_budget&.to_f, budget: campaign.budget&.to_f, automatic_budget: campaign.automatic_budget,
+        daily_budget: (campaign.budget || campaign.daily_budget)&.to_f, daily_cap: campaign.daily_budget&.to_f, budget: campaign.budget&.to_f, automatic_budget: campaign.automatic_budget,
         date_created: campaign.date_created, last_updated: campaign.last_updated,
         metrics: metrics, acos_state: acos_state(metrics[:acos], campaign.acos_target&.to_f, metrics[:cost]),
         ads_count: ads_counts[campaign.campaign_id].to_i,
