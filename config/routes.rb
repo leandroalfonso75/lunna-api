@@ -55,6 +55,8 @@ Rails.application.routes.draw do
     post "ads/decisions", to: "ads#decide"
     delete "ads/decisions/:id", to: "ads#undecide"
     post "ads/sync", to: "ads#sync"
+    get "claims", to: "claims#index"
+    get "claims/:id", to: "claims#show"
     get "promotions", to: "promotions#index"
     get "promotions/export", to: "promotions#export"
     post "promotions/sync", to: "promotions#sync"

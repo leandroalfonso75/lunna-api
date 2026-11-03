@@ -103,6 +103,20 @@ module Ml
       get("/post-purchase/v1/claims/reasons/#{reason_id}")
     end
 
+    # Seção Reclamações: todas as reclamações em que o vendedor responde (cancelamentos, mediações, devoluções).
+    def claims_search(seller_id, offset: 0, limit: 100, sort: "date_created:desc")
+      get("/post-purchase/v1/claims/search", { player_role: "respondent", player_user_id: seller_id, offset: offset, limit: limit, sort: sort })
+    end
+
+    # Partes de uma reclamação: detail, messages, status_history, actions-history, expected-resolutions, evidences,
+    # changes, affects-reputation.
+    CLAIM_SUBS = %w[detail messages status_history actions-history expected-resolutions evidences changes affects-reputation].freeze
+    def claim_sub(claim_id, path)
+      raise ArgumentError, "parte inválida: #{path}" unless CLAIM_SUBS.include?(path)
+
+      get("/post-purchase/v1/claims/#{claim_id}/#{path}")
+    end
+
     # Devolução ligada à reclamação (404 quando não há).
     def claim_return(claim_id)
       get("/post-purchase/v2/claims/#{claim_id}/returns")

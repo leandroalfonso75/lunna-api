@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_150001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_03_160001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -116,6 +116,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_150001) do
     t.bigint "ads_advertiser_id"
     t.datetime "ads_recent_synced_at"
     t.datetime "promotions_synced_at"
+    t.datetime "claims_listed_at"
+    t.datetime "claims_full_listed_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -245,6 +247,59 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_150001) do
     t.index ["action_id"], name: "index_ml_catalog_checks_on_action_id"
     t.index ["ml_account_id", "status"], name: "index_ml_catalog_checks_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_catalog_checks_on_ml_account_id"
+  end
+
+  create_table "ml_claims", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "claim_id", null: false
+    t.bigint "parent_id"
+    t.string "resource"
+    t.bigint "resource_id"
+    t.bigint "order_id"
+    t.string "claim_type"
+    t.string "stage"
+    t.string "status"
+    t.string "reason_id"
+    t.string "reason_name"
+    t.string "reason_detail"
+    t.string "reason_flow"
+    t.boolean "fulfilled"
+    t.string "quantity_type"
+    t.integer "claimed_quantity"
+    t.string "site_id"
+    t.datetime "date_created"
+    t.datetime "last_updated"
+    t.jsonb "players", default: [], null: false
+    t.jsonb "resolution"
+    t.jsonb "related_entities", default: [], null: false
+    t.string "detail_title"
+    t.text "detail_description"
+    t.string "detail_problem"
+    t.string "action_responsible"
+    t.datetime "due_date"
+    t.boolean "affects_reputation"
+    t.boolean "has_incentive"
+    t.jsonb "raw", default: {}, null: false
+    t.jsonb "detail", default: {}, null: false
+    t.jsonb "messages", default: [], null: false
+    t.jsonb "status_history", default: [], null: false
+    t.jsonb "actions_history", default: [], null: false
+    t.jsonb "expected_resolutions", default: [], null: false
+    t.jsonb "evidences", default: [], null: false
+    t.jsonb "changes_log", default: [], null: false
+    t.jsonb "reputation", default: {}, null: false
+    t.jsonb "devolution"
+    t.jsonb "reason", default: {}, null: false
+    t.jsonb "detail_errors", default: {}, null: false
+    t.datetime "listed_at"
+    t.datetime "details_synced_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "claim_id"], name: "index_ml_claims_on_ml_account_id_and_claim_id", unique: true
+    t.index ["ml_account_id", "date_created"], name: "index_ml_claims_on_ml_account_id_and_date_created"
+    t.index ["ml_account_id", "status"], name: "index_ml_claims_on_ml_account_id_and_status"
+    t.index ["ml_account_id"], name: "index_ml_claims_on_ml_account_id"
+    t.index ["order_id"], name: "index_ml_claims_on_order_id"
   end
 
   create_table "ml_costs", force: :cascade do |t|
@@ -866,6 +921,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_150001) do
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_catalog_checks", "ml_accounts"
   add_foreign_key "ml_catalog_checks", "ml_promotion_actions", column: "action_id"
+  add_foreign_key "ml_claims", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade

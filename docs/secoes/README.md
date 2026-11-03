@@ -10,6 +10,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
 | Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
+| Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com mensagens, histórico, prazo e reputação |
 | Ads | [ads.md](ads.md) | Campanhas e anúncios de publicidade (Product Ads) dos últimos 3 meses, com ACOS, ROAS e investimento |
 | Promoções | [promocoes.md](promocoes.md) | Central de Promoções do ML por anúncio: promoção atual, melhor oferta pela margem, margens por anúncio e exportação |
 | Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA |
