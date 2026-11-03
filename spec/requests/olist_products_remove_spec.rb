@@ -85,4 +85,23 @@ RSpec.describe "Excluir produtos (seção Produtos)", type: :request do
     expect(json["removed"]).to eq([])
     expect(other.reload.hidden_at).to be_nil
   end
+
+  it "restaurar: lista os ocultos e traz de volta (com as variações), sem chamar o Olist" do
+    remove([ 100 ], keep: true)
+    expect(listed_skus).to eq([ "DIF" ])
+
+    get "/api/olist/products", params: { hidden: 1 }, headers: auth_headers(admin)
+    expect(json["products"].map { |p| p["sku"] }).to eq([ "PAI" ])
+    expect(json["hidden_count"]).to eq(1)
+
+    post "/api/olist/products/restore", params: { ids: [ 100 ] }, headers: auth_headers(member)
+    expect(response).to have_http_status(:forbidden)
+
+    post "/api/olist/products/restore", params: { ids: [ 100 ] }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:ok)
+    expect(json["restored"]).to eq([ { "id" => 100, "sku" => "PAI", "description" => "Secador", "deleted_in_erp" => false } ])
+    expect(OlistProduct.where(olist_id: [ 100, 101 ]).pluck(:hidden_at)).to all(be_nil)
+    expect(listed_skus).to contain_exactly("PAI", "DIF")
+    expect(WebMock).not_to have_requested(:any, /api.tiny.com.br/)
+  end
 end

@@ -7,8 +7,11 @@
 #   GET   /api/olist/changes             → registro das alterações feitas (admin)
 #   POST  /api/olist/products/remove     → remove os selecionados (admin, confirm: true; ids, keep_in_erp):
 #                                           mantém no Olist (só some do Lunna) ou exclui o cadastro no Olist
+#   POST  /api/olist/products/restore    → traz de volta para a lista os ocultos (admin; ids). Excluído no Olist volta
+#                                           como "Excluído" (o cadastro não é recriado no ERP)
+#   GET   /api/olist/products?hidden=1   → lista só os ocultos
 class OlistProductsController < ApplicationController
-  before_action :require_admin!, only: [ :update_price, :adjust_stock, :changes, :remove ]
+  before_action :require_admin!, only: [ :update_price, :adjust_stock, :changes, :remove, :restore ]
   before_action :require_confirmation!, only: [ :update_price, :adjust_stock, :remove ]
   MAX_REMOVE = 200
 
@@ -31,6 +34,7 @@ class OlistProductsController < ApplicationController
     render json: {
       products: payloads(scope.order(:description, :olist_id).limit(limit).offset(offset).to_a),
       total: total, limit: limit, offset: offset,
+      hidden_count: Current.company.olist_products.where.not(hidden_at: nil).where(TOP_LEVEL_SQL).count,
       last_synced_at: Current.company.olist_products.maximum(:synced_at)
     }
   end
@@ -77,6 +81,18 @@ class OlistProductsController < ApplicationController
     render json: { removed: result.removed, failed: result.failed, kept_in_erp: keep }
   end
 
+  # Traz de volta para a lista (produto e variações). Não mexe no Olist.
+  def restore
+    ids = Array(params[:ids]).map(&:to_s).select { |v| v.match?(/\A\d+\z/) }.first(MAX_REMOVE).map(&:to_i)
+    return render_errors([ "Selecione ao menos um produto." ], status: :unprocessable_content) if ids.empty?
+
+    scope = Current.company.olist_products
+    products = scope.where(olist_id: ids).where.not(hidden_at: nil).to_a
+    scope.where(olist_id: products.map(&:olist_id)).or(scope.where(parent_olist_id: products.map(&:olist_id)))
+      .update_all(hidden_at: nil, hidden_by_user_id: nil, updated_at: Time.current)
+    render json: { restored: products.map { |p| { id: p.olist_id, sku: p.sku, description: p.description, deleted_in_erp: p.status == "E" } } }
+  end
+
   def changes
     list = Current.company.olist_changes.recent.includes(:user).limit(100)
     render json: { changes: list.map { |c| change_payload(c) } }
@@ -119,7 +135,8 @@ class OlistProductsController < ApplicationController
   SQL
 
   def listing_scope
-    all = Current.company.olist_products.where(hidden_at: nil)
+    all = Current.company.olist_products
+    all = ActiveModel::Type::Boolean.new.cast(params[:hidden]) ? all.where.not(hidden_at: nil) : all.where(hidden_at: nil)
     top = all.where(TOP_LEVEL_SQL)
 
     if params[:q].present?

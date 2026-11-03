@@ -61,7 +61,10 @@ que o Lunna usa quando o PEPS não tem custo. Para produto novo, dar a entrada d
     em `olist_changes` (`kind: delete`, antes = descrição/SKU) antes da chamada e fechado como done/failed; depois some
     do Lunna com situação "E". Falha de um produto (ex.: o Olist recusa por movimentações) não impede os outros: a
     resposta traz `removed` e `failed` com o motivo, e a tela avisa cada um.
-- Não há tela para trazer de volta um produto oculto (só no banco: `hidden_at = NULL`).
+- **Restaurar:** "Ver ocultos (n)" (administrador, ao lado do total) lista só os ocultos (`GET /api/olist/products?hidden=1`;
+  a resposta traz `hidden_count`); selecionar e usar a ação **Restaurar** (`POST /api/olist/products/restore`, admin,
+  `ids`) volta o produto e as variações para a lista. Não mexe no Olist: quem foi excluído também no ERP volta com a
+  situação "Excluído" (o cadastro não é recriado).
 
 ## Escrita no Olist (API, ainda sem tela)
 `PATCH /api/olist/products/:id/price` e `POST /api/olist/products/:id/stock`: só administradores, exigem `confirm=true`,
