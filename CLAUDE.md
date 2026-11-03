@@ -34,6 +34,8 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 - `BOOTSNAP_CACHE_DIR=/tmp/bootsnap` no compose: cada container (api, jobs) tem o próprio cache do bootsnap. Com o cache
   em `tmp/cache` da pasta montada do Windows, os dois gravando juntos corrompiam o bytecode (quedas com `[BUG]` e
   `NoMethodError` sem sentido dentro do Rails, mesmo no Ruby 3.4). Não volte o cache para a pasta montada.
+- Worker com threads configuráveis (`JOB_THREADS`, padrão 3); o serviço `jobs` está em 1 thread desde 02/11/2026 como teste
+  contra as quedas do Ruby. Se as quedas pararem, manter; se não, suspeitar da máquina (memória/WSL2).
 - O serviço `jobs` roda `bin/jobs-watchdog`: sobe o Solid Queue e, se nenhum Worker der heartbeat por 5 minutos
   (`bin/jobs-heartbeat`), sai com erro para o Docker reiniciar (`restart: unless-stopped`).
 - Testes: `docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"`.
