@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_130001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_03_140001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -589,6 +589,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_130001) do
     t.jsonb "kit_components", default: [], null: false
     t.datetime "kit_checked_at"
     t.decimal "fifo_last_entry_cost", precision: 12, scale: 4
+    t.datetime "hidden_at"
+    t.uuid "hidden_by_user_id"
+    t.index ["company_id", "hidden_at"], name: "index_olist_products_on_company_id_and_hidden_at"
     t.index ["company_id", "olist_id"], name: "index_olist_products_on_company_id_and_olist_id", unique: true
     t.index ["company_id", "parent_olist_id"], name: "index_olist_products_on_company_id_and_parent_olist_id"
     t.index ["company_id", "sku"], name: "index_olist_products_on_company_id_and_sku"

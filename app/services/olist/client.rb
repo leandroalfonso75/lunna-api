@@ -5,11 +5,12 @@
 module Olist
   class Client
     class Error < StandardError
-      attr_reader :status, :path
+      attr_reader :status, :path, :body
 
       def initialize(status:, path:, body: nil)
         @status = status
         @path = path
+        @body = body
         detail = body.presence && " — #{body}"
         super("Olist::Client: #{status || "falha de conexão"} em #{path}#{detail}")
       end
@@ -100,6 +101,19 @@ module Olist
     # --- Escritas (nunca repetem sozinhas) -----------------------------------
 
     # PUT /produtos/{id}/preco
+    # Exclui o cadastro do produto no Olist (DELETE /produtos/{idProduto}, 204). Irreversível: só pela ação
+    # "Excluir" da seção Produtos, com a escolha explícita do usuário.
+    def delete_product(id)
+      path = "/produtos/#{Integer(id)}"
+      ensure_usable!(path)
+      response = http.delete(path.delete_prefix("/")) { |req| authorize(req) }
+      return {} if (200...300).cover?(response.status)
+
+      raise_for(response, path)
+    rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
+      raise Error.new(status: nil, path: path, body: e.message)
+    end
+
     def update_price(id, price:, promo_price: nil)
       body = { preco: price }
       body[:precoPromocional] = promo_price unless promo_price.nil?

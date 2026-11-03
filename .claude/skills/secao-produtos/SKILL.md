@@ -9,3 +9,4 @@ description: Use ao alterar, corrigir ou investigar a página Produtos do Lunna 
 4. Respeite: Olist só com `confirm=true` na escrita; nunca testar escrita no ERP real sem o dono autorizar; segredos fora do git e do chat.
 5. Mudou regra ou arquivo? Atualize `docs/secoes/produtos.md` no mesmo commit e rode os testes com `RAILS_ENV=test` (ver CLAUDE.md), por exemplo `spec/services/olist`.
 6. A lista mostra a foto do anúncio do ML com o mesmo SKU (`thumbnail` em `Olist::ProductPayloads`).
+7. Selecionar e Excluir: `POST /api/olist/products/remove` (`Olist::RemoveProducts`): manter no ERP = só `hidden_at` (a sync não traz de volta); não manter = `DELETE /produtos/{id}` no Olist (irreversível, registrado em `olist_changes` kind delete). Popup com "Sim" padrão (Enter). Teste só com respostas simuladas; nunca excluir produto real para testar.

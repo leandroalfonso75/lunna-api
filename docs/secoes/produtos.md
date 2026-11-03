@@ -47,6 +47,22 @@ Entrada de estoque já lançada **não é editável** no Olist (a tela só ofere
 não tem edição). O caminho sem mexer no estoque é preencher o **preço de custo** no cadastro do produto (aba Custos),
 que o Lunna usa quando o PEPS não tem custo. Para produto novo, dar a entrada de estoque já com o valor.
 
+## Selecionar e excluir (pedido do usuário em 03/11/2026)
+- Administrador marca produtos na lista (caixa por produto; "selecionar todos" vale para a página; variação vai junto
+  com o pai), escolhe a ação **Excluir** e clica em Aplicar. Trocar de página, busca ou filtro limpa a seleção.
+- Com o ERP integrado, o popup pergunta se o cadastro fica no ERP. **Sim** vem marcado e com o foco (Enter confirma);
+  **Não** traz a nota "Ao clicar em Não será excluído automaticamente o cadastro do produto do seu ERP e todas suas
+  informações". Esc ou Cancelar fecham sem mudar nada.
+- `POST /api/olist/products/remove` (admin, `confirm: true`, `ids`, `keep_in_erp` obrigatório e explícito; até 200
+  por vez), `Olist::RemoveProducts`:
+  - Sim (`keep_in_erp: true`): só marca `olist_products.hidden_at`/`hidden_by_user_id` (produto e variações); some da
+    lista e a sincronização não traz de volta (o upsert não mexe nessas colunas). Nada é chamado no Olist.
+  - Não (`keep_in_erp: false`): `DELETE /produtos/{idProduto}` na API v3 do Olist (204; 404 = já não existia), gravado
+    em `olist_changes` (`kind: delete`, antes = descrição/SKU) antes da chamada e fechado como done/failed; depois some
+    do Lunna com situação "E". Falha de um produto (ex.: o Olist recusa por movimentações) não impede os outros: a
+    resposta traz `removed` e `failed` com o motivo, e a tela avisa cada um.
+- Não há tela para trazer de volta um produto oculto (só no banco: `hidden_at = NULL`).
+
 ## Escrita no Olist (API, ainda sem tela)
 `PATCH /api/olist/products/:id/price` e `POST /api/olist/products/:id/stock`: só administradores, exigem `confirm=true`,
 registram quem/quando/antes/depois em `olist_changes` e nunca repetem sozinhas. Testado só com respostas simuladas.

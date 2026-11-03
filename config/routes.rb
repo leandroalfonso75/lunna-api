@@ -32,6 +32,7 @@ Rails.application.routes.draw do
     post "olist/sync", to: "olist#sync"
     get "olist/sync_runs", to: "olist#sync_runs"
     get "olist/products", to: "olist_products#index"
+    post "olist/products/remove", to: "olist_products#remove"
     get "olist/products/:id", to: "olist_products#show"
     patch "olist/products/:id/price", to: "olist_products#update_price"
     post "olist/products/:id/stock", to: "olist_products#adjust_stock"

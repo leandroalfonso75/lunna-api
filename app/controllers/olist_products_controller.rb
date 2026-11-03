@@ -5,9 +5,12 @@
 #   PATCH /api/olist/products/:id/price  → altera preço no Olist (admin, confirm: true)
 #   POST  /api/olist/products/:id/stock  → lança estoque no Olist (admin, confirm: true)
 #   GET   /api/olist/changes             → registro das alterações feitas (admin)
+#   POST  /api/olist/products/remove     → remove os selecionados (admin, confirm: true; ids, keep_in_erp):
+#                                           mantém no Olist (só some do Lunna) ou exclui o cadastro no Olist
 class OlistProductsController < ApplicationController
-  before_action :require_admin!, only: [ :update_price, :adjust_stock, :changes ]
-  before_action :require_confirmation!, only: [ :update_price, :adjust_stock ]
+  before_action :require_admin!, only: [ :update_price, :adjust_stock, :changes, :remove ]
+  before_action :require_confirmation!, only: [ :update_price, :adjust_stock, :remove ]
+  MAX_REMOVE = 200
 
   MAX_LIMIT = 100
 
@@ -59,6 +62,21 @@ class OlistProductsController < ApplicationController
     render_olist_failure(e)
   end
 
+  # keep_in_erp é obrigatório e explícito (true/false): nunca exclui no Olist por omissão.
+  def remove
+    ids = Array(params[:ids]).map(&:to_s).select { |v| v.match?(/\A\d+\z/) }.first(MAX_REMOVE)
+    return render_errors([ "Selecione ao menos um produto." ], status: :unprocessable_content) if ids.empty?
+    unless %w[true false].include?(params[:keep_in_erp].to_s)
+      return render_errors([ "Informe se o cadastro fica no ERP (keep_in_erp true ou false)." ], status: :unprocessable_content)
+    end
+
+    keep = params[:keep_in_erp].to_s == "true"
+    raise NotConnected if !keep && (Current.company.olist_connection.nil? || Current.company.olist_connection.reauth_required?)
+
+    result = Olist::RemoveProducts.call(company: Current.company, user: Current.user, olist_ids: ids, keep_in_erp: keep)
+    render json: { removed: result.removed, failed: result.failed, kept_in_erp: keep }
+  end
+
   def changes
     list = Current.company.olist_changes.recent.includes(:user).limit(100)
     render json: { changes: list.map { |c| change_payload(c) } }
@@ -101,7 +119,7 @@ class OlistProductsController < ApplicationController
   SQL
 
   def listing_scope
-    all = Current.company.olist_products
+    all = Current.company.olist_products.where(hidden_at: nil)
     top = all.where(TOP_LEVEL_SQL)
 
     if params[:q].present?
