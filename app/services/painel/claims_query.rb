@@ -30,17 +30,33 @@ module Painel
       @params = params
     end
 
+    # Período pela data de abertura (como em Vendas): presets, mês (YYYY-MM) ou datas; "all" = todas (padrão).
+    PRESETS = { "today" => 1, "yesterday" => 1, "7d" => 7, "30d" => 30, "60d" => 60, "90d" => 90, "365d" => 365 }.freeze
+    # Ordenação por coluna (pedido do usuário em 03/11/2026). Colunas calculadas (devolução, reembolso, frete) são
+    # ordenadas depois de montar as linhas; vazio ("carregando…") vai sempre para o fim.
+    SORTS = {
+      "date" => ->(r) { r[:date_created].to_i }, "type" => ->(r) { r[:type_label] }, "reason" => ->(r) { r[:reason] },
+      "status" => ->(r) { r[:status_label] }, "return_enabled" => ->(r) { { true => 1, false => 0 }[r.dig(:devolution_status, :enabled)] },
+      "return_state" => ->(r) { r.dig(:devolution_status, :label) }, "refund" => ->(r) { r.dig(:refund, :label) },
+      "freight" => ->(r) { r.dig(:freight, :amount) || ({ "nao" => 0 }[r.dig(:freight, :key)]) },
+      "reputation" => ->(r) { { true => 1, false => 0 }[r[:affects_reputation]] }
+    }.freeze
+    ZONE = ActiveSupport::TimeZone["America/Sao_Paulo"]
+
     def list
+      from, to = window
       scope = search(@account.ml_claims)
-      total = scope.count
+      scope = scope.where(date_created: from..to) if from
+      claims = scope.select(MlClaim.column_names - %w[raw detail messages changes_log evidences reason status_history]).to_a
+      orders = orders_for(claims)
+      rows = sort(claims.map { |c| row(c, orders[c.claim_id]) })
       per = PER_PAGES.include?(@params[:per_page].to_i) ? @params[:per_page].to_i : 50
       page = [ @params[:page].to_i, 1 ].max
-      claims = scope.order(date_created: :desc, claim_id: :desc).offset((page - 1) * per).limit(per)
-        .select(MlClaim.column_names - %w[raw detail messages changes_log evidences reason]).to_a
-      orders = orders_for(claims)
       {
-        claims: claims.map { |c| row(c, orders[c.claim_id]) },
-        total: total, page: page, per_page: per,
+        claims: rows.slice((page - 1) * per, per) || [],
+        total: rows.size, page: page, per_page: per, sort: sort_key, dir: sort_dir,
+        period: { preset: preset_key, month: month_key, from: from&.iso8601, to: to&.iso8601 },
+        months: available_months,
         import: import_info
       }
     end
@@ -60,6 +76,63 @@ module Painel
     end
 
     private
+
+    def sort_key = SORTS.key?(@params[:sort].to_s) ? @params[:sort].to_s : "date"
+    def sort_dir = @params[:dir].to_s == "asc" ? "asc" : "desc"
+
+    def sort(rows)
+      key = SORTS.fetch(sort_key)
+      filled, empty = rows.partition { |r| !key.(r).nil? }
+      sorted = filled.sort_by { |r| [ key.(r), r[:date_created].to_i ] }
+      sorted = sorted.reverse if sort_dir == "desc"
+      sorted + empty.sort_by { |r| -r[:date_created].to_i }
+    end
+
+    def preset_key
+      return "custom" if custom_dates?
+      return "month" if month_key
+
+      PRESETS.key?(@params[:period].to_s) ? @params[:period].to_s : "all"
+    end
+
+    def custom_dates? = @params[:from].present? && @params[:to].present?
+
+    def month_key
+      key = @params[:month].to_s
+      key.match?(/\A\d{4}-\d{2}\z/) && available_months.any? { |m| m[:value] == key } ? key : nil
+    end
+
+    # Meses com reclamação, do mais novo para o mais antigo (o atual sempre primeiro).
+    def available_months
+      @available_months ||= begin
+        today = ZONE.today
+        keys = @account.ml_claims.where.not(date_created: nil)
+          .pluck(Arel.sql("DISTINCT to_char(date_created AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')"))
+        keys = (keys + [ today.strftime("%Y-%m") ]).uniq.sort.reverse
+        keys.map { |k| { value: k, label: "#{k[5, 2]}/#{k[0, 4]}", current: k == today.strftime("%Y-%m") } }
+      end
+    end
+
+    # => [início, fim] em horário de Brasília, ou [nil, nil] para todas.
+    def window
+      today = ZONE.today
+      if custom_dates?
+        first = Date.parse(@params[:from].to_s) rescue nil
+        last = Date.parse(@params[:to].to_s) rescue nil
+        return [ first.in_time_zone(ZONE).beginning_of_day, last.in_time_zone(ZONE).end_of_day ] if first && last
+      end
+      if (key = month_key)
+        start = Date.strptime(key, "%Y-%m")
+        return [ start.in_time_zone(ZONE).beginning_of_day, [ start.end_of_month, today ].min.in_time_zone(ZONE).end_of_day ]
+      end
+
+      case preset_key
+      when "today" then [ today.in_time_zone(ZONE).beginning_of_day, ZONE.now.end_of_day ]
+      when "yesterday" then [ (today - 1).in_time_zone(ZONE).beginning_of_day, (today - 1).in_time_zone(ZONE).end_of_day ]
+      when "all" then [ nil, nil ]
+      else [ (today - (PRESETS.fetch(preset_key) - 1)).in_time_zone(ZONE).beginning_of_day, ZONE.now.end_of_day ]
+      end
+    end
 
     def search(scope)
       q = @params[:q].to_s.strip
@@ -90,8 +163,10 @@ module Painel
                 Arel.sql("payload->'payments' AS payments")).to_a
       items = MlOrderItem.where(order_id: orders.map(&:order_id)).group_by(&:order_id)
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
+      by_id = orders.index_by(&:order_id)
+      by_shipping = orders.select(&:shipping_id).index_by(&:shipping_id)
       claims.to_h do |c|
-        o = orders.find { |x| (c.order_id && x.order_id == c.order_id) || (c.resource == "shipment" && x.shipping_id == c.resource_id) }
+        o = (c.order_id && by_id[c.order_id]) || (c.resource == "shipment" && by_shipping[c.resource_id]) || nil
         line = o && items[o.order_id]&.first
         [ c.claim_id, o && { order_id: o.order_id, buyer_nickname: o.buyer_nickname, buyer_name: o.buyer_name,
                              total: o.total_amount&.to_f, date_created: o.date_created, status: o.status,

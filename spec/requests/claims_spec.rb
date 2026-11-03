@@ -118,4 +118,39 @@ RSpec.describe "/api/claims", type: :request do
     expect(by[1]["freight"]).to include("key" => "nao")
     expect(by[2]["freight"]).to include("key" => "previsto", "label" => "Sim (previsto)")
   end
+
+  it "filtro de período (presets, mês e datas) e ordenação por coluna" do
+    travel_to(Time.zone.local(2026, 11, 3, 12)) do
+      now = Time.current
+      claim(1, date_created: Time.zone.local(2026, 11, 2, 10), details_synced_at: now, affects_reputation: true, reason_detail: "Chegou quebrado",
+               devolution: { "status" => "delivered" })
+      claim(2, date_created: Time.zone.local(2026, 10, 20, 10), details_synced_at: now, affects_reputation: false, reason_detail: "Arrependimento",
+               claim_type: "cancel_purchase")
+      claim(3, date_created: Time.zone.local(2025, 5, 1, 10), reason_detail: "Antiga")
+
+      get "/api/claims", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["total"]).to eq(3)
+      expect(json["period"]).to include("preset" => "all")
+      expect(json["months"].map { |m| m["label"] }).to eq(%w[11/2026 10/2026 05/2025])
+
+      get "/api/claims", params: { account_id: account.id, period: "7d" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1 ])
+
+      get "/api/claims", params: { account_id: account.id, month: "2026-10" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 2 ])
+
+      get "/api/claims", params: { account_id: account.id, from: "2025-01-01", to: "2025-12-31" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 3 ])
+
+      get "/api/claims", params: { account_id: account.id, sort: "reason", dir: "asc" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 3, 2, 1 ]) # Antiga, Arrependimento, Chegou quebrado
+      expect(json).to include("sort" => "reason", "dir" => "asc")
+
+      get "/api/claims", params: { account_id: account.id, sort: "reputation", dir: "desc" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1, 2, 3 ]) # afeta, não afeta, sem detalhe no fim
+
+      get "/api/claims", params: { account_id: account.id, sort: "return_state", dir: "asc" }, headers: auth_headers(member)
+      expect(json["claims"].first["claim_id"]).to eq(1)
+    end
+  end
 end

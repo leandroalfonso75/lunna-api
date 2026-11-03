@@ -25,6 +25,15 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   lido na importação) ou, sem isso, o custo do envio de retorno que ficou com o vendedor (`/shipments/{id}/costs`,
   `receiver.cost`, em `ml_claims.return_shipping`). Quando o ML aplicou cobertura na reclamação (`applied_coverage`), a
   tela avisa "cobertura do ML": o custo pode ter sido reembolsado ao vendedor (em 03/11, 97 de 101 casos com frete).
+- **Período** (pela data de abertura, como em Vendas; pedido do usuário em 03/11/2026): Todas (padrão), Hoje, Ontem,
+  7, 30, 60 dias, 3 e 12 meses, **Mês** (lista com todos os meses que têm reclamação, o atual primeiro) ou datas
+  escolhidas (sem o limite de 92 dias de Vendas: as reclamações vêm desde 2020). API: `period`, `month=YYYY-MM` ou
+  `from`/`to`; a resposta traz `period` e `months`.
+- **Ordenação** clicando no título: Aberta em, Reclamação (tipo), Motivo, Situação, Devolução habilitada, Devolução
+  efetivada, Reembolso, Custo com frete (pelo valor) e Reputação; clicar de novo inverte. API: `sort` (date, type,
+  reason, status, return_enabled, return_state, refund, freight, reputation) e `dir`. Como devolução, reembolso e
+  frete são calculados, a lista inteira do período é montada e ordenada antes de paginar (~0,2 s para 2.481);
+  reclamação ainda sem detalhes vai para o fim em qualquer ordem.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como
@@ -57,7 +66,8 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   continua igual.
 
 ## API
-- `GET /api/claims?account_id=&q=&page=&per_page=` → `claims`, `total`, `page`, `per_page`, `import`.
+- `GET /api/claims?account_id=&q=&page=&per_page=&period=|month=|from=&to=&sort=&dir=` → `claims`, `total`, `page`, `per_page`,
+  `sort`, `dir`, `period`, `months`, `import`.
 - `GET /api/claims/:id?account_id=` → a reclamação com tudo (`messages`, `status_history`, `actions_history`,
   `expected_resolutions`, `evidences`, `changes`, `reputation`, `devolution`, `reason_info`, `resolution_raw`, `raw`).
 
