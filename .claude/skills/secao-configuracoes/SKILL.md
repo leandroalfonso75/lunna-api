@@ -10,3 +10,4 @@ description: Use ao alterar a página Configurações do Lunna (empresa, imposto
 5. Pendência conhecida: `fixed_expenses_pct` (despesas fixas, 3%) ainda não tem campo na tela e é usado em Anúncios e Vendas.
 6. Respeite: tudo escopado por `Current.company`, só administradores alteram, chave de IA cifrada e nunca devolvida ao front.
 7. Mudou regra ou arquivo? Atualize `docs/secoes/configuracoes.md` no mesmo commit.
+8. Pendência (03/11/2026): ao criar a página de criação de usuários e permissões, lembrar o usuário de decidir a permissão "ver CPF completo em Vendas" (hoje só administrador; `reveal_doc` em `SalesController`).
