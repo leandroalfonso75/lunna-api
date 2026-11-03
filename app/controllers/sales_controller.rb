@@ -7,11 +7,11 @@ class SalesController < ApplicationController
   before_action :require_admin!, only: [ :sync ]
 
   def index
-    render json: Painel::SalesQuery.call(Current.account, params)
+    render json: Painel::SalesQuery.call(Current.account, params, reveal_doc: Current.user.admin?)
   end
 
   def show
-    render json: Painel::SalesQuery.detail(Current.account, params[:id], params)
+    render json: Painel::SalesQuery.detail(Current.account, params[:id], params, reveal_doc: Current.user.admin?)
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Venda não encontrada." ], status: :not_found)
   end

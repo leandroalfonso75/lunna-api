@@ -13,6 +13,7 @@ module Ml
       QUALITY_BATCH = 200
       DETAILS_BATCH = 60
       SHIPMENTS_BATCH = 60
+      BILLING_BATCH = 150
       CLAIMS_BATCH = 40
       ADS_EVERY = 3.hours
       ADS_RECENT_EVERY = 30.minutes
@@ -57,6 +58,7 @@ module Ml
         sync_visits(client)
         orders_result = sync_orders(client)
         sync_shipments(client)
+        sync_billing(client)
         sync_claims(client)
         sync_ads(client)
         sync_promotions(client)
@@ -159,6 +161,12 @@ module Ml
         return if last.present? && last > CATALOG_EVERY.ago
 
         @notes.concat(Ml::Sync::CatalogStatus.call(client, @account).notes)
+      end
+
+      # Nome, CPF/CNPJ e cidade/UF do comprador (coluna "Cliente" de Vendas), 150 pedidos por rodada (mais novos primeiro).
+      def sync_billing(client)
+        result = Ml::Sync::BillingInfo.call(client, @account, limit: BILLING_BATCH, since: 95.days.ago)
+        @notes.concat(result.notes)
       end
 
       # Reclamações, cancelamentos por mediação e devoluções das vendas (motivo, resultado, devolução).

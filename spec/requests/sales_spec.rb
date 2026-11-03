@@ -371,4 +371,38 @@ RSpec.describe "/api/sales", type: :request do
     expect(carts.values_at(1, 2).map { |c| c["position"] }).to contain_exactly(1, 2)
     expect(carts[3]).to be_nil
   end
+
+  it "filtro por mês: lista do mês atual para trás e recorte do 1º ao último dia" do
+    travel_to(Time.zone.local(2026, 11, 3, 12)) do
+      sale(1, at: Time.zone.local(2026, 10, 15, 10))
+      sale(2, at: Time.zone.local(2026, 11, 2, 10))
+
+      get "/api/sales", params: { account_id: account.id, month: "2026-10" }, headers: auth_headers(member)
+
+      expect(json["period"]).to include("preset" => "month", "month" => "2026-10")
+      expect(json["period"]["from"]).to start_with("2026-10-01")
+      expect(json["period"]["to"]).to start_with("2026-10-31")
+      expect(json["sales"].map { |r| r["order_id"] }).to eq([ 1 ])
+      expect(json["months"].map { |m| m["label"] }).to eq(%w[11/2026 10/2026 09/2026 08/2026])
+      expect(json["months"].first).to include("current" => true)
+      expect(json["months"].last).to include("partial" => true) # 92 dias para trás começam em 03/08
+
+      get "/api/sales", params: { account_id: account.id, month: "2026-11" }, headers: auth_headers(member)
+      expect(json["sales"].map { |r| r["order_id"] }).to eq([ 2 ])
+      expect(json["period"]["to"]).to start_with("2026-11-03")
+    end
+  end
+
+  it "coluna Cliente: nome, CPF (inteiro só para administrador) e cidade/UF" do
+    sale(1).update!(buyer_name: "Maria Souza", buyer_doc_type: "CPF", buyer_doc_number: "12345678901", buyer_city: "Itabaraba", buyer_state: "BA")
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["sales"].first["buyer"]).to eq("name" => "Maria Souza", "doc_type" => "CPF", "doc" => "***.456.789-**", "city" => "Itabaraba/BA", "loaded" => false)
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(json["sales"].first["buyer"]["doc"]).to eq("123.456.789-01")
+
+    get "/api/sales/1", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(json["buyer"]).to include("name" => "Maria Souza", "doc" => "123.456.789-01", "nickname" => "COMPRADOR1")
+  end
 end

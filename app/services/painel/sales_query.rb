@@ -54,23 +54,26 @@ module Painel
     }.freeze
 
     LIST_COLUMNS = %i[order_id ml_account_id status date_created date_closed total_amount paid_amount shipping_id pack_id
-                      buyer_id buyer_nickname shipment shipment_synced_at claims].freeze
+                      buyer_id buyer_nickname shipment shipment_synced_at claims
+                      buyer_name buyer_doc_type buyer_doc_number buyer_city buyer_state billing_synced_at].freeze
     # motivo do cancelamento sem carregar o payload inteiro do pedido na lista
     CANCEL_DETAIL = Arel.sql("payload->'cancel_detail' AS cancel_detail")
 
-    def self.call(account, params)
-      new(account, params).call
+    def self.call(account, params, reveal_doc: false)
+      new(account, params, reveal_doc: reveal_doc).call
     end
 
     # params: o mesmo período da lista (period ou from/to), que define o rateio do custo de Ads.
-    def self.detail(account, order_id, params = {})
-      new(account, params).detail(order_id)
+    def self.detail(account, order_id, params = {}, reveal_doc: false)
+      new(account, params, reveal_doc: reveal_doc).detail(order_id)
     end
 
-    def initialize(account, params)
+    # reveal_doc: administrador vê o CPF/CNPJ inteiro; os demais, mascarado.
+    def initialize(account, params, reveal_doc: false)
       @account = account
       @company = account.company
       @params = params
+      @reveal_doc = reveal_doc
       @zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
     end
 
@@ -86,7 +89,8 @@ module Painel
       attach_carts!(slice)
 
       {
-        period: { from: from.iso8601, to: to.iso8601, preset: preset_key },
+        period: { from: from.iso8601, to: to.iso8601, preset: preset_key, month: month_key },
+        months: available_months,
         summary: summary(rows, filtered: filtered?),
         daily: daily(rows, from, to),
         counts: counts(base),
@@ -109,7 +113,7 @@ module Painel
         coupon_amount: payload.dig("coupon", "amount"),
         date_last_updated: payload["date_last_updated"],
         expiration_date: payload["expiration_date"],
-        buyer: { id: order.buyer_id, nickname: order.buyer_nickname },
+        buyer: row[:buyer].merge(id: order.buyer_id, nickname: order.buyer_nickname),
         shipment_detail: row[:shipping]
       )
     end
@@ -221,12 +225,37 @@ module Painel
         order_id: order.order_id, pack_id: order.pack_id,
         date_created: order.date_created, date_closed: order.date_closed,
         status: status_label(ORDER_STATUS, order.status), buyer_nickname: order.buyer_nickname,
+        buyer: buyer(order, shipment),
         items: items, units: items.sum { |i| i[:quantity].to_i },
         total_amount: order.total_amount&.to_f, paid_amount: order.paid_amount&.to_f,
         shipping: shipping(order, shipment, share, group, order.order_id),
         issue: SaleIssues.for(order),
         economics: economics(order, lines, shipment, olist, manual, share, ads)
       }
+    end
+
+    # Coluna "Cliente": nome, documento (CPF/CNPJ) e cidade/UF (do faturamento, que traz a sigla da UF; sem ele, do envio).
+    def buyer(order, shipment)
+      city = [ order.buyer_city, order.buyer_state ].compact_blank
+      city = [ shipment&.dig("destination_city"), shipment&.dig("destination_state") ].compact_blank if city.empty?
+      { name: order.buyer_name, doc_type: order.buyer_doc_type, doc: format_doc(order.buyer_doc_type, order.buyer_doc_number),
+        city: city.join("/").presence, loaded: order.billing_synced_at.present? }
+    end
+
+    # CPF 123.456.789-01 / CNPJ 12.345.678/0001-90; para quem não é administrador, só os 3 do meio do CPF
+    # (***.456.789-**) e o CNPJ inteiro (é de empresa).
+    def format_doc(type, number)
+      return nil if number.blank?
+
+      if number.size == 11
+        return "***.#{number[3, 3]}.#{number[6, 3]}-**" unless @reveal_doc
+
+        "#{number[0, 3]}.#{number[3, 3]}.#{number[6, 3]}-#{number[9, 2]}"
+      elsif number.size == 14
+        "#{number[0, 2]}.#{number[2, 3]}.#{number[5, 3]}/#{number[8, 4]}-#{number[12, 2]}"
+      else
+        @reveal_doc ? number : "#{'*' * [ number.size - 4, 0 ].max}#{number[-4..]}"
+      end
     end
 
     # Parte desta venda no frete do vendedor do envio: frete × unidades da venda ÷ unidades do envio.
@@ -366,6 +395,7 @@ module Painel
     def preset_key
       key = @params[:period].to_s
       return "custom" if custom_dates?
+      return "month" if month_key
 
       PRESETS.key?(key) ? key : DEFAULT_PERIOD
     end
@@ -380,8 +410,36 @@ module Painel
       nil
     end
 
+    # Filtro por mês ("2026-10"): do dia 1º ao último dia (o mês atual vai até hoje). Só meses da lista.
+    def month_key
+      key = @params[:month].to_s
+      available_months.any? { |m| m[:value] == key } ? key : nil
+    end
+
+    # Mês atual primeiro e os anteriores em ordem decrescente, até o mês do limite de 92 dias (o mais antigo fica
+    # parcial: começa no limite).
+    def available_months
+      @available_months ||= begin
+        first = @zone.today - MAX_DAYS
+        months = []
+        month = @zone.today.beginning_of_month
+        while month >= first.beginning_of_month
+          months << { value: month.strftime("%Y-%m"), label: month.strftime("%m/%Y"), current: month == @zone.today.beginning_of_month,
+                      partial: month < first }
+          month = month.prev_month
+        end
+        months
+      end
+    end
+
     def window
       limit = @zone.today - MAX_DAYS
+      if (key = month_key)
+        start = Date.strptime(key, "%Y-%m")
+        first = [ start, limit ].max
+        last = [ start.end_of_month, @zone.today ].min
+        return [ first.in_time_zone(@zone).beginning_of_day, last == @zone.today ? @zone.now.end_of_day : last.in_time_zone(@zone).end_of_day ]
+      end
       if custom_dates?
         first = [ parse_date(@params[:from]), limit ].max
         last = [ parse_date(@params[:to]), @zone.today ].min

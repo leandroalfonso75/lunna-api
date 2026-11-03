@@ -112,6 +112,11 @@ module Ml
       get("/shipments/#{shipment_id}")
     end
 
+    # Faturamento do comprador do pedido (nome, CPF/CNPJ, endereço; o Lunna guarda só nome, documento e cidade/UF).
+    def billing_info(order_id)
+      get("/orders/#{order_id}/billing_info")
+    end
+
     def shipment_costs(shipment_id)
       get("/shipments/#{shipment_id}/costs")
     end

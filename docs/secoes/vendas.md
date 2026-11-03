@@ -3,7 +3,10 @@
 Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o que a API entrega e o lucro líquido de cada uma.
 
 ## O que mostra
-- **Período:** Hoje (padrão ao abrir), Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas (no máximo 92 dias para trás).
+- **Período:** Hoje (padrão ao abrir), Ontem, 7 dias, 30 dias, 60 dias, 3 meses, **Mês** (lista com o mês atual
+  primeiro, "até hoje", e os anteriores em ordem decrescente: 11/2026, 10/2026...; o mais antigo, cortado no limite de 92
+  dias, aparece como "parcial"; `?month=2026-10` mostra do dia 1º ao último dia) ou datas escolhidas (no máximo 92 dias
+  para trás). O botão "Mês até hoje" saiu em 03/11/2026: é o mês atual da lista (`mtd` continua aceito pela API).
 - **Resumo:** vendas, faturamento (e ticket médio), lucro líquido (e % do faturamento), tarifas + frete, imposto + despesas
   fixas e custo dos produtos. Vendas canceladas ficam fora dos totais (só aparecem contadas).
 - **Contagem de vendas:** uma venda = um carrinho do Mercado Livre (`pack_id`) quando houver, senão o pedido. Carrinho
@@ -19,7 +22,8 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
 - **Coluna Envio:** situação do envio e, abaixo, o oval do logotipo do Mercado Livre (origem da venda) seguido do selo da
   forma de envio: imagem para Full e Agência (`public/logistica/` no lunna-web-radar: `ml-oval.png`, `full.png` com
   fundo transparente, `agencia.png`); Flex, Coleta e as demais ficam em texto. Pedido do usuário em 02/11/2026.
-- **Tabela:** data, produto (foto, SKU, unidades), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
+- **Tabela:** data, produto (foto, título, nº da venda e, na linha de baixo, SKU e unidades), **Cliente** (nome, CPF/CNPJ
+  e cidade/UF, uma informação por linha; "Carregando…" até o faturamento ser lido), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
   Colunas de valores: valor, tarifa, frete, imposto, despesas fixas, custo, **lucro líquido**, **Custo Ads** e **Lucro pós
   Ads** (% em cima, R$ embaixo). Resumo com os cartões "Custo com Ads" e "Lucro pós Ads". Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
 - **Detalhe (clique na linha):** resultado da venda linha a linha, produtos (variação, tarifa, tipo de anúncio),
@@ -71,7 +75,12 @@ Implementado em `Painel::SalesQuery#economics`.
 ## Dados e atualização
 - Fonte: API do Mercado Livre, somente leitura. Pedido completo em `ml_orders.payload`; linhas em `ml_order_items`
   (com título, SKU, tipo de anúncio e variação); envio em `ml_orders.shipment`; reclamações em `ml_orders.claims`.
-- **Privacidade:** do comprador guardamos só id e apelido. O envio é salvo sem nome, telefone e endereço (só cidade/UF).
+- **Privacidade:** do comprador guardamos id, apelido e, desde 03/11/2026 (pedido do usuário, coluna "Cliente"), nome,
+  tipo e número do documento (CPF/CNPJ) e cidade/UF, lidos de `/orders/{id}/billing_info` (`Ml::Sync::BillingInfo`,
+  150 pedidos por rodada, mais novos primeiro; colunas `ml_orders.buyer_*` e `billing_synced_at`). Rua, número,
+  bairro, CEP e telefone continuam fora; o envio segue salvo sem nome, telefone e endereço. Na tela, CPF inteiro só
+  para administrador (os demais veem `***.456.789-**`); CNPJ aparece inteiro. São dados pessoais (LGPD): usar só para a
+  operação das vendas.
 - A sincronização normal (5 min) relê os pedidos criados nos últimos 4 dias e os alterados nos últimos 2 dias, busca o
   envio de 60 pedidos por rodada (`Ml::Sync::Shipments`; envio em andamento é relido depois de 2 h; envio já
   entregue/cancelado só é relido se o pedido mudar depois) e as reclamações de 40 (`Ml::Sync::Claims`).
