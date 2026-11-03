@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_160001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_03_170001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -295,6 +295,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_160001) do
     t.datetime "details_synced_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "reputation_status"
     t.index ["ml_account_id", "claim_id"], name: "index_ml_claims_on_ml_account_id_and_claim_id", unique: true
     t.index ["ml_account_id", "date_created"], name: "index_ml_claims_on_ml_account_id_and_date_created"
     t.index ["ml_account_id", "status"], name: "index_ml_claims_on_ml_account_id_and_status"

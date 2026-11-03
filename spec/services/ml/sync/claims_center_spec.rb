@@ -26,7 +26,7 @@ RSpec.describe Ml::Sync::ClaimsCenter do
     stub_request(:get, "#{api}/v1/claims/#{id}/expected-resolutions").to_return(status: 200, body: [ { player_role: "complainant", expected_resolution: "return_product", status: "pending" } ].to_json)
     stub_request(:get, "#{api}/v1/claims/#{id}/evidences").to_return(status: 500, body: "{}") # parte recusada não impede o resto
     stub_request(:get, "#{api}/v1/claims/#{id}/changes").to_return(status: 200, body: { paging: {}, data: [ { field: "stage" } ] }.to_json)
-    stub_request(:get, "#{api}/v1/claims/#{id}/affects-reputation").to_return(status: 200, body: { affects_reputation: true, has_incentive: false }.to_json)
+    stub_request(:get, "#{api}/v1/claims/#{id}/affects-reputation").to_return(status: 200, body: { affects_reputation: id == 2 ? "not_affected" : "affected", has_incentive: false }.to_json)
     stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 200, body: { id: 77, status: "label_generated" }.to_json)
     stub_request(:get, "#{api}/v1/claims/reasons/PDD9941").to_return(status: 200, body: { id: "PDD9941", name: "different_color", detail: "Não é da cor que escolhi", flow: "post_purchase_delivered" }.to_json)
   end
@@ -48,7 +48,9 @@ RSpec.describe Ml::Sync::ClaimsCenter do
     expect(c.devolution).to include("id" => 77)
     expect(c.changes_log).to eq([ { "field" => "stage" } ])
     expect(c.detail_errors.keys).to eq([ "evidences" ])
-    expect(account.ml_claims.find_by(claim_id: 2)).to have_attributes(order_id: nil, resource: "shipment", devolution: nil)
+    expect(account.ml_claims.find_by(claim_id: 2)).to have_attributes(order_id: nil, resource: "shipment", devolution: nil,
+                                                                       affects_reputation: false, reputation_status: "not_affected")
+    expect(c.reputation_status).to eq("affected")
     expect(account.reload.claims_full_listed_at).to be_present
   end
 

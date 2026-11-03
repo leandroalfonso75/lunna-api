@@ -28,6 +28,11 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   filtrar (tipo, etapa, situação, motivo, datas, quem age, prazo, reputação, pedido) e jsonb com tudo o que a API
   devolve (`raw`, `detail`, `messages`, `status_history`, `actions_history`, `expected_resolutions`, `evidences`,
   `changes_log`, `reputation`, `devolution`, `reason`).
+- **Reputação:** `/affects-reputation` responde `affects_reputation` como **texto** ("affected" / "not_affected"), não
+  como verdadeiro/falso. `affects_reputation` (booleano) = `ClaimsCenter.reputation_flag` (affected → true,
+  not_affected → false, outro valor → nil) e o texto original fica em `reputation_status`. Até 03/11/2026 15h o texto era
+  convertido direto e "not_affected" virava "Afeta" (corrigido pela migration `AddReputationStatusToMlClaims`, que
+  recalculou tudo a partir do jsonb `reputation`; conferido com a venda #2000019300486644, que não afetou a reputação).
 - Venda ligada: pelo pedido (`resource: order`) ou pelo envio (`resource: shipment` → `ml_orders.shipping_id`).
 - Somente leitura no Mercado Livre: o Lunna não responde, não anexa nem age nas reclamações.
 - O resumo antigo de reclamações dentro das vendas (`ml_orders.claims`, `Ml::Sync::Claims`, motivo na lista de Vendas)

@@ -115,7 +115,8 @@ module Ml
                        action_responsible: d["action_responsible"], due_date: d["due_date"])
         end
         if (r = attrs[:reputation]).is_a?(Hash)
-          attrs.merge!(affects_reputation: r["affects_reputation"], has_incentive: r["has_incentive"])
+          attrs.merge!(affects_reputation: reputation_flag(r["affects_reputation"]), reputation_status: r["affects_reputation"]&.to_s.presence,
+                       has_incentive: reputation_flag(r["has_incentive"]))
         end
         related = Array((full || {})["related_entities"].presence || claim.related_entities)
         attrs[:devolution] = related.include?("return") ? safe(errors, :devolution) { client.claim_return(claim.claim_id) } : nil
@@ -124,6 +125,15 @@ module Ml
           attrs.merge!(reason: reason, reason_name: reason["name"], reason_detail: reason["detail"], reason_flow: reason["flow"])
         end
         attrs.merge(detail_errors: errors)
+      end
+
+      # O ML responde affects_reputation como texto ("affected" / "not_affected"); valor desconhecido fica nil (o texto
+      # original vai em reputation_status). Nunca converter texto direto para booleano: "not_affected" viraria true.
+      def self.reputation_flag(value)
+        case value.to_s
+        when "affected", "true" then true
+        when "not_affected", "false" then false
+        end
       end
 
       # Uma parte que o ML recusa (404 = não existe para esta reclamação) não impede as outras.

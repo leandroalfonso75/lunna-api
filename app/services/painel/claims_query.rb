@@ -99,7 +99,7 @@ module Painel
         resource: c.resource, resource_id: c.resource_id,
         title: c.detail_title, action_responsible: c.action_responsible,
         action_responsible_label: c.action_responsible && (ROLES[c.action_responsible] || c.action_responsible), due_date: c.due_date,
-        affects_reputation: c.affects_reputation, has_incentive: c.has_incentive,
+        affects_reputation: c.affects_reputation, reputation_status: c.reputation_status, has_incentive: c.has_incentive,
         resolution: c.resolution && { reason: c.resolution["reason"], benefited: Array(c.resolution["benefited"]),
                                       closed_by: c.resolution["closed_by"], date: c.resolution["date_created"] },
         order: order, detailed: c.details_synced_at.present?,
