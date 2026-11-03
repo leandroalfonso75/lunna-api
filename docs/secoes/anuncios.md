@@ -15,7 +15,10 @@ Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
 ## Conta do lucro líquido (por unidade vendida)
 `preço de venda − custo − comissão − frete/taxas − despesas fixas − imposto`
 - **Custo:** do Olist pelo SKU (`Olist::UnitCost`: PEPS → cadastro → médio → custo da última entrada; kit = soma dos componentes). Sem custo no
-  Olist, usa o custo manual do SKU (`ml_costs`: custo + extra). Sem nenhum, aparece "sem custo" e o lucro não é calculado.
+  Olist, usa o custo manual do SKU (`ml_costs`: custo + extra). Anúncio com variações cujo SKU do anúncio não existe
+  no Olist (ex.: MONDSC13-DIF, variações LS-SC13-DIF-110/220, kits do secador + LS-DIF): custo = média dos SKUs das
+  variações vendidas nos últimos 90 dias, ponderada pelas unidades (`Painel::VariationCost`, fonte "variacoes"); vale
+  também em Promoções e na Análise de Ads. Sem nenhum, aparece "sem custo" e o lucro não é calculado.
 - **Comissão:** parte percentual da tarifa prevista no anúncio (`fee_now` menos taxa fixa e financiamento, lidos de
   `fee_details`). Sem o detalhe, a tarifa inteira entra como comissão.
 - **Frete/taxas:** frete pago pelo vendedor (`ship_cost`) + taxa fixa + financiamento.

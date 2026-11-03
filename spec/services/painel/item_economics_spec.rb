@@ -55,6 +55,22 @@ RSpec.describe Painel::ItemEconomics do
     expect(result).to include(commission: 22.5, fees_split: false, fees_known: true)
   end
 
+  it "anúncio com variações: SKU do anúncio sem custo usa a média dos SKUs das variações vendidas (kit pela soma)" do
+    m = metric(sku: "PAI-SEM-CUSTO")
+    item
+    olist_cost("VAR-110", 80)
+    MlCost.create!(company: company, sku: "VAR-220", cost: 100, extra: 0)
+    [ [ 1, "VAR-110", 3 ], [ 2, "VAR-220", 1 ], [ 3, "VAR-SEM", 5 ] ].each do |id, sku, qty|
+      MlOrder.create!(order_id: id, ml_account: account, status: "paid", date_created: 3.days.ago, total_amount: 100)
+      MlOrderItem.create!(order_id: id, item_id: "MLB1", sku: sku, quantity: qty, unit_price: 100, sale_fee: 10)
+    end
+
+    result = call(m)[m.item_id]
+
+    # (80×3 + 100×1) ÷ 4 = 85; variação sem custo fica fora da média
+    expect(result).to include(cost: 85.0, cost_source: "variacoes")
+  end
+
   it "sem custo no Olist usa o custo manual do SKU (custo + extra)" do
     m = metric
     item

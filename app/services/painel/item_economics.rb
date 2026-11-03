@@ -30,8 +30,14 @@ module Painel
       olist = Olist::UnitCost.for_skus(@company, skus)
       manual = @company.ml_costs.where(sku: skus).index_by(&:sku)
       ads = AdsUnitCost.for_items(@account, @metrics.map(&:item_id))
+      # SKU do anúncio sem custo (anúncio com variações): custo pelos SKUs das variações vendidas
+      missing = @metrics.reject { |m| olist[m.sku] || manual[m.sku] }.map(&:item_id)
+      by_variation = VariationCost.for_items(@account, missing)
 
-      @metrics.to_h { |metric| [ metric.item_id, build(metric, items[metric.item_id], olist[metric.sku], manual[metric.sku], ads[metric.item_id]) ] }
+      @metrics.to_h do |metric|
+        olist_cost = olist[metric.sku] || by_variation[metric.item_id]
+        [ metric.item_id, build(metric, items[metric.item_id], olist_cost, manual[metric.sku], ads[metric.item_id]) ]
+      end
     end
 
     private

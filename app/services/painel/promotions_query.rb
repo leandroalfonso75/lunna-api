@@ -154,9 +154,13 @@ module Painel
 
     def context(items)
       skus = items.map(&:sku).compact_blank.uniq
+      olist = Olist::UnitCost.for_skus(@company, skus)
+      manual = @company.ml_costs.where(sku: skus).index_by(&:sku)
+      missing = items.reject { |i| olist[i.sku] || manual[i.sku] }.map(&:item_id)
       {
-        olist: Olist::UnitCost.for_skus(@company, skus),
-        manual: @company.ml_costs.where(sku: skus).index_by(&:sku),
+        olist: olist,
+        manual: manual,
+        by_variation: VariationCost.for_items(@account, missing),
         settings: @account.ml_promotion_settings.where(item_id: items.map(&:item_id)).index_by(&:item_id),
         ads: ads_per_unit(items.map(&:item_id)),
         offers: offers_by_item(items.map(&:item_id)),
@@ -264,7 +268,9 @@ module Painel
       return olist.value.to_f if olist
 
       manual = ctx[:manual][item.sku]
-      manual ? manual.cost.to_f + manual.extra.to_f : nil
+      return manual.cost.to_f + manual.extra.to_f if manual
+
+      ctx[:by_variation][item.item_id]&.value&.to_f
     end
 
     # O desconto próprio (PRICE_DISCOUNT) sempre pode ser criado: quando o ML não listou a oferta, entra uma candidata
