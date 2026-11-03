@@ -121,11 +121,40 @@ module Ml
         # Devolução: sempre consultada (404 = não há). O ML nem sempre lista "return" em related_entities de reclamação
         # já encerrada, e confiar nisso deixava devoluções entregues/expiradas de fora (corrigido em 03/11/2026).
         attrs[:devolution] = safe(errors, :devolution) { client.claim_return(claim.claim_id) }
+        attrs[:return_shipping] = return_shipping(client, attrs[:devolution], claim.ml_account, errors)
+        if attrs[:return_shipping] && (stated = stated_freight(attrs[:messages]))
+          attrs[:return_shipping] = attrs[:return_shipping].merge("stated_cost" => stated)
+        end
         reason_id = (full || {})["reason_id"] || claim.reason_id
         if reason_id.present? && (reason = reason(client, reason_id, reasons))
           attrs.merge!(reason: reason, reason_name: reason["name"], reason_detail: reason["detail"], reason_flow: reason["flow"])
         end
         attrs.merge(detail_errors: errors)
+      end
+
+      # Valor do frete da devolução que o ML informa na mensagem ao vendedor ("custo do frete da etiqueta de devolução
+      # ... R$ 9,79"): é o que foi cobrado; o custo do envio pode ser maior (subsídio do ML).
+      FREIGHT_MSG = /frete da etiqueta de devolu[çc][ãa]o.{0,80}?R\$\s*\**\s*([\d.]+,\d{2})/i
+
+      def self.stated_freight(messages)
+        found = Array(messages).filter_map { |m| m.is_a?(Hash) && m["message"].to_s[FREIGHT_MSG, 1] }.first
+        found && found.delete(".").tr(",", ".").to_f
+      end
+
+      # Frete da devolução: custo do envio de retorno e quanto ficou com o vendedor (ele é o receiver do retorno).
+      def self.return_shipping(client, devolution, account, errors)
+        shipment = Array(devolution.is_a?(Hash) ? devolution["shipments"] : nil).find { |s| s["type"] == "return" } ||
+                   Array(devolution.is_a?(Hash) ? devolution["shipments"] : nil).first
+        return nil unless shipment && shipment["shipment_id"]
+
+        costs = safe(errors, :return_shipping) { client.shipment_costs(shipment["shipment_id"]) }
+        return nil unless costs
+
+        receiver = costs["receiver"] || {}
+        seller_cost = receiver["user_id"].to_s == account.seller_id.to_s ? receiver["cost"].to_f : 0.0
+        { "shipment_id" => shipment["shipment_id"], "gross_amount" => costs["gross_amount"], "seller_cost" => seller_cost,
+          "receiver" => receiver.slice("user_id", "cost", "save", "compensation"),
+          "senders" => Array(costs["senders"]).map { |s| s.slice("user_id", "cost") } }
       end
 
       # O ML responde affects_reputation como texto ("affected" / "not_affected"); valor desconhecido fica nil (o texto

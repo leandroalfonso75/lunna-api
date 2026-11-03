@@ -85,4 +85,37 @@ RSpec.describe "/api/claims", type: :request do
     expect(got).to eq(1 => [ true, "Devolvida" ], 2 => [ true, "A caminho" ], 3 => [ true, "Aguardando" ], 4 => [ true, "Não devolvida" ],
                       5 => [ true, "Aguardando" ], 6 => [ false ], 7 => [ nil ], 8 => [ true, "Não devolvida" ])
   end
+
+  it "reembolso (integral, parcial, sem) e custo com frete na devolução" do
+    now = Time.current
+    pay = ->(amount, refunded) { { "payments" => [ { "status" => refunded.positive? ? "refunded" : "approved", "transaction_amount" => amount, "total_paid_amount" => amount, "transaction_amount_refunded" => refunded } ] } }
+    MlOrder.create!(order_id: 10, ml_account: account, status: "cancelled", date_created: 2.days.ago, total_amount: 100, payload: pay.(100, 100))
+    MlOrder.create!(order_id: 11, ml_account: account, status: "paid", date_created: 2.days.ago, total_amount: 100, payload: pay.(100, 40))
+    MlOrder.create!(order_id: 12, ml_account: account, status: "paid", date_created: 2.days.ago, total_amount: 100, payload: pay.(100, 0))
+    dev = { "status" => "delivered", "shipments" => [ { "type" => "return", "shipment_id" => 5 } ] }
+    claim(1, order_id: 10, resource: "order", resource_id: 10, details_synced_at: now, devolution: dev, return_shipping: { "seller_cost" => 27.2 })
+    claim(2, order_id: 11, resource: "order", resource_id: 11, details_synced_at: now, devolution: dev,
+             return_shipping: { "seller_cost" => 27.2, "stated_cost" => 9.79 }, date_created: 2.days.ago)
+    claim(3, order_id: 12, resource: "order", resource_id: 12, details_synced_at: now, status: "closed", date_created: 3.days.ago)
+    # venda fora do Lunna: pelo que a reclamação diz
+    claim(4, details_synced_at: now, expected_resolutions: [ { "expected_resolution" => "partial_coverage", "status" => "accepted" } ], date_created: 4.days.ago)
+
+    get "/api/claims", params: { account_id: account.id }, headers: auth_headers(member)
+
+    by = json["claims"].to_h { |c| [ c["claim_id"], c ] }
+    expect(by[1]["refund"]).to include("key" => "integral", "label" => "Reembolso integral", "amount" => 100.0)
+    expect(by[2]["refund"]).to include("key" => "parcial", "label" => "Reembolso parcial", "amount" => 40.0)
+    expect(by[3]["refund"]).to include("key" => "sem", "label" => "Sem reembolso")
+    expect(by[4]["refund"]).to include("key" => "parcial", "source" => "reclamacao")
+    expect(by[1]["freight"]).to include("key" => "sim", "amount" => 27.2)
+    expect(by[2]["freight"]).to include("key" => "sim", "amount" => 9.79, "source" => "mensagem do ML")
+    expect(by[3]["freight"]).to include("key" => "nao")
+
+    MlClaim.find_by(claim_id: 1).update!(devolution: dev.merge("status" => "expired"))
+    MlClaim.find_by(claim_id: 2).update!(devolution: dev.merge("status" => "label_generated"))
+    get "/api/claims", params: { account_id: account.id }, headers: auth_headers(member)
+    by = json["claims"].to_h { |c| [ c["claim_id"], c ] }
+    expect(by[1]["freight"]).to include("key" => "nao")
+    expect(by[2]["freight"]).to include("key" => "previsto", "label" => "Sim (previsto)")
+  end
 end

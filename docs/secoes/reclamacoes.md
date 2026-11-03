@@ -14,6 +14,17 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   `expired`/`cancelled`/`failed`/`not_delivered` → Não devolvida. Autorizada sem devolução gerada: Aguardando se a
   reclamação está aberta, Não devolvida se encerrada. A devolução é sempre consultada (404 = não há): o ML nem sempre
   marca "return" em `related_entities` de reclamação encerrada (até 03/11 isso deixava devoluções de fora; refeito).
+- **Reembolso** (pedido do usuário em 03/11/2026): pelos pagamentos da venda (`transaction_amount_refunded` x
+  `transaction_amount`): Reembolso integral, Reembolso parcial (com o valor e o pago) ou Sem reembolso ("até agora" se a
+  reclamação está aberta). Venda fora do Lunna: pelo que a reclamação registra (resolução esperada `partial_coverage`/
+  `partial_refund` aceita → parcial; `refund` aceita, `status_money: refunded` da devolução ou resolução
+  `payment_refunded` → integral; senão, sem).
+- **Custo com frete** (frete da devolução): Não quando não houve devolução ou ela não foi postada (expirou/cancelada);
+  Sim quando foi entregue ou está a caminho; "Sim (previsto)" quando a etiqueta existe e ainda não foi postada. Valor:
+  o que o ML informa na mensagem ("custo do frete da etiqueta de devolução ... R$ X", `return_shipping.stated_cost`,
+  lido na importação) ou, sem isso, o custo do envio de retorno que ficou com o vendedor (`/shipments/{id}/costs`,
+  `receiver.cost`, em `ml_claims.return_shipping`). Quando o ML aplicou cobertura na reclamação (`applied_coverage`), a
+  tela avisa "cobertura do ML": o custo pode ter sido reembolsado ao vendedor (em 03/11, 97 de 101 casos com frete).
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

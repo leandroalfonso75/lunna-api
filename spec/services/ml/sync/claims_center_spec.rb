@@ -69,4 +69,9 @@ RSpec.describe Ml::Sync::ClaimsCenter do
     expect(result.listed).to eq(2)
     expect(a_request(:get, "#{api}/v1/claims/search").with(query: hash_including({ "sort" => "last_updated:desc" }))).to have_been_made.once
   end
+
+  it "lê o valor do frete da devolução informado na mensagem do ML" do
+    expect(described_class.stated_freight([ { "message" => "O custo do frete da etiqueta de devolução cobrado de você é de **R$ 1.050,90**." } ])).to eq(1050.9)
+    expect(described_class.stated_freight([ { "message" => "Olá" } ])).to be_nil
+  end
 end

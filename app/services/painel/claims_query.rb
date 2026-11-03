@@ -86,7 +86,8 @@ module Painel
       by_order = claims.filter_map(&:order_id)
       by_ship = claims.select { |c| c.resource == "shipment" }.map(&:resource_id)
       orders = @account.ml_orders.where(order_id: by_order).or(@account.ml_orders.where(shipping_id: by_ship))
-        .select(:order_id, :shipping_id, :buyer_nickname, :buyer_name, :total_amount, :date_created, :status).to_a
+        .select(:order_id, :shipping_id, :buyer_nickname, :buyer_name, :total_amount, :paid_amount, :date_created, :status,
+                Arel.sql("payload->'payments' AS payments")).to_a
       items = MlOrderItem.where(order_id: orders.map(&:order_id)).group_by(&:order_id)
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
       claims.to_h do |c|
@@ -94,6 +95,7 @@ module Painel
         line = o && items[o.order_id]&.first
         [ c.claim_id, o && { order_id: o.order_id, buyer_nickname: o.buyer_nickname, buyer_name: o.buyer_name,
                              total: o.total_amount&.to_f, date_created: o.date_created, status: o.status,
+                             payments: Array(o.attributes["payments"]).map { |p| p.slice("status", "transaction_amount", "total_paid_amount", "transaction_amount_refunded", "shipping_cost") },
                              item: line && { item_id: line.item_id, title: line.title, sku: line.sku, quantity: line.quantity,
                                              thumbnail: thumbs[line.item_id] } } ]
       end
@@ -113,6 +115,8 @@ module Painel
         resolution: c.resolution && { reason: c.resolution["reason"], benefited: Array(c.resolution["benefited"]),
                                       closed_by: c.resolution["closed_by"], date: c.resolution["date_created"] },
         devolution_status: return_info(c),
+        refund: refund_info(c, order),
+        freight: freight_info(c),
         order: order, detailed: c.details_synced_at.present?,
         link: c.order_id || order ? "https://www.mercadolivre.com.br/vendas/#{order&.dig(:order_id) || c.order_id}/detalhe" : nil
       }
@@ -138,6 +142,57 @@ module Painel
       { enabled: true, key: key, label: label, tone: tone, status: d["status"], shipment_status: shipment["status"],
         tracking: shipment["tracking_number"], refund_at: d["refund_at"], money: d["status_money"],
         date: d["date_closed"] || d["last_updated"] }
+    end
+
+    # Reembolso ao comprador: pelos pagamentos da venda (estornado x pago); sem a venda no Lunna (mais de 3 meses),
+    # pelo que o ML registrou na reclamação (resolução esperada aceita, dinheiro da devolução estornado, resolução).
+    def refund_info(c, order)
+      payments = Array(order&.dig(:payments))
+      if payments.any?
+        paid = payments.sum { |p| p["total_paid_amount"].to_f.positive? ? p["total_paid_amount"].to_f : p["transaction_amount"].to_f }
+        refunded = payments.sum { |p| p["transaction_amount_refunded"].to_f }
+        return refund_hash("sem", c, source: "pagamento") if refunded <= 0.009
+        kind = refunded >= payments.sum { |p| p["transaction_amount"].to_f } - 0.01 ? "integral" : "parcial"
+        return refund_hash(kind, c, amount: refunded.round(2), paid: paid.round(2), source: "pagamento")
+      end
+      return { key: nil, label: nil } unless c.details_synced_at
+
+      accepted = ->(type) { Array(c.expected_resolutions).any? { |e| e["expected_resolution"] == type && e["status"] == "accepted" } }
+      return refund_hash("parcial", c, source: "reclamacao") if accepted.("partial_coverage") || accepted.("partial_refund")
+      if accepted.("refund") || c.devolution&.dig("status_money") == "refunded" || c.resolution&.dig("reason") == "payment_refunded"
+        return refund_hash("integral", c, source: "reclamacao")
+      end
+
+      refund_hash("sem", c, source: "reclamacao")
+    end
+
+    def refund_hash(kind, c, amount: nil, paid: nil, source: nil)
+      label = { "integral" => "Reembolso integral", "parcial" => "Reembolso parcial" }[kind]
+      label ||= c.status == "opened" ? "Sem reembolso (até agora)" : "Sem reembolso"
+      { key: kind, label: label, amount: amount, paid: paid, source: source }
+    end
+
+    # Custo com frete na devolução: o que o envio de retorno custou ao vendedor (ou o valor que o ML informou na
+    # mensagem, quando informou). Sem devolução, não houve frete de retorno.
+    def freight_info(c)
+      return { key: nil } unless c.details_synced_at
+      return { key: "nao", label: "Não" } if c.devolution.blank?
+
+      # devolução que não aconteceu (prazo expirou, cancelada): a etiqueta não foi usada, não há frete de retorno
+      state = RETURN_STATES.dig(c.devolution["status"].to_s, 0)
+      return { key: "nao", label: "Não", note: "devolução não postada" } if state == "nao_devolvida"
+
+      stated_value = c.return_shipping&.dig("stated_cost")&.to_f
+      stated = stated_value.present?
+      cost = c.return_shipping&.dig("seller_cost")
+      covered = c.resolution&.dig("applied_coverage") == true
+      value = stated_value || cost
+      return { key: nil, label: nil, note: "custo do frete ainda não lido" } if value.nil? && c.return_shipping.nil?
+      return { key: "nao", label: "Não", amount: 0.0, covered: covered } if value.to_f <= 0
+
+      planned = state == "aguardando"
+      { key: planned ? "previsto" : "sim", label: planned ? "Sim (previsto)" : "Sim", amount: value.round(2),
+        source: stated ? "mensagem do ML" : "custo do envio de retorno", covered: covered }
     end
 
     # Texto da mensagem sem HTML (o ML manda <strong>, <br>); anexos só como dados (nome, tipo, tamanho).
