@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_180001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_03_190001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -247,6 +247,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_180001) do
     t.index ["action_id"], name: "index_ml_catalog_checks_on_action_id"
     t.index ["ml_account_id", "status"], name: "index_ml_catalog_checks_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_catalog_checks_on_ml_account_id"
+  end
+
+  create_table "ml_claim_replies", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "claim_id", null: false
+    t.uuid "user_id"
+    t.string "receiver_role", null: false
+    t.text "message", null: false
+    t.string "status", default: "pending", null: false
+    t.string "error"
+    t.jsonb "response", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "claim_id"], name: "index_ml_claim_replies_on_ml_account_id_and_claim_id"
+    t.index ["ml_account_id"], name: "index_ml_claim_replies_on_ml_account_id"
+    t.index ["user_id"], name: "index_ml_claim_replies_on_user_id"
   end
 
   create_table "ml_claims", force: :cascade do |t|
@@ -923,6 +939,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_180001) do
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_catalog_checks", "ml_accounts"
   add_foreign_key "ml_catalog_checks", "ml_promotion_actions", column: "action_id"
+  add_foreign_key "ml_claim_replies", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_claim_replies", "users", on_delete: :nullify
   add_foreign_key "ml_claims", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade

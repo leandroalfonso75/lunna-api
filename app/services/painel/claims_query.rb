@@ -22,6 +22,33 @@ module Painel
     EXPECTED = { "return_product" => "Devolver o produto", "refund" => "Reembolso", "change_product" => "Troca do produto",
                  "partial_refund" => "Reembolso parcial", "product" => "Receber o produto", "allow_return" => "Permitir devolução" }.freeze
 
+    # Ações que o ML libera ao vendedor numa reclamação (players[respondent].available_actions).
+    ACTIONS = {
+      "send_message_to_complainant" => "Mandar mensagem ao comprador", "send_message_to_mediator" => "Mandar mensagem ao mediador",
+      "refund" => "Reembolsar o comprador", "open_dispute" => "Pedir mediação do Mercado Livre", "allow_return" => "Permitir devolução",
+      "send_potential_shipping" => "Informar envio", "add_shipping_evidence" => "Enviar comprovante de envio",
+      "send_attachments" => "Enviar anexos", "partial_refund" => "Reembolso parcial"
+    }.freeze
+    SELLER_ROLES = %w[seller respondent].freeze
+
+    # Para quem o vendedor pode mandar mensagem agora (pelas ações liberadas pelo ML).
+    def self.reply_targets(claim)
+      return [] unless claim.status == "opened"
+
+      actions = seller_actions(claim).map { |a| a["action"] }
+      ClaimReply::RECEIVER_ACTIONS.select { |_, action| actions.include?(action) }.keys
+    end
+
+    def self.seller_actions(claim)
+      Array(Array(claim.players).find { |p| p["role"] == "respondent" }&.dig("available_actions"))
+    end
+
+    # A atender: aberta e o ML aguarda o vendedor (é o responsável pela próxima ação ou tem ação obrigatória).
+    def self.to_attend?(claim)
+      claim.status == "opened" &&
+        (SELLER_ROLES.include?(claim.action_responsible.to_s) || seller_actions(claim).any? { |a| a["mandatory"] })
+    end
+
     def self.list(account, params) = new(account, params).list
     def self.detail(account, claim_id) = new(account, {}).detail(claim_id)
 
@@ -47,9 +74,15 @@ module Painel
       from, to = window
       scope = search(@account.ml_claims)
       scope = scope.where(date_created: from..to) if from
-      claims = scope.select(MlClaim.column_names - %w[raw detail messages changes_log evidences reason status_history]).to_a
+      view = @params[:view].to_s
+      scope = scope.where(status: "opened") if %w[atender abertas].include?(view)
+      # na visão "A atender"/"Abertas" (poucas) vem tudo, inclusive o detalhe e a última mensagem
+      columns = view.present? ? MlClaim.column_names - %w[raw changes_log reason] : MlClaim.column_names - %w[raw detail messages changes_log evidences reason status_history]
+      claims = scope.select(columns).to_a
+      claims = claims.select { |c| self.class.to_attend?(c) } if view == "atender"
       orders = orders_for(claims)
-      rows = sort(claims.map { |c| row(c, orders[c.claim_id]) })
+      rows = claims.map { |c| row(c, orders[c.claim_id]) }
+      rows = view.present? && @params[:sort].blank? ? rows.sort_by { |r| [ r[:to_attend] ? 0 : 1, r[:deadline] || Time.utc(3000) ] } : sort(rows)
       per = PER_PAGES.include?(@params[:per_page].to_i) ? @params[:per_page].to_i : 50
       page = [ @params[:page].to_i, 1 ].max
       {
@@ -57,6 +90,8 @@ module Painel
         total: rows.size, page: page, per_page: per, sort: sort_key, dir: sort_dir,
         period: { preset: preset_key, month: month_key, from: from&.iso8601, to: to&.iso8601 },
         months: available_months,
+        view: view.presence,
+        attention: attention_info,
         import: import_info
       }
     end
@@ -190,6 +225,13 @@ module Painel
         resolution: c.resolution && { reason: c.resolution["reason"], benefited: Array(c.resolution["benefited"]),
                                       closed_by: c.resolution["closed_by"], date: c.resolution["date_created"] },
         devolution_status: return_info(c),
+        to_attend: self.class.to_attend?(c),
+        deadline: c.due_date,
+        seller_actions: c.status == "opened" ? self.class.seller_actions(c).map { |a| { action: a["action"], label: ACTIONS[a["action"]] || a["action"], due_date: a["due_date"], mandatory: a["mandatory"] } } : [],
+        reply_targets: self.class.reply_targets(c),
+        buyer_wants: Array(c.expected_resolutions).select { |e| e["player_role"] == "complainant" }.map { |e| EXPECTED[e["expected_resolution"]] || e["expected_resolution"] }.uniq,
+        what_to_do: c.has_attribute?(:detail) && c.detail.present? ? { title: c.detail["title"], description: c.detail["description"] } : (c.detail_title && { title: c.detail_title, description: c.detail_description }),
+        last_message: c.has_attribute?(:messages) && c.messages.present? ? message(c.messages.max_by { |m| m["message_date"].presence || m["date_created"].to_s }) : nil,
         refund: refund_info(c, order),
         freight: freight_info(c),
         order: order, detailed: c.details_synced_at.present?,
@@ -278,6 +320,13 @@ module Painel
         date: m["message_date"].presence || m["date_created"], text: CGI.unescapeHTML(text).strip, stage: m["stage"], status: m["status"],
         read_at: m["date_read"], moderation: m["message_moderation"],
         attachments: Array(m["attachments"]).map { |a| a.slice("filename", "original_filename", "type", "size", "date_created") } }
+    end
+
+    # Contadores para o botão "A atender" (sempre sobre todas as abertas, sem filtro de período).
+    def attention_info
+      open = @account.ml_claims.where(status: "opened").select(:id, :status, :action_responsible, :players).to_a
+      { to_attend: open.count { |c| self.class.to_attend?(c) }, open: open.size,
+        can_reply: open.count { |c| self.class.reply_targets(c).any? } }
     end
 
     def import_info

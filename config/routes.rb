@@ -57,6 +57,7 @@ Rails.application.routes.draw do
     post "ads/sync", to: "ads#sync"
     get "claims", to: "claims#index"
     get "claims/:id", to: "claims#show"
+    post "claims/:id/reply", to: "claims#reply"
     get "promotions", to: "promotions#index"
     get "promotions/export", to: "promotions#export"
     post "promotions/sync", to: "promotions#sync"

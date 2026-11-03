@@ -34,6 +34,22 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   reason, status, return_enabled, return_state, refund, freight, reputation) e `dir`. Como devolução, reembolso e
   frete são calculados, a lista inteira do período é montada e ordenada antes de paginar (~0,2 s para 2.481);
   reclamação ainda sem detalhes vai para o fim em qualquer ordem.
+- **A atender** (pedido do usuário em 03/11/2026): botão grande abaixo do período, com contador e ponto pulsante quando
+  há pendência. "A atender" = reclamação aberta em que o ML aguarda o vendedor (`detail.action_responsible` seller/
+  respondent ou ação obrigatória do vendedor em `players[respondent].available_actions`). Ao lado, "Abertas" (todas as
+  abertas, com quantas o vendedor pode responder). As duas visões mostram cartões, pelo prazo (as que aguardam o
+  vendedor primeiro): prazo com contagem (vermelho < 24 h e amarelo < 72 h só quando o prazo é do vendedor), quem age,
+  motivo, o que o comprador quer (resolução esperada), reputação, custos (reembolso, frete da devolução, cobertura do
+  ML), devolução, ações liberadas pelo ML, "o que fazer" do ML e a última mensagem. API: `view=atender|abertas`;
+  contadores em `attention` (to_attend, open, can_reply), sempre sobre todas as abertas.
+- **Responder** (escrita no ML, não se desfaz): `POST /api/claims/:id/reply` (admin, `receiver_role` complainant ou
+  mediator, `message` até 3.500 caracteres, `confirm: true`), `Painel::ClaimReply` →
+  `POST /post-purchase/v1/claims/{id}/actions/send-message`. Só para quem o ML libera agora (ação
+  `send_message_to_complainant`/`send_message_to_mediator` do vendedor). Na tela: botão Responder → destinatário e texto
+  → "Enviar resposta" → "Confirmar envio ao Mercado Livre" (segundo clique, com aviso). Cada envio fica em
+  `ml_claim_replies` (quem, quando, para quem, texto, sent/failed, erro) e a reclamação é relida em seguida. Testado só
+  com respostas simuladas; o primeiro envio real confirma se o app do Lunna tem permissão de escrita em reclamações
+  (403 = falta liberar no DevCenter).
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

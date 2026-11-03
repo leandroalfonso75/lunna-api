@@ -117,6 +117,11 @@ module Ml
       get("/post-purchase/v1/claims/#{claim_id}/#{path}")
     end
 
+    # Responde na reclamação (escrita no ML, não se desfaz): receiver_role "complainant" (comprador) ou "mediator".
+    def claim_send_message(claim_id, receiver_role:, message:)
+      write(:post, "/post-purchase/v1/claims/#{claim_id}/actions/send-message", {}, { receiver_role: receiver_role, message: message })
+    end
+
     # Devolução ligada à reclamação (404 quando não há).
     def claim_return(claim_id)
       get("/post-purchase/v2/claims/#{claim_id}/returns")

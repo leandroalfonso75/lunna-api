@@ -8,6 +8,7 @@ class MlAccount < ApplicationRecord
   has_many :ml_item_visits
   has_many :ml_orders
   has_many :ml_claims, dependent: :delete_all
+  has_many :ml_claim_replies, dependent: :delete_all
   has_many :ml_ad_campaigns
   has_many :ml_ad_items
   has_many :ml_ad_daily_metrics

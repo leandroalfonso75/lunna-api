@@ -3,6 +3,7 @@ require "rails_helper"
 RSpec.describe "/api/claims", type: :request do
   let(:company) { create(:company) }
   let(:member) { create(:user, company: company) }
+  let(:admin) { create(:user, :admin, company: company) }
   let(:account) { create(:ml_account, company: company) }
 
   def claim(id, **attrs)
@@ -151,6 +152,70 @@ RSpec.describe "/api/claims", type: :request do
 
       get "/api/claims", params: { account_id: account.id, sort: "return_state", dir: "asc" }, headers: auth_headers(member)
       expect(json["claims"].first["claim_id"]).to eq(1)
+    end
+  end
+
+  describe "A atender e responder" do
+    let(:base) { "https://api.mercadolibre.com/post-purchase/v1/claims" }
+    let(:seller_actions) { [ { "action" => "send_message_to_complainant", "due_date" => nil, "mandatory" => false }, { "action" => "refund", "mandatory" => false } ] }
+    let(:players) { [ { "role" => "complainant", "type" => "buyer" }, { "role" => "respondent", "type" => "seller", "available_actions" => seller_actions } ] }
+
+    before do
+      claim(1, status: "opened", action_responsible: "seller", due_date: 2.days.from_now, players: players, details_synced_at: Time.current,
+               detail: { "title" => "Responda o comprador", "description" => "Você tem até amanhã" },
+               expected_resolutions: [ { "player_role" => "complainant", "expected_resolution" => "return_product" } ],
+               messages: [ { "sender_role" => "complainant", "message" => "Veio errado", "message_date" => 1.hour.ago.iso8601 } ])
+      claim(2, status: "opened", action_responsible: "complainant", due_date: 5.days.from_now, players: players, details_synced_at: Time.current)
+      claim(3, status: "closed", action_responsible: "seller")
+    end
+
+    it "lista as que aguardam o vendedor, com prazo, ações liberadas, o que o comprador quer e a última mensagem" do
+      get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
+
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1 ])
+      c = json["claims"].first
+      expect(c).to include("to_attend" => true, "reply_targets" => [ "complainant" ], "buyer_wants" => [ "Devolver o produto" ])
+      expect(c["what_to_do"]).to include("title" => "Responda o comprador")
+      expect(c["last_message"]).to include("text" => "Veio errado")
+      expect(c["seller_actions"].map { |a| a["label"] }).to eq([ "Mandar mensagem ao comprador", "Reembolsar o comprador" ])
+      expect(json["attention"]).to eq("to_attend" => 1, "open" => 2, "can_reply" => 2)
+
+      get "/api/claims", params: { account_id: account.id, view: "abertas" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1, 2 ]) # a atender primeiro, depois pelo prazo
+    end
+
+    it "responde no Mercado Livre só com confirmação, registra e relê a reclamação" do
+      send = stub_request(:post, "#{base}/1/actions/send-message").with(body: { receiver_role: "complainant", message: "Olá, vamos resolver." }.to_json)
+        .to_return(status: 201, body: { id: "m1" }.to_json)
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({})
+
+      post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "complainant", message: "Olá, vamos resolver." }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(send).not_to have_been_made
+
+      post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "complainant", message: "Olá, vamos resolver.", confirm: true }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+
+      post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "complainant", message: "Olá, vamos resolver.", confirm: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+      expect(send).to have_been_made.once
+      expect(MlClaimReply.last).to have_attributes(claim_id: 1, receiver_role: "complainant", status: "sent", user_id: admin.id)
+      expect(Ml::Sync::ClaimsCenter).to have_received(:fetch_details)
+    end
+
+    it "recusa destinatário que o ML não libera e registra a falha quando o ML recusa" do
+      allow(Ml::OAuth).to receive(:refresh!)
+      post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "mediator", message: "Oi", confirm: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["errors"].first).to include("mediador")
+      expect(MlClaimReply.count).to eq(0)
+
+      stub_request(:post, "#{base}/1/actions/send-message").to_return(status: 400, body: { message: "claim closed" }.to_json)
+      post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "complainant", message: "Oi", confirm: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:bad_gateway)
+      expect(json["errors"].first).to include("claim closed")
+      expect(MlClaimReply.last).to have_attributes(status: "failed")
     end
   end
 end
