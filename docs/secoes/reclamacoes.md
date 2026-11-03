@@ -45,7 +45,8 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
 - **Responder** (escrita no ML, não se desfaz): `POST /api/claims/:id/reply` (admin, `receiver_role` complainant ou
   mediator, `message` até 3.500 caracteres, `confirm: true`), `Painel::ClaimReply` →
   `POST /post-purchase/v1/claims/{id}/actions/send-message`. Só para quem o ML libera agora (ação
-  `send_message_to_complainant`/`send_message_to_mediator` do vendedor). Na tela: botão Responder → destinatário e texto
+  `send_message_to_complainant`/`send_message_to_mediator` do vendedor). Na tela: botão "Responder" quando a reclamação aguarda o vendedor, ou "Responder (opcional)" (mais discreto) quando não
+  há obrigação de resposta → destinatário e texto
   → "Enviar resposta" → "Confirmar envio ao Mercado Livre" (segundo clique, com aviso). Cada envio fica em
   `ml_claim_replies` (quem, quando, para quem, texto, sent/failed, erro) e a reclamação é relida em seguida. Testado só
   com respostas simuladas; o primeiro envio real confirma se o app do Lunna tem permissão de escrita em reclamações
