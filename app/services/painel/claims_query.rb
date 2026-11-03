@@ -9,6 +9,16 @@ module Painel
     STATUSES = { "opened" => [ "Aberta", "warn" ], "closed" => [ "Encerrada", "neutral" ] }.freeze
     ROLES = { "seller" => "Você", "respondent" => "Você", "buyer" => "Comprador", "complainant" => "Comprador",
               "mediator" => "Mercado Livre", "internal" => "Mercado Livre" }.freeze
+    # Devolução (status da devolução no ML, /v2/claims/{id}/returns) → coluna "Devolução efetivada".
+    RETURN_STATES = {
+      "delivered" => [ "devolvida", "Devolvida", "ok" ], "shipped" => [ "a_caminho", "A caminho", "warn" ],
+      "label_generated" => [ "aguardando", "Aguardando", "neutral" ], "pending" => [ "aguardando", "Aguardando", "neutral" ],
+      "ready_to_ship" => [ "aguardando", "Aguardando", "neutral" ],
+      "expired" => [ "nao_devolvida", "Não devolvida", "bad" ], "cancelled" => [ "nao_devolvida", "Não devolvida", "bad" ],
+      "failed" => [ "nao_devolvida", "Não devolvida", "bad" ], "not_delivered" => [ "nao_devolvida", "Não devolvida", "bad" ]
+    }.freeze
+    # Ações do ML que habilitam a devolução mesmo antes de a devolução existir.
+    RETURN_ACTIONS = %w[allow_return generate_return generate_return_async].freeze
     EXPECTED = { "return_product" => "Devolver o produto", "refund" => "Reembolso", "change_product" => "Troca do produto",
                  "partial_refund" => "Reembolso parcial", "product" => "Receber o produto", "allow_return" => "Permitir devolução" }.freeze
 
@@ -26,7 +36,7 @@ module Painel
       per = PER_PAGES.include?(@params[:per_page].to_i) ? @params[:per_page].to_i : 50
       page = [ @params[:page].to_i, 1 ].max
       claims = scope.order(date_created: :desc, claim_id: :desc).offset((page - 1) * per).limit(per)
-        .select(MlClaim.column_names - %w[raw detail messages changes_log evidences devolution reason]).to_a
+        .select(MlClaim.column_names - %w[raw detail messages changes_log evidences reason]).to_a
       orders = orders_for(claims)
       {
         claims: claims.map { |c| row(c, orders[c.claim_id]) },
@@ -102,9 +112,32 @@ module Painel
         affects_reputation: c.affects_reputation, reputation_status: c.reputation_status, has_incentive: c.has_incentive,
         resolution: c.resolution && { reason: c.resolution["reason"], benefited: Array(c.resolution["benefited"]),
                                       closed_by: c.resolution["closed_by"], date: c.resolution["date_created"] },
+        devolution_status: return_info(c),
         order: order, detailed: c.details_synced_at.present?,
         link: c.order_id || order ? "https://www.mercadolivre.com.br/vendas/#{order&.dig(:order_id) || c.order_id}/detalhe" : nil
       }
+    end
+
+    # "Devolução habilitada" (Sim/Não) e "Devolução efetivada" (Devolvida, Não devolvida, A caminho, Aguardando).
+    # Aguardando = etiqueta gerada / ainda dentro do prazo de postagem; Não devolvida = prazo expirou ou devolução cancelada.
+    def return_info(c)
+      return { enabled: nil } unless c.details_synced_at
+
+      d = c.devolution
+      enabled = d.present? || Array(c.actions_history).any? { |a| RETURN_ACTIONS.include?(a["action_name"]) }
+      return { enabled: false } unless enabled
+      if d.blank?
+        # autorizada, mas sem devolução gerada: aberta ainda pode ser postada; encerrada não foi devolvida
+        return { enabled: true, key: "aguardando", label: "Aguardando", tone: "neutral", status: nil } if c.status == "opened"
+
+        return { enabled: true, key: "nao_devolvida", label: "Não devolvida", tone: "bad", status: nil }
+      end
+
+      key, label, tone = RETURN_STATES.fetch(d["status"].to_s, [ d["status"].to_s, d["status"].to_s.tr("_", " ").capitalize, "neutral" ])
+      shipment = Array(d["shipments"]).find { |s| s["type"] == "return" } || Array(d["shipments"]).first || {}
+      { enabled: true, key: key, label: label, tone: tone, status: d["status"], shipment_status: shipment["status"],
+        tracking: shipment["tracking_number"], refund_at: d["refund_at"], money: d["status_money"],
+        date: d["date_closed"] || d["last_updated"] }
     end
 
     # Texto da mensagem sem HTML (o ML manda <strong>, <br>); anexos só como dados (nome, tipo, tamanho).

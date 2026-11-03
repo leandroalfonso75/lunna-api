@@ -7,6 +7,13 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
 - Lista de todas as reclamações da conta (cancelamentos, reclamações/mediações e devoluções), mais novas primeiro:
   data de abertura, tipo e etapa, nº da reclamação, venda ligada (foto, título, nº da venda, SKU, valor, comprador),
   motivo, situação (Aberta/Encerrada), quem deve agir e o prazo, e se afeta a reputação.
+- **Devolução habilitada** (Sim/Não; "carregando…" antes dos detalhes): Sim quando há devolução no ML (`devolution`) ou
+  uma ação do ML que a autoriza (`allow_return`, `generate_return`, `generate_return_async`). **Devolução efetivada**
+  (pedido do usuário em 03/11/2026), pelo status da devolução (`/v2/claims/{id}/returns`): `delivered` → Devolvida;
+  `shipped` → A caminho; `label_generated`/`pending`/`ready_to_ship` → Aguardando (ainda no prazo de postagem);
+  `expired`/`cancelled`/`failed`/`not_delivered` → Não devolvida. Autorizada sem devolução gerada: Aguardando se a
+  reclamação está aberta, Não devolvida se encerrada. A devolução é sempre consultada (404 = não há): o ML nem sempre
+  marca "return" em `related_entities` de reclamação encerrada (até 03/11 isso deixava devoluções de fora; refeito).
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

@@ -118,8 +118,9 @@ module Ml
           attrs.merge!(affects_reputation: reputation_flag(r["affects_reputation"]), reputation_status: r["affects_reputation"]&.to_s.presence,
                        has_incentive: reputation_flag(r["has_incentive"]))
         end
-        related = Array((full || {})["related_entities"].presence || claim.related_entities)
-        attrs[:devolution] = related.include?("return") ? safe(errors, :devolution) { client.claim_return(claim.claim_id) } : nil
+        # Devolução: sempre consultada (404 = não há). O ML nem sempre lista "return" em related_entities de reclamação
+        # já encerrada, e confiar nisso deixava devoluções entregues/expiradas de fora (corrigido em 03/11/2026).
+        attrs[:devolution] = safe(errors, :devolution) { client.claim_return(claim.claim_id) }
         reason_id = (full || {})["reason_id"] || claim.reason_id
         if reason_id.present? && (reason = reason(client, reason_id, reasons))
           attrs.merge!(reason: reason, reason_name: reason["name"], reason_detail: reason["detail"], reason_flow: reason["flow"])

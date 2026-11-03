@@ -27,7 +27,11 @@ RSpec.describe Ml::Sync::ClaimsCenter do
     stub_request(:get, "#{api}/v1/claims/#{id}/evidences").to_return(status: 500, body: "{}") # parte recusada não impede o resto
     stub_request(:get, "#{api}/v1/claims/#{id}/changes").to_return(status: 200, body: { paging: {}, data: [ { field: "stage" } ] }.to_json)
     stub_request(:get, "#{api}/v1/claims/#{id}/affects-reputation").to_return(status: 200, body: { affects_reputation: id == 2 ? "not_affected" : "affected", has_incentive: false }.to_json)
-    stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 200, body: { id: 77, status: "label_generated" }.to_json)
+    if id == 2
+      stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 404, body: "{}")
+    else
+      stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 200, body: { id: 77, status: "label_generated" }.to_json)
+    end
     stub_request(:get, "#{api}/v1/claims/reasons/PDD9941").to_return(status: 200, body: { id: "PDD9941", name: "different_color", detail: "Não é da cor que escolhi", flow: "post_purchase_delivered" }.to_json)
   end
 

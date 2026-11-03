@@ -66,4 +66,23 @@ RSpec.describe "/api/claims", type: :request do
     get "/api/claims/#{other.claim_id}", params: { account_id: account.id }, headers: auth_headers(member)
     expect(response).to have_http_status(:not_found)
   end
+
+  it "devolução habilitada e efetivada: Devolvida, A caminho, Aguardando e Não devolvida" do
+    now = Time.current
+    ret = ->(status) { { "status" => status, "subtype" => "return_total", "shipments" => [ { "type" => "return", "status" => "x", "tracking_number" => "BR1" } ] } }
+    claim(1, details_synced_at: now, devolution: ret.("delivered"), date_created: 1.day.ago)
+    claim(2, details_synced_at: now, devolution: ret.("shipped"), date_created: 2.days.ago)
+    claim(3, details_synced_at: now, devolution: ret.("label_generated"), date_created: 3.days.ago)
+    claim(4, details_synced_at: now, devolution: ret.("expired"), date_created: 4.days.ago)
+    claim(5, details_synced_at: now, actions_history: [ { "action_name" => "allow_return" } ], date_created: 5.days.ago)
+    claim(8, details_synced_at: now, status: "closed", actions_history: [ { "action_name" => "allow_return" } ], date_created: 8.days.ago)
+    claim(6, details_synced_at: now, date_created: 6.days.ago)
+    claim(7, date_created: 7.days.ago)
+
+    get "/api/claims", params: { account_id: account.id }, headers: auth_headers(member)
+
+    got = json["claims"].to_h { |c| [ c["claim_id"], c["devolution_status"].slice("enabled", "label").values ] }
+    expect(got).to eq(1 => [ true, "Devolvida" ], 2 => [ true, "A caminho" ], 3 => [ true, "Aguardando" ], 4 => [ true, "Não devolvida" ],
+                      5 => [ true, "Aguardando" ], 6 => [ false ], 7 => [ nil ], 8 => [ true, "Não devolvida" ])
+  end
 end
