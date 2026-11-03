@@ -94,6 +94,8 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
   **Limite diário** (`companies.ads_daily_budget_max`, Configurações → Ads) sobre o total das campanhas depois da rodada:
   dinheiro novo que não cabe fica `within_limit: false` (e sai do razão); se uma redução libera verba, passa a caber "só
   com a redução". Sem limite informado, o plano avisa (`plan.note`).
+  **Tela:** as sugestões aparecem em seções por campanha (a de origem; sem origem, a de destino), com o nome da
+  campanha em destaque e o orçamento e ROAS Objetivo antes → depois no cabeçalho; seções ordenadas por valor em jogo.
   **Periodicidade:** a análise é recalculada ao abrir a aba, com os dados de Ads lidos a cada 30 minutos (ontem e hoje) e
   completos a cada 3 horas; as mudanças de estrutura seguem a rodada semanal (data em `round.next_round_on`).
 
