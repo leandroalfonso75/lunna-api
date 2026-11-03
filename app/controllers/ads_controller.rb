@@ -31,7 +31,7 @@ class AdsController < ApplicationController
   # Marca um item da fila como feito ou ignorado (guarda o "antes"); a análise mostra o "depois" 7 dias depois.
   def decide
     decision = Painel::AdsAnalysis.decide(Current.account, params.permit(:key, :signal, :status).to_h.symbolize_keys, user: Current.user)
-    return render_errors([ "Item da fila não encontrado." ], status: :not_found) unless decision
+    return render_errors([ "Essa sugestão mudou desde que a tela foi aberta (nova leitura dos dados ou outra decisão). A análise foi atualizada." ], status: :not_found) unless decision
 
     render json: Painel::AdsAnalysis.decision_payload(decision), status: :created
   end
