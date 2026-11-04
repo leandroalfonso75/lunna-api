@@ -140,4 +140,4 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
 - Não cruza o investimento com o lucro líquido do anúncio (margem depois de Ads) nem mostra Brand Ads/Display.
 - A coluna de desempenho por palavra-chave não existe na API de Product Ads.
 
-- Períodos: Hoje, Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas.
+- Períodos: Hoje, Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas. Ao entrar na seção, o período começa em **Hoje** (pedido do usuário em 04/11/2026).
