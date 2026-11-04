@@ -94,7 +94,8 @@ class PhotoJobsController < ApplicationController
       id: job.id, item_id: job.item_id, status: job.status, count: job.count, instructions: job.instructions,
       error: job.error, publish_error: job.publish_error, published_at: job.published_at, created_at: job.created_at,
       model: job.model, reference_urls: job.reference_urls,
-      photos: job.photos.map { |p| { id: p.id, kind: p.kind, position: p.position, approved: p.approved, ml_picture_id: p.ml_picture_id } }
+      cost_usd: job.photos.sum { |p| p.cost_usd.to_f }.round(4),
+      photos: job.photos.map { |p| { id: p.id, kind: p.kind, position: p.position, approved: p.approved, ml_picture_id: p.ml_picture_id, cost_usd: p.cost_usd&.to_f, model: p.model } }
     }
   end
 end

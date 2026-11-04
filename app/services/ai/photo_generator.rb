@@ -35,8 +35,8 @@ module Ai
 
       start = @job.generated.size
       (start...@job.count).each do |i|
-        bytes, mime = generate_one(refs, i)
-        @job.photos.create!(kind: "gerada", position: i, mime: mime, data: bytes)
+        bytes, mime, cost = generate_one(refs, i)
+        @job.photos.create!(kind: "gerada", position: i, mime: mime, data: bytes, cost_usd: cost, model: model)
       end
     end
 
@@ -64,7 +64,8 @@ module Ai
 
     def generate_one(refs, index)
       content = [ { type: "text", text: prompt(index) } ] + refs.map { |u| { type: "image_url", image_url: { url: u } } }
-      body = { model: model, modalities: %w[image text], messages: [ { role: "user", content: content } ] }
+      # usage.include: a OpenRouter devolve o custo da chamada (US$), guardado em cada imagem
+      body = { model: model, modalities: %w[image text], messages: [ { role: "user", content: content } ], usage: { include: true } }
       response = http.post(URL) do |req|
         req.headers["Authorization"] = "Bearer #{@company.openrouter_api_key}"
         req.headers["Content-Type"] = "application/json"
@@ -73,11 +74,12 @@ module Ai
       end
       raise Error, error_message(response.status) unless (200...300).cover?(response.status)
 
-      url = JSON.parse(response.body).dig("choices", 0, "message", "images", 0, "image_url", "url").to_s
+      data = JSON.parse(response.body)
+      url = data.dig("choices", 0, "message", "images", 0, "image_url", "url").to_s
       match = url.match(%r{\Adata:(image/[a-z+]+);base64,(.+)\z}m)
       raise Error, "A OpenRouter não devolveu imagem (o modelo \"#{model}\" gera imagens?)." unless match
 
-      [ Base64.decode64(match[2]), match[1] ]
+      [ Base64.decode64(match[2]), match[1], data.dig("usage", "cost") ]
     end
 
     def error_message(status)

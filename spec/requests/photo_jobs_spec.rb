@@ -32,12 +32,14 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
 
     openrouter = stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
       .with { |req| JSON.parse(req.body).then { |b| b["modalities"] == %w[image text] && b["messages"][0]["content"].size == 3 } }
-      .to_return(status: 200, body: { choices: [ { message: { images: [ { image_url: { url: "data:image/png;base64,#{Base64.strict_encode64(png)}" } } ] } } ] }.to_json)
+      .to_return(status: 200, body: { choices: [ { message: { images: [ { image_url: { url: "data:image/png;base64,#{Base64.strict_encode64(png)}" } } ] } } ],
+                                      usage: { cost: 0.134 } }.to_json)
     perform_enqueued_jobs
 
     expect(openrouter).to have_been_requested.twice
     expect(job.reload).to have_attributes(status: "pronto", error: nil)
     expect(job.generated.size).to eq(2)
+    expect(job.generated.map(&:cost_usd)).to all(eq(0.134))
 
     get "/api/photo_images/#{job.generated.first.id}", params: { account_id: account.id }, headers: auth_headers(member)
     expect(response.body.b).to eq(png)
