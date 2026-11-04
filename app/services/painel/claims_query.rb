@@ -229,6 +229,7 @@ module Painel
         deadline: c.due_date,
         seller_actions: c.status == "opened" ? self.class.seller_actions(c).map { |a| { action: a["action"], label: ACTIONS[a["action"]] || a["action"], due_date: a["due_date"], mandatory: a["mandatory"] } } : [],
         reply_targets: self.class.reply_targets(c),
+        resolve_actions: ClaimAction.available(c),
         buyer_wants: Array(c.expected_resolutions).select { |e| e["player_role"] == "complainant" }.map { |e| EXPECTED[e["expected_resolution"]] || e["expected_resolution"] }.uniq,
         what_to_do: c.has_attribute?(:detail) && c.detail.present? ? { title: c.detail["title"], description: c.detail["description"] } : (c.detail_title && { title: c.detail_title, description: c.detail_description }),
         last_message: c.has_attribute?(:messages) && c.messages.present? ? message(c.messages.max_by { |m| m["message_date"].presence || m["date_created"].to_s }) : nil,

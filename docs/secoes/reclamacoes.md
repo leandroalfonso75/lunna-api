@@ -83,6 +83,16 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   devolvido) são retiradas do texto-modelo e recolocadas conforme os fatos deste caso (`traits`), e o card lista o que
   difere do caso-modelo (embalagem, devolução, cobertura do ML, produto/SKU, relato do comprador) em "Peculiaridades
   deste caso (revise o texto)". Nova frase dependente de fato entra em `ADDONS` + `traits_for`.
+- **Resolver pelo Lunna** (pedido do usuário em 04/11/2026), como no ML: "Responder" abre as opções (não mais o campo de
+  mensagem direto): **Enviar mensagem ao comprador** (ou ao mediador), **Oferecer devolução** (`allow_return` →
+  `POST .../expected-resolutions/allow-return`), **Reembolsar o dinheiro** (`refund` → `.../expected-resolutions/refund`),
+  **Oferecer reembolso parcial** (só se o ML libera `allow_partial_refund`; valores de `GET .../partial-refund/available-offers`,
+  `POST .../expected-resolutions/partial-refund` com `percentage`) e **Falar com o Mercado Livre** (`open_dispute` →
+  `POST .../actions/open-dispute`, mediação). Só aparecem as que o ML libera ao vendedor (`resolve_actions` na lista);
+  sem nenhuma, o botão vira "Resolver no Mercado Livre" (abre a venda no ML em outra guia). Cada ação explica o efeito e
+  pede segundo clique ("Confirmar no Mercado Livre"). API: `POST /api/claims/:id/resolve` (admin, `action_name`,
+  `percentage`, `confirm: true`), `GET /api/claims/:id/partial_refund_offers`; `Painel::ClaimAction`; registro em
+  `ml_claim_actions` (quem, quando, ação, resultado) e a reclamação é relida em seguida.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

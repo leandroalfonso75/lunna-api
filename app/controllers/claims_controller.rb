@@ -5,7 +5,7 @@
 class ClaimsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :reply, :contest ]
+  before_action :require_admin!, only: [ :reply, :contest, :resolve, :partial_refund_offers ]
 
   # Assistente de contestação: as que afetam a reputação, no prazo de 60 dias, com grupo, provas e texto sugerido.
   def contests
@@ -30,6 +30,32 @@ class ClaimsController < ApplicationController
 
   def index
     render json: Painel::ClaimsQuery.list(Current.account, params)
+  end
+
+  # Resolver pelo Lunna (escrita no ML, não se desfaz): action = allow_return | refund | partial_refund | open_dispute,
+  # percentage (reembolso parcial) e confirm=true.
+  def resolve
+    unless ActiveModel::Type::Boolean.new.cast(params[:confirm]) == true
+      return render_errors([ "Confirmação obrigatória: envie confirm=true para agir na reclamação no Mercado Livre." ], status: :unprocessable_content)
+    end
+
+    result = Painel::ClaimAction.call(Current.account, params[:id].to_i, action: params[:action_name], user: Current.user, percentage: params[:percentage])
+    if result.ok
+      render json: { ok: true, message: result.message, claim: Painel::ClaimsQuery.detail(Current.account, params[:id].to_i) }, status: :created
+    else
+      render json: { ok: false, errors: [ result.message ] }, status: result.record ? :bad_gateway : :unprocessable_content
+    end
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  end
+
+  def partial_refund_offers
+    claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)
+    render json: Painel::ClaimAction.partial_offers(Current.account, claim.claim_id)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  rescue Ml::Client::Error => e
+    render_errors([ "O Mercado Livre não informou os valores de reembolso parcial: #{e.message.truncate(120)}" ], status: :unprocessable_content)
   end
 
   # Escrita no Mercado Livre: exige confirm=true em cada envio.

@@ -184,6 +184,47 @@ RSpec.describe "/api/claims", type: :request do
       expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1, 2 ]) # a atender primeiro, depois pelo prazo
     end
 
+    it "resolve pelo Lunna só com as ações que o ML libera, com confirmação, e registra" do
+      refund = stub_request(:post, "#{base}/1/expected-resolutions/refund").to_return(status: 200, body: [ { expected_resolution: "refund" } ].to_json)
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({})
+
+      get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
+      expect(json["claims"].find { |c| c["claim_id"] == 1 }["resolve_actions"]).to eq([ "refund" ])
+
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "refund" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "refund", confirm: true }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "allow_return", confirm: true }, headers: auth_headers(admin)
+      expect(json["errors"].first).to include("não libera")
+
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "refund", confirm: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+      expect(refund).to have_been_made.once
+      expect(MlClaimAction.last).to have_attributes(claim_id: 1, action: "refund", status: "done", user_id: admin.id)
+    end
+
+    it "reembolso parcial manda o percentual escolhido; pedir mediação usa open-dispute" do
+      MlClaim.find_by(claim_id: 1).update!(players: [ { "role" => "respondent", "available_actions" => [ { "action" => "allow_partial_refund" }, { "action" => "open_dispute" } ] } ])
+      partial = stub_request(:post, "#{base}/1/expected-resolutions/partial-refund").with(body: { percentage: 30.0 }.to_json).to_return(status: 200, body: "[]")
+      dispute = stub_request(:post, "#{base}/1/actions/open-dispute").to_return(status: 200, body: { id: 1, stage: "dispute" }.to_json)
+      stub_request(:get, "#{base}/1/partial-refund/available-offers").to_return(status: 200, body: { available_offers: [ { amount: 13.5, percentage: 30.0 } ] }.to_json)
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({})
+
+      get "/api/claims/1/partial_refund_offers", params: { account_id: account.id }, headers: auth_headers(admin)
+      expect(json["available_offers"].first).to include("percentage" => 30.0)
+
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "partial_refund", percentage: 30, confirm: true }, headers: auth_headers(admin)
+      expect(partial).to have_been_made.once
+      post "/api/claims/1/resolve", params: { account_id: account.id, action_name: "open_dispute", confirm: true }, headers: auth_headers(admin)
+      expect(dispute).to have_been_made.once
+      expect(MlClaimAction.pluck(:action, :status)).to eq([ %w[partial_refund done], %w[open_dispute done] ])
+    end
+
     it "responde no Mercado Livre só com confirmação, registra e relê a reclamação" do
       send = stub_request(:post, "#{base}/1/actions/send-message").with(body: { receiver_role: "complainant", message: "Olá, vamos resolver." }.to_json)
         .to_return(status: 201, body: { id: "m1" }.to_json)

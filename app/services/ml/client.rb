@@ -159,6 +159,19 @@ module Ml
       write(:post, "/post-purchase/v1/claims/#{claim_id}/actions/send-message", {}, { receiver_role: receiver_role, message: message })
     end
 
+    # Resolve a reclamação (escrita no ML, não se desfaz): allow_return, refund, partial_refund (percentage), open_dispute.
+    CLAIM_RESOLUTIONS = { "allow_return" => "expected-resolutions/allow-return", "refund" => "expected-resolutions/refund",
+                          "partial_refund" => "expected-resolutions/partial-refund", "open_dispute" => "actions/open-dispute" }.freeze
+    def claim_resolve(claim_id, action, percentage: nil)
+      path = CLAIM_RESOLUTIONS.fetch(action)
+      write(:post, "/post-purchase/v1/claims/#{claim_id}/#{path}", {}, action == "partial_refund" ? { percentage: percentage } : nil)
+    end
+
+    # Percentuais/valores possíveis de reembolso parcial: { available_offers: [{ amount, percentage }], recommendations, restrictions }.
+    def claim_partial_refund_offers(claim_id)
+      get("/post-purchase/v1/claims/#{claim_id}/partial-refund/available-offers")
+    end
+
     # Devolução ligada à reclamação (404 quando não há).
     def claim_return(claim_id)
       get("/post-purchase/v2/claims/#{claim_id}/returns")
