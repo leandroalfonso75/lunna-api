@@ -13,6 +13,7 @@ pt-BR:
         group_up_pct: Limite "Vendendo"
         group_down_pct: Limite "Em queda"
         ai_model: Modelo da OpenRouter
+        ai_image_model: Modelo imagens (use o identificador, ex.: google/gemini-2.5-flash-image)
         openrouter_api_key: Chave da OpenRouter
       user:
         name: Nome
