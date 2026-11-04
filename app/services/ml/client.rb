@@ -149,6 +149,11 @@ module Ml
       get("/items/#{item_id}/description")
     end
 
+    # Produto do catálogo (anúncio de catálogo usa a descrição do produto: `short_description.content`).
+    def catalog_product(product_id)
+      get("/products/#{product_id}")
+    end
+
     def category_attributes(category_id)
       get("/categories/#{category_id}/attributes")
     end

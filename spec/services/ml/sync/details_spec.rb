@@ -91,6 +91,25 @@ RSpec.describe Ml::Sync::Details do
     expect(item.reload.description_len).to eq(0)
   end
 
+  it "anúncio de catálogo com descrição vazia usa a descrição do produto do catálogo" do
+    item.update!(catalog_listing: true, catalog_product_id: "MLB61180856")
+    stub_category
+    stub_request(:get, "https://api.mercadolibre.com/items/MLB1000000001/description")
+      .to_return(status: 200, body: { plain_text: "", text: "" }.to_json)
+    stub_request(:get, "https://api.mercadolibre.com/products/MLB61180856")
+      .to_return(status: 200, body: { id: "MLB61180856", short_description: { type: "plaintext", content: "x" * 991 } }.to_json)
+    stub_sale_price(amount: 139.9)
+    stub_suggestion(suggested: 129.9)
+    stub_fee(price: 139.9)
+    stub_ship(item_price: 139.9, free_shipping: true)
+    stub_fee(price: 129.9)
+    stub_ship(item_price: 129.9, free_shipping: true)
+
+    described_class.call(client, account, [ item ])
+
+    expect(item.reload.description_len).to eq(991)
+  end
+
   it "price_ref 404 vira nil (sem nota) e fee_at_ref/ship_at_ref ficam nil" do
     stub_category
     stub_description

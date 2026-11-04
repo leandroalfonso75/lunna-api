@@ -97,10 +97,21 @@ module Ml
       end
       private_class_method :fetch_sale_price_pair
 
+      # Anúncio de catálogo: o ML deixa a descrição do anúncio vazia e mostra a do produto do catálogo
+      # (`/products/{id}` → short_description). Até 04/11/2026 o Lunna só lia a do anúncio e marcava "sem descrição".
       def self.fetch_description_len(client, item)
-        client.item_description(item.item_id)["plain_text"].to_s.length
-      rescue Ml::Client::NotFound
-        0
+        len = begin
+          client.item_description(item.item_id)["plain_text"].to_s.length
+        rescue Ml::Client::NotFound
+          0
+        end
+        return len if len.positive? || !item.catalog_listing || item.catalog_product_id.blank?
+
+        begin
+          client.catalog_product(item.catalog_product_id).dig("short_description", "content").to_s.length
+        rescue Ml::Client::NotFound
+          len
+        end
       end
       private_class_method :fetch_description_len
 
