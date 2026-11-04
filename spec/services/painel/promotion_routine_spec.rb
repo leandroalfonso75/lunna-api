@@ -126,4 +126,17 @@ RSpec.describe Painel::PromotionRoutine do
     # a rodada seguinte não programa de novo
     expect { described_class.call(account, mode: "apply", trigger: "agendada") }.not_to have_enqueued_job(Ml::PromotionsApplyJob)
   end
+
+  it "simulação não conta como programada: a rodada real programa a cabível mesmo depois de uma simulação" do
+    include ActiveJob::TestHelper
+    finish = 3.days.from_now.change(sec: 0)
+    MlPromotionOffer.where(item_id: item.item_id).delete_all
+    MlPromotionOffer.create!(ml_account: account, item_id: item.item_id, promotion_id: nil, promotion_type: "PRICE_DISCOUNT",
+      status: "started", price: 70, original_price: 100, min_price: 20, max_price: 95, fees: fees, start_date: 2.days.ago, finish_date: finish)
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+
+    described_class.call(account, mode: "simulation", trigger: "manual")
+    expect { described_class.call(account, mode: "apply", trigger: "agendada") }
+      .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], nil, anything)
+  end
 end

@@ -136,8 +136,11 @@ module Painel
       finish = ev[:current][:offer].finish_date || PromotionActions.period_of(@account, ev[:current][:offer]).last
       return skip(run, ev, "revisar", "oferta cabível aumentaria o preço e a promoção atual não tem data de fim", kind: "revisar") unless finish
 
+      # só conta agendamento de verdade: o registro de uma simulação não cria a tarefa (até 04/11/2026 contava e a rotina
+      # pulava o anúncio achando que já estava programado)
       if @account.ml_promotion_actions.where(item_id: ev[:item].item_id, kind: "agendar", ok: true, to_type: fit[:offer].promotion_type,
-                                             to_promotion_id: fit[:offer].promotion_id).where("effective_at > ?", Time.current).exists?
+                                             to_promotion_id: fit[:offer].promotion_id).where.not(source: "simulacao")
+                 .where("effective_at > ?", Time.current).exists?
         return skip(run, ev, "sem_mudanca", "oferta cabível já programada para quando a promoção atual acabar")
       end
 
