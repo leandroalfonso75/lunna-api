@@ -85,7 +85,17 @@ module Ml
 
     # Fotos do anúncio (Curva ABC > Fotos): [{ "id", "secure_url", "max_size" }], na ordem do anúncio.
     def item_pictures(item_id)
-      Array(get("/items/#{item_id}", attributes: "id,pictures,catalog_listing")["pictures"])
+      Array(item_info(item_id)["pictures"])
+    end
+
+    # O que a publicação de fotos precisa saber do anúncio (catálogo, produto do vendedor, fotos, situação).
+    def item_info(item_id)
+      get("/items/#{item_id}", attributes: "id,pictures,catalog_listing,user_product_id,status")
+    end
+
+    # Anúncios do vendedor que são do mesmo produto (user_product_id): o de catálogo e o(s) tradicional(is).
+    def items_by_user_product(seller_id, user_product_id)
+      Array(get("/users/#{seller_id}/items/search", user_product_id: user_product_id)["results"])
     end
 
     # Sobe uma imagem para o Mercado Livre (multipart) => { "id" => "...", ... }. Escrita: uma tentativa só.

@@ -31,7 +31,11 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   estilo de vida), mantendo o produto idêntico e sem textos. Imagens em `ml_generated_photos` (bytes no banco). O
   usuário aprova (`PATCH /api/photo_images/:id`) e publica (`POST /api/photo_jobs/:id/publish`, admin, `confirm: true`,
   confirmação dupla na tela): `Ml::PicturePublisher` sobe cada aprovada (`/pictures/items/upload`) e regrava as fotos do
-  anúncio = as atuais + as novas no fim (limite de 10).
+  anúncio = as atuais + as novas no fim (limite de 10). Anúncio de **catálogo** não deixa trocar fotos (o ML usa as do produto do
+  catálogo; "pictures is not modifiable"): a janela avisa e publica no anúncio **tradicional do mesmo produto**
+  (`user_product_id`), escolhido pelo usuário (`target_item_id`; só aceita o próprio ou um tradicional do mesmo produto).
+  Imagens que subiram e não foram ligadas ao anúncio (troca recusada) são reaproveitadas na próxima tentativa.
+  Custo de cada imagem (US$, `usage.cost` da OpenRouter) fica em `ml_generated_photos.cost_usd`.
 
 ## Arquivos
 **Front (`lunna-web`)**

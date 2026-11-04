@@ -18,7 +18,10 @@ class PhotoJobsController < ApplicationController
       []
     end
     jobs = Current.account.ml_photo_jobs.where(item_id: params[:item_id]).includes(:photos).order(created_at: :desc).limit(5)
-    render json: { pictures: pictures, jobs: jobs.map { |j| job_json(j) }, ai_configured: Current.account.company.openrouter_api_key.present? }
+    info = (client.item_info(params[:item_id]) rescue {})
+    alternatives = info["catalog_listing"] ? (Ml::PicturePublisher.alternatives(client, Current.account.seller_id, params[:item_id]) rescue []) : []
+    render json: { pictures: pictures, jobs: jobs.map { |j| job_json(j) }, ai_configured: Current.account.company.openrouter_api_key.present?,
+                   catalog_listing: info["catalog_listing"] == true, alternatives: alternatives }
   end
 
   def create
@@ -69,8 +72,9 @@ class PhotoJobsController < ApplicationController
     end
 
     job = Current.account.ml_photo_jobs.find(params[:id])
-    result = Ml::PicturePublisher.call(job, client: client)
-    render json: { ok: result.ok, message: result.message, published: result.published, job: job_json(job.reload) },
+    result = Ml::PicturePublisher.call(job, client: client, target_item_id: params[:target_item_id], seller_id: Current.account.seller_id)
+    render json: { ok: result.ok, message: result.message, errors: (result.ok ? nil : [ result.message ]), published: result.published,
+                   alternatives: result.alternatives || [], job: job_json(job.reload) },
            status: result.ok ? :ok : :unprocessable_content
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Pedido não encontrado." ], status: :not_found)
@@ -92,7 +96,8 @@ class PhotoJobsController < ApplicationController
   def job_json(job)
     {
       id: job.id, item_id: job.item_id, status: job.status, count: job.count, instructions: job.instructions,
-      error: job.error, publish_error: job.publish_error, published_at: job.published_at, created_at: job.created_at,
+      error: job.error, publish_error: job.publish_error, published_at: job.published_at, published_item_id: job.published_item_id,
+      created_at: job.created_at,
       model: job.model, reference_urls: job.reference_urls,
       cost_usd: job.photos.sum { |p| p.cost_usd.to_f }.round(4),
       photos: job.photos.map { |p| { id: p.id, kind: p.kind, position: p.position, approved: p.approved, ml_picture_id: p.ml_picture_id, cost_usd: p.cost_usd&.to_f, model: p.model } }

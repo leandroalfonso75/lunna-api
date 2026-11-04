@@ -81,4 +81,51 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
     expect(job.reload).to have_attributes(status: "publicado")
     expect(ok.reload.ml_picture_id).to eq("999-MLB")
   end
+
+  it "anúncio de catálogo: não sobe nada, oferece o tradicional do mesmo produto e publica nele" do
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 1, status: "pronto")
+    photo = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png, approved: true)
+    WebMock.reset!
+    stub_request(:get, %r{\Ahttps://api\.mercadolibre\.com/items/MLB1\?})
+      .to_return(status: 200, body: { id: "MLB1", catalog_listing: true, user_product_id: "MLBU1", pictures: pictures }.to_json)
+    stub_request(:get, %r{\Ahttps://api\.mercadolibre\.com/items/MLB2\?})
+      .to_return(status: 200, body: { id: "MLB2", catalog_listing: false, user_product_id: "MLBU1", status: "active",
+                                      pictures: [ { id: "222-MLB" } ] }.to_json)
+    stub_request(:get, %r{/users/#{account.seller_id}/items/search\?})
+      .to_return(status: 200, body: { results: %w[MLB1 MLB2] }.to_json)
+    upload = stub_request(:post, "https://api.mercadolibre.com/pictures/items/upload").to_return(status: 201, body: { id: "999-MLB" }.to_json)
+
+    post "/api/photo_jobs/#{job.id}/publish", params: { account_id: account.id, confirm: true }, headers: auth_headers(admin), as: :json
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(json["message"]).to include("anúncio de catálogo", "MLB2")
+    expect(json["alternatives"]).to eq([ { "item_id" => "MLB2", "status" => "active", "pictures" => 1 } ])
+    expect(upload).not_to have_been_requested
+
+    post "/api/photo_jobs/#{job.id}/publish", params: { account_id: account.id, confirm: true, target_item_id: "MLB9" },
+                                              headers: auth_headers(admin), as: :json
+    expect(json["message"]).to include("Só dá para publicar")
+
+    put = stub_request(:put, "https://api.mercadolibre.com/items/MLB2")
+      .with(body: { pictures: [ { id: "222-MLB" }, { id: "999-MLB" } ] }.to_json).to_return(status: 200, body: "{}")
+    post "/api/photo_jobs/#{job.id}/publish", params: { account_id: account.id, confirm: true, target_item_id: "MLB2" },
+                                              headers: auth_headers(admin), as: :json
+    expect(response).to have_http_status(:ok)
+    expect(put).to have_been_requested
+    expect(job.reload).to have_attributes(status: "publicado", published_item_id: "MLB2")
+    expect(photo.reload.ml_picture_id).to eq("999-MLB")
+  end
+
+  it "se a troca das fotos falhar depois de subir, a próxima tentativa reaproveita as imagens já enviadas" do
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 1, status: "pronto")
+    job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png, approved: true, ml_picture_id: "777-MLB")
+    upload = stub_request(:post, "https://api.mercadolibre.com/pictures/items/upload")
+    put = stub_request(:put, "https://api.mercadolibre.com/items/MLB1")
+      .with(body: { pictures: [ { id: "111-MLB" }, { id: "777-MLB" } ] }.to_json).to_return(status: 200, body: "{}")
+
+    post "/api/photo_jobs/#{job.id}/publish", params: { account_id: account.id, confirm: true }, headers: auth_headers(admin), as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(upload).not_to have_been_requested
+    expect(put).to have_been_requested
+  end
 end
