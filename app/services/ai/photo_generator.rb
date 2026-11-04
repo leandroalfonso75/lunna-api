@@ -42,7 +42,8 @@ module Ai
 
     private
 
-    def model = @company.ai_image_model.presence || DEFAULT_MODEL
+    # o modelo gravado no pedido (o da empresa no momento do pedido, ou um escolhido para comparação)
+    def model = @job.model.presence || @company.ai_image_model.presence || DEFAULT_MODEL
 
     def reference_urls
       (Array(@job.reference_urls) + @job.uploaded_references.map(&:data_url)).first(MAX_REFERENCES)
