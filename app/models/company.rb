@@ -17,6 +17,7 @@ class Company < ApplicationRecord
   encrypts :openrouter_api_key
 
   normalizes :ai_model, with: ->(value) { value.to_s.strip.presence }
+  normalizes :ai_image_model, with: ->(value) { value.to_s.strip.presence }
 
   validates :name, presence: true
   validates :tax_pct, :min_margin_pct,
@@ -27,6 +28,8 @@ class Company < ApplicationRecord
   validates :group_down_pct, numericality: { less_than_or_equal_to: 0 }
   validates :fixed_expenses_pct, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :ai_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
+  # modelo da OpenRouter que GERA imagens (Curva ABC > Gerar fotos); vazio = padrão do Ai::PhotoGenerator
+  validates :ai_image_model, format: { with: AI_MODEL_FORMAT }, length: { maximum: 120 }, allow_nil: true
   validates :max_margin_pct, numericality: { greater_than: -100, less_than: 100 }, allow_nil: true
   validates :promo_routine_mode, inclusion: { in: %w[simulation apply] }
   validates :ads_daily_budget_max, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true

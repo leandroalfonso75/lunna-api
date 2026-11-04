@@ -34,6 +34,7 @@ module Payloads
       group_down_pct: company.group_down_pct.to_f,
       fixed_expenses_pct: company.fixed_expenses_pct.to_f,
       ai_model: company.ai_model,
+      ai_image_model: company.ai_image_model,
       ai_configured: company.ai_configured?,
       ai_key_hint: company.ai_key_hint
     }
