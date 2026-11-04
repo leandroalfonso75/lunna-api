@@ -261,6 +261,14 @@ RSpec.describe "/api/claims", type: :request do
       get "/api/claims/contests", params: { account_id: account.id }, headers: auth_headers(member)
       expect(json["claims"].find { |c| c["claim_id"] == 1 }["contest"]).to include("status" => "contestada", "text" => "meu texto")
       expect(json["summary"]["by_status"]).to include("contestada" => 1, "pendente" => 3)
+      expect(json["summary"]).to include("pending" => 3, "contested" => 1)
+
+      # contestada fica na guia Contestadas mesmo fora dos 60 dias ou sem afetar mais a reputação
+      patch "/api/claims/5/contest", params: { account_id: account.id, status: "aceita" }, headers: auth_headers(admin)
+      MlClaim.find_by(claim_id: 1).update!(affects_reputation: false)
+      get "/api/claims/contests", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).to include(1, 5)
+      expect(json["summary"]).to include("pending" => 3, "contested" => 2)
     end
   end
 end

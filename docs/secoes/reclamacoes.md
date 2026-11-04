@@ -67,7 +67,12 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   quando a mediação ainda está aberta, filtro por grupo e o andamento (Pendente, Contestada, Aceita, Negada) com
   "Marcar como contestada". **O Lunna não envia a contestação** ao ML: guarda status, texto usado, quem e quando em
   `ml_claim_contests` (uma por reclamação; apagada junto com a conta). API: `GET /api/claims/contests` →
-  `claims` + `summary` (total, by_group, due_7d, by_status); `PATCH /api/claims/:id/contest` (admin; `status`, `text`).
+  `claims` + `summary` (total, pending, contested, by_group e due_7d só das pendentes, by_status);
+  `PATCH /api/claims/:id/contest` (admin; `status`, `text`).
+  Duas guias (pedido do usuário em 04/11/2026): **A contestar** (pendentes, pelo prazo) e **Contestadas** (em destaque;
+  status diferente de pendente, mais recentes primeiro). As contestadas continuam na lista mesmo depois dos 60 dias ou
+  se o ML tirar a reclamação da reputação. No card contestado, no lugar de "Andamento" fica **Situação** em destaque:
+  azul = Aceita pelo ML, vermelho = Negada pelo ML, âmbar = Contestada (aguardando o ML), com "Atualizar" para mudar.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

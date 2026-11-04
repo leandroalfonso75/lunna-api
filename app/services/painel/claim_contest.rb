@@ -40,15 +40,21 @@ module Painel
     end
 
     def list
-      claims = @account.ml_claims.where(affects_reputation: true).where.not(details_synced_at: nil)
-        .where("date_created > ?", WINDOW.ago).order(:date_created).to_a
+      # a contestar: afetam a reputação e estão nos 60 dias; contestadas (guia "Contestadas", pedido de 04/11/2026)
+      # ficam sempre, mesmo depois do prazo ou se o ML tirar a reclamação da reputação
+      contested_ids = @account.ml_claim_contests.where.not(status: "pendente").pluck(:claim_id)
+      open_scope = @account.ml_claims.where(affects_reputation: true).where("date_created > ?", WINDOW.ago)
+      claims = open_scope.or(@account.ml_claims.where(claim_id: contested_ids)).where.not(details_synced_at: nil)
+        .order(:date_created).to_a
       contests = @account.ml_claim_contests.where(claim_id: claims.map(&:claim_id)).index_by(&:claim_id)
       orders = load_orders(claims)
       items = MlOrderItem.where(order_id: orders.values.compact.map(&:order_id)).group_by(&:order_id)
       rows = claims.map { |c| build(c, orders[c.claim_id], items, contests[c.claim_id]) }
+      pending = rows.select { |r| r[:contest][:status] == "pendente" }
       { claims: rows.sort_by { |r| r[:deadline] },
-        summary: { total: rows.size, by_group: rows.group_by { |r| r[:group] }.transform_values(&:size),
-                   due_7d: rows.count { |r| r[:deadline] < 7.days.from_now },
+        summary: { total: rows.size, pending: pending.size, contested: rows.size - pending.size,
+                   by_group: pending.group_by { |r| r[:group] }.transform_values(&:size),
+                   due_7d: pending.count { |r| r[:deadline] < 7.days.from_now },
                    by_status: rows.group_by { |r| r[:contest][:status] }.transform_values(&:size) } }
     end
 
