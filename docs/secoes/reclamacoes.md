@@ -73,6 +73,11 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   status diferente de pendente, mais recentes primeiro). As contestadas continuam na lista mesmo depois dos 60 dias ou
   se o ML tirar a reclamação da reputação. No card contestado, no lugar de "Andamento" fica **Situação** em destaque:
   azul = Aceita pelo ML, vermelho = Negada pelo ML, âmbar = Contestada (aguardando o ML), com "Atualizar" para mudar.
+  **Aprender com o que deu certo** (pedido do usuário em 04/11/2026): o texto salvo de uma contestação **aceita** vira o
+  texto sugerido das pendentes do **mesmo grupo e motivo** (a aceita mais recente; troca nº da reclamação, da venda e
+  título). O card avisa "Texto baseado na contestação aceita #X" e oferece "Usar o texto padrão" (`generic_draft`).
+  Outro grupo não reaproveita, porque o texto traz fatos do caso (ex.: "venda pelo Full"). Vale o texto **salvo no
+  Lunna**: se o texto enviado no ML foi editado lá, cole-o no card e salve, senão o modelo é o texto padrão.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

@@ -50,6 +50,7 @@ module Painel
       orders = load_orders(claims)
       items = MlOrderItem.where(order_id: orders.values.compact.map(&:order_id)).group_by(&:order_id)
       rows = claims.map { |c| build(c, orders[c.claim_id], items, contests[c.claim_id]) }
+      apply_accepted_models(rows)
       pending = rows.select { |r| r[:contest][:status] == "pendente" }
       { claims: rows.sort_by { |r| r[:deadline] },
         summary: { total: rows.size, pending: pending.size, contested: rows.size - pending.size,
@@ -59,6 +60,33 @@ module Painel
     end
 
     private
+
+    # Aprende com o que deu certo (pedido do usuário em 04/11/2026): o texto de uma contestação ACEITA pelo ML vira o
+    # modelo das pendentes do MESMO grupo e motivo (outro grupo não: o texto traz fatos do caso, como "venda pelo Full"),
+    # trocando nº da reclamação, da venda e o título. A mais recente aceita vale; `model` diz de qual veio.
+    def apply_accepted_models(rows)
+      accepted = rows.select { |r| r[:contest][:status] == "aceita" && r[:contest][:text].present? }
+        .sort_by { |r| r[:contest][:contested_at] || Time.at(0) }.reverse
+      return if accepted.empty?
+
+      rows.each do |r|
+        next unless r[:contest][:status] == "pendente"
+
+        src = accepted.find { |a| a[:group] == r[:group] && a[:reason_code] == r[:reason_code] }
+        next unless src
+
+        r[:generic_draft] = r[:draft]
+        r[:draft] = adapt(src, r)
+        r[:model] = { claim_id: src[:claim_id], same_group: true }
+      end
+    end
+
+    def adapt(src, row)
+      text = src[:contest][:text].gsub(src[:claim_id].to_s, row[:claim_id].to_s)
+      text = text.gsub(src[:order_id].to_s, row[:order_id].to_s) if src[:order_id] && row[:order_id]
+      text = text.gsub(src[:title], row[:title]) if src[:title].present? && row[:title].present?
+      text
+    end
 
     def load_orders(claims)
       by_id = @account.ml_orders.where(order_id: claims.filter_map(&:order_id)).index_by(&:order_id)

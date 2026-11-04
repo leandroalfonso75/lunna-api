@@ -246,6 +246,21 @@ RSpec.describe "/api/claims", type: :request do
       expect(json["summary"]).to include("total" => 4, "due_7d" => 1)
     end
 
+    it "usa o texto de uma contestação aceita como modelo das pendentes do mesmo motivo" do
+      claim(7, details_synced_at: Time.current, affects_reputation: true, status: "closed", date_created: 5.days.ago,
+               reason: { "name" => "different_than_published" })
+      MlClaimContest.create!(ml_account: account, claim_id: 4, status: "aceita", contested_at: 1.hour.ago,
+                             text: "Revisão da reclamação 4: argumento completo que funcionou.")
+
+      get "/api/claims/contests", params: { account_id: account.id }, headers: auth_headers(member)
+
+      seven = json["claims"].find { |c| c["claim_id"] == 7 }
+      expect(seven["draft"]).to eq("Revisão da reclamação 7: argumento completo que funcionou.")
+      expect(seven["model"]).to include("claim_id" => 4, "same_group" => true)
+      expect(seven["generic_draft"]).to include("Solicito a revisão da reclamação 7")
+      expect(json["claims"].find { |c| c["claim_id"] == 1 }).not_to have_key("model") # outro motivo
+    end
+
     it "guarda o andamento e o texto (só admin), sem enviar nada ao Mercado Livre" do
       patch "/api/claims/1/contest", params: { account_id: account.id, status: "contestada", text: "meu texto" }, headers: auth_headers(member)
       expect(response).to have_http_status(:forbidden)
