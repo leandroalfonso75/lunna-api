@@ -58,6 +58,7 @@ RSpec.describe Company, type: :model do
     it "aceita ids no formato fornecedor/modelo" do
       expect(build(:company, ai_model: "anthropic/claude-sonnet-4.5")).to be_valid
       expect(build(:company, ai_model: "openai/gpt-4o:online")).to be_valid
+      expect(build(:company, ai_image_model: "https://mcp.openrouter.ai/mcp")).not_to be_valid # endereço não é modelo
     end
 
     it "rejeita sem barra, com espaço, ou muito longo" do

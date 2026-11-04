@@ -1,7 +1,7 @@
 class Company < ApplicationRecord
   # DECISOES §10 — id OpenRouter no formato "fornecedor/modelo" (sem espaço
   # nem barra no fornecedor; sem espaço no modelo).
-  AI_MODEL_FORMAT = %r{\A[^\s/:]+/[^\s:]+\z} # fornecedor/modelo; não aceita endereço (https://...)
+  AI_MODEL_FORMAT = %r{\A(?!.*://)[^\s/]+/\S+\z} # fornecedor/modelo (aceita sufixo :online); não aceita endereço https://
 
   has_many :users
   has_many :ml_accounts
