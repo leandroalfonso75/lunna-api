@@ -368,10 +368,11 @@ module Painel
 
       offers = evaluated.reject { |e| e[:as_is] }.select { |e| e[:reason].present? && PromotionEvaluator::PRICE_TYPES.include?(e[:offer].promotion_type) }
       tally = offers.group_by { |e| e[:reason] }.transform_values(&:size).sort_by { |_, n| -n }
-      # melhor barrada: só as que a automação escolheria (sem campanha do vendedor) e que rendem mais que hoje;
-      # oferta no mesmo preço e lucro da atual não é sugerida (trocar não muda nada)
+      # melhor barrada: só as que a automação escolheria (sem campanha do vendedor). Desde 04/11/2026 não precisa render
+      # mais que hoje (pedido do usuário: com o alvo na margem mínima, a oferta mais barata barrada pela trava de lucro
+      # também deve aparecer). Oferta no mesmo preço da atual não é sugerida (trocar não muda nada).
       blocked = offers.select { |e| e[:margin_pct] && e[:offer].promotion_type != "SELLER_CAMPAIGN" }
-        .select { |e| current.nil? || e[:profit] > current[:profit].to_f + GAIN_EPSILON }
+        .reject { |e| current && (e[:price].to_f - current[:price].to_f).abs < 0.005 && e[:offer].promotion_type == current[:offer].promotion_type }
         .max_by { |e| [ e[:margin_pct], e[:offer].finish_date.to_i ] }
       # a oferta que cabe nos limites (outra campanha, ou o desconto próprio), mesmo que fira a trava de lucro ou a regra
       # de aumento: a tela mostra ao lado da barrada e deixa aplicar

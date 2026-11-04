@@ -75,6 +75,12 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Desconto próprio ativo vem do ML sem faixa de preço; `Ml::Sync::Promotions` guarda a faixa usual (20% a 95% do preço cheio)
   para o Lunna poder recriá-lo em outro preço (ajustar). Nas faixas, o preço arredondado a centavos sobe 1 centavo se a
   margem ficar um centésimo abaixo da mínima.
+- **Ofertas barradas em qualquer anúncio** (pedido do usuário em 04/11/2026): no quadro "Ofertas deste anúncio", cada
+  oferta barrada por uma regra do Lunna (margem, valor, trava de lucro, aumento, relâmpago) aparece como "Barrada pela
+  regra: …" com o botão "Aplicar mesmo assim" (mesma confirmação e registro do Histórico da aba Revisar), também nos
+  anúncios "Na melhor". Nesses, um resumo no alto lista as barradas. Regras que o ML recusaria (`HARD_REASONS`) não têm
+  o botão. A "melhor barrada" de Revisar deixou de exigir mais lucro que hoje: com o alvo na margem mínima, a oferta
+  mais barata barrada pela trava de lucro também aparece.
 - **Oferta cabível** (`review.fitting`, `PromotionEvaluator#fitting`): quando a melhor oferta está barrada, o Lunna
   procura outra promoção disponível que caiba nos limites (campanhas do ML primeiro) ou o desconto próprio (sempre
   avaliado: se o ML não listou a oferta, entra uma candidata com a faixa usual, 20% a 95% do preço cheio). Ela pode ferir
