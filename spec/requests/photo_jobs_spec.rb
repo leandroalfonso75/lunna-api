@@ -128,4 +128,36 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
     expect(upload).not_to have_been_requested
     expect(put).to have_been_requested
   end
+
+  it "publica na ordem escolhida (a primeira é a capa) e só as novas que estão na ordem" do
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 2, status: "pronto")
+    first = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png, approved: true, ml_picture_id: "777-MLB")
+    job.photos.create!(kind: "gerada", position: 1, mime: "image/png", data: png, approved: true, ml_picture_id: "888-MLB")
+    put = stub_request(:put, "https://api.mercadolibre.com/items/MLB1")
+      .with(body: { pictures: [ { id: "777-MLB" }, { id: "111-MLB" } ] }.to_json).to_return(status: 200, body: "{}")
+
+    post "/api/photo_jobs/#{job.id}/publish", params: { account_id: account.id, confirm: true, order: [ "new:#{first.id}" ] },
+                                              headers: auth_headers(admin), as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(put).to have_been_requested # a atual (111) que faltou na ordem entra no fim; a 888 ficou de fora
+    expect(json["published"]).to eq(1)
+  end
+
+  it "confere a capa pela IA de visão e devolve os motivos quando foge do padrão do ML" do
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 1, status: "pronto")
+    photo = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png)
+    vision = stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+      .with { |req| JSON.parse(req.body)["model"] == Ai::CoverCheck::MODEL }
+      .to_return(status: 200, body: { choices: [ { message: { content: { white_background: false, no_text: false, no_logo_watermark: true,
+        no_border: true, whole_product: true, single_scene: true, sharp: true }.to_json } } ] }.to_json)
+
+    post "/api/photo_jobs/#{job.id}/check_cover", params: { account_id: account.id, ref: "new:#{photo.id}" }, headers: auth_headers(admin), as: :json
+
+    expect(vision).to have_been_requested
+    expect(json).to eq("ok" => false, "reasons" => [ "fundo não é branco", "tem texto na imagem" ])
+
+    post "/api/photo_jobs/#{job.id}/check_cover", params: { account_id: account.id, ref: "new:#{photo.id}" }, headers: auth_headers(member), as: :json
+    expect(response).to have_http_status(:forbidden)
+  end
 end

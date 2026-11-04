@@ -50,6 +50,7 @@ Rails.application.routes.draw do
     get "photo_images/:id", to: "photo_jobs#image"
     patch "photo_images/:id", to: "photo_jobs#approve"
     post "photo_jobs/:id/publish", to: "photo_jobs#publish"
+    post "photo_jobs/:id/check_cover", to: "photo_jobs#check_cover"
     get "items/:id/ai-plan", to: "ai_plans#show"
     post "items/:id/ai-plan", to: "ai_plans#create", as: :item_ai_plan
     delete "items/:id/ai-plan", to: "ai_plans#destroy"

@@ -10,7 +10,9 @@ module Ml
     MAX_PICTURES = 10
     Result = Struct.new(:ok, :message, :published, :alternatives, keyword_init: true)
 
-    def self.call(job, client:, target_item_id: nil, seller_id: nil) = new(job, client, target_item_id, seller_id).call
+    # order (opcional): a galeria final na ordem escolhida, a 1ª é a capa: "ml:<id da foto atual>" ou "new:<id da imagem
+    # gerada>" (pedido do usuário em 04/11/2026). Foto atual que não vier na lista entra no fim; gerada fora dela não sobe.
+    def self.call(job, client:, target_item_id: nil, seller_id: nil, order: nil) = new(job, client, target_item_id, seller_id, order).call
 
     # Anúncios tradicionais (não catálogo) do mesmo produto do vendedor (mesmo user_product_id).
     def self.alternatives(client, seller_id, item_id)
@@ -23,7 +25,8 @@ module Ml
       end
     end
 
-    def initialize(job, client, target_item_id, seller_id)
+    def initialize(job, client, target_item_id, seller_id, order = nil)
+      @order = Array(order).map(&:to_s).presence
       @job = job
       @client = client
       @seller_id = seller_id || job.ml_account.seller_id
@@ -43,6 +46,7 @@ module Ml
 
       current = Array(info["pictures"]).map { |p| p["id"] }
       approved = @job.generated.select(&:approved).reject { |p| p.ml_picture_id && current.include?(p.ml_picture_id) }
+      approved = approved.select { |p| @order.include?("new:#{p.id}") } if @order
       return Result.new(ok: false, message: "Aprove ao menos uma imagem antes de publicar.", published: 0) if approved.empty?
 
       room = MAX_PICTURES - current.size
@@ -58,7 +62,7 @@ module Ml
         up = @client.upload_picture(photo.data, filename: "lunna-#{@job.id}-#{photo.position + 1}.#{photo.mime.split('/').last}", mime: photo.mime)
         photo.update!(ml_picture_id: up["id"])
       end
-      @client.update_item_pictures(@target, current + batch.map(&:ml_picture_id))
+      @client.update_item_pictures(@target, gallery(current, batch))
       @job.update!(status: "publicado", published_at: Time.current, publish_error: nil, published_item_id: @target)
       left = approved.size - batch.size
       Result.new(ok: true, published: batch.size,
@@ -70,6 +74,15 @@ module Ml
     end
 
     private
+
+    # Ordem final: a escolhida (sem repetir e só com fotos válidas), as atuais que faltaram no fim; sem ordem, atuais + novas.
+    def gallery(current, batch)
+      return current + batch.map(&:ml_picture_id) unless @order
+
+      by_token = current.to_h { |id| [ "ml:#{id}", id ] }.merge(batch.to_h { |p| [ "new:#{p.id}", p.ml_picture_id ] })
+      chosen = @order.filter_map { |t| by_token[t] }.uniq
+      chosen + (current - chosen)
+    end
 
     def alternative_ids
       @alternative_ids ||= self.class.alternatives(@client, @seller_id, @job.item_id).map { |a| a[:item_id] }

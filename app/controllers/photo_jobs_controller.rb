@@ -7,7 +7,7 @@
 class PhotoJobsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :create, :approve, :publish ]
+  before_action :require_admin!, only: [ :create, :approve, :publish, :check_cover ]
 
   MAX_UPLOAD_BYTES = 8.megabytes
 
@@ -66,13 +66,35 @@ class PhotoJobsController < ApplicationController
     render_errors([ "Imagem não encontrada." ], status: :not_found)
   end
 
+  # Confere se uma foto serve de capa no Mercado Livre (fundo branco, sem texto, produto inteiro...) pela IA de visão.
+  # ref: "ml:<id>" (foto atual do anúncio) ou "new:<id>" (imagem gerada). Não publica nada.
+  def check_cover
+    job = Current.account.ml_photo_jobs.find(params[:id])
+    ref = params[:ref].to_s
+    url =
+      if ref.start_with?("new:")
+        photo_scope.find(ref.delete_prefix("new:")).data_url
+      else
+        pic = client.item_pictures(params[:item_id].presence || job.item_id).find { |p| p["id"] == ref.delete_prefix("ml:") }
+        pic && (pic["secure_url"] || pic["url"])
+      end
+    return render_errors([ "Foto não encontrada." ], status: :not_found) unless url
+
+    render json: Ai::CoverCheck.call(Current.account.company, url)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Foto não encontrada." ], status: :not_found)
+  rescue Ai::CoverCheck::Error => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  end
+
   def publish
     unless ActiveModel::Type::Boolean.new.cast(params[:confirm]) == true
       return render_errors([ "Confirmação obrigatória: envie confirm=true para publicar no Mercado Livre." ], status: :unprocessable_content)
     end
 
     job = Current.account.ml_photo_jobs.find(params[:id])
-    result = Ml::PicturePublisher.call(job, client: client, target_item_id: params[:target_item_id], seller_id: Current.account.seller_id)
+    result = Ml::PicturePublisher.call(job, client: client, target_item_id: params[:target_item_id], seller_id: Current.account.seller_id,
+                                       order: params[:order])
     render json: { ok: result.ok, message: result.message, errors: (result.ok ? nil : [ result.message ]), published: result.published,
                    alternatives: result.alternatives || [], job: job_json(job.reload) },
            status: result.ok ? :ok : :unprocessable_content

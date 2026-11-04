@@ -36,6 +36,12 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   (`user_product_id`), escolhido pelo usuário (`target_item_id`; só aceita o próprio ou um tradicional do mesmo produto).
   Imagens que subiram e não foram ligadas ao anúncio (troca recusada) são reaproveitadas na próxima tentativa.
   Custo de cada imagem (US$, `usage.cost` da OpenRouter) fica em `ml_generated_photos.cost_usd`.
+  **Ordem e capa** (pedido do usuário em 04/11/2026): antes de publicar, a janela mostra a galeria final do anúncio de
+  destino (fotos atuais + aprovadas) com setas e "Tornar capa"; a 1ª é a capa. A publicação manda `order` (`ml:<id>` /
+  `new:<id>`); foto atual fora da lista entra no fim, gerada fora dela não sobe. Ao trocar a capa, `Ai::CoverCheck`
+  (`POST /api/photo_jobs/:id/check_cover`, modelo de visão `google/gemini-2.5-flash`, ~US$ 0,001) confere fundo branco,
+  texto, logo/marca d'água, borda, produto inteiro, colagem e nitidez; fora do padrão abre o aviso "Capa fora dos padrões
+  do Mercado Livre" com **Publicar mesmo assim** (publica direto) e **Cancelar** (volta a ordem de antes).
 
 ## Arquivos
 **Front (`lunna-web`)**
