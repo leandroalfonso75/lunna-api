@@ -12,7 +12,7 @@ module Painel
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 90
     PER_PAGES = [ 25, 50, 100 ].freeze
-    ITEM_SORTS = %w[cost total_amount acos roas clicks prints units title price].freeze
+    ITEM_SORTS = %w[cost total_amount acos roas clicks prints units organic_units title price].freeze
     MIN_COST_TO_FLAG = 10.0
 
     CAMPAIGN_STATUS = {
