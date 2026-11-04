@@ -51,6 +51,23 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   `ml_claim_replies` (quem, quando, para quem, texto, sent/failed, erro) e a reclamação é relida em seguida. Testado só
   com respostas simuladas; o primeiro envio real confirma se o app do Lunna tem permissão de escrita em reclamações
   (403 = falta liberar no DevCenter).
+- **Contestar** (assistente de contestação, pedido do usuário em 03/11/2026): botão ao lado de "A atender"/"Abertas",
+  com quantas estão pendentes e quantas vencem em 7 dias. Lista as reclamações que **afetam a reputação**, com detalhes
+  importados e abertas há menos de **60 dias** (prazo do ML para contestar), pela data-limite (abertura + 60 dias).
+  Cada uma é classificada num grupo (`Painel::ClaimContest#group_for`, nesta ordem): **Decisão a seu favor** (resolução
+  com `benefited` respondent; força alta), **Produto não devolvido** (devolução `expired`/`cancelled`; alta),
+  **Decisão do depósito do ML** (`resolution.reason` warehouse_decision; alta), **Venda Full** (envio `fulfillment`;
+  média), **Produto x anúncio** (motivos de item diferente/faltando/com defeito em relação ao anúncio; média) e
+  **Envio pelo vendedor** (o resto; baixa). As provas saem só dos dados do ML e da venda (datas de abertura, envio e
+  entrega, quem abriu a mediação, resolução e cobertura, devolução e rastreio, o relato do comprador registrado pelo
+  mediador, mensagens do vendedor). O texto sugerido é por grupo (introdução com nº da reclamação e da venda, argumento,
+  "Agradeço a análise."); no Full o argumento muda com o motivo (dano → transporte do ML; item diferente → separação
+  no depósito; outros → análise do produto devolvido) e cita quando o mediador registrou que a embalagem não estava
+  danificada. Na tela: provas, texto editável ("Voltar ao sugerido", "Copiar texto"), link da venda no ML, aviso
+  quando a mediação ainda está aberta, filtro por grupo e o andamento (Pendente, Contestada, Aceita, Negada) com
+  "Marcar como contestada". **O Lunna não envia a contestação** ao ML: guarda status, texto usado, quem e quando em
+  `ml_claim_contests` (uma por reclamação; apagada junto com a conta). API: `GET /api/claims/contests` →
+  `claims` + `summary` (total, by_group, due_7d, by_status); `PATCH /api/claims/:id/contest` (admin; `status`, `text`).
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como
@@ -78,7 +95,7 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   convertido direto e "not_affected" virava "Afeta" (corrigido pela migration `AddReputationStatusToMlClaims`, que
   recalculou tudo a partir do jsonb `reputation`; conferido com a venda #2000019300486644, que não afetou a reputação).
 - Venda ligada: pelo pedido (`resource: order`) ou pelo envio (`resource: shipment` → `ml_orders.shipping_id`).
-- Somente leitura no Mercado Livre: o Lunna não responde, não anexa nem age nas reclamações.
+- No Mercado Livre o Lunna só responde (ver Responder); não anexa, não contesta nem age de outra forma nas reclamações.
 - O resumo antigo de reclamações dentro das vendas (`ml_orders.claims`, `Ml::Sync::Claims`, motivo na lista de Vendas)
   continua igual.
 
@@ -89,11 +106,11 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   `expected_resolutions`, `evidences`, `changes`, `reputation`, `devolution`, `reason_info`, `resolution_raw`, `raw`).
 
 ## Arquivos
-- API: `app/services/ml/sync/claims_center.rb`, `app/services/painel/claims_query.rb`, `app/controllers/claims_controller.rb`,
-  `app/models/ml_claim.rb`, `Ml::Client#claims_search`/`#claim_sub`; testes `spec/services/ml/sync/claims_center_spec.rb`,
+- API: `app/services/ml/sync/claims_center.rb`, `app/services/painel/claims_query.rb`, `app/services/painel/claim_contest.rb`,
+  `app/services/painel/claim_reply.rb`, `app/controllers/claims_controller.rb`, `app/models/ml_claim.rb`, `MlClaimContest`, `Ml::Client#claims_search`/`#claim_sub`; testes `spec/services/ml/sync/claims_center_spec.rb`,
   `spec/requests/claims_spec.rb`.
 - Front (`lunna-web-radar`): `app/pages/reclamacoes.vue`, `app/components/reclamacoes/ClaimDetailPanel.vue`,
-  `app/types/claims.ts`; item "Reclamações" no menu, logo abaixo de Vendas.
+  `ClaimAttentionCard.vue`, `ClaimContestCard.vue`, `app/types/claims.ts`; item "Reclamações" no menu, logo abaixo de Vendas.
 
 ## Próximos passos (a definir com o usuário)
 - Filtros (tipo, situação, etapa, quem age, prazo, reputação, período, produto) e regras (alertas de prazo, custo das

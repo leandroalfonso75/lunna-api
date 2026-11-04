@@ -218,4 +218,49 @@ RSpec.describe "/api/claims", type: :request do
       expect(MlClaimReply.last).to have_attributes(status: "failed")
     end
   end
+
+  describe "assistente de contestação" do
+    before do
+      MlOrder.create!(order_id: 10, ml_account: account, status: "paid", date_created: 12.days.ago, total_amount: 80,
+                      shipment: { "logistic_type" => "fulfillment" })
+      MlOrderItem.create!(order_id: 10, item_id: "MLB1", sku: "KIT-1", title: "Secador", quantity: 1, unit_price: 80, sale_fee: 8)
+      synced = { details_synced_at: Time.current, affects_reputation: true, status: "closed" }
+      claim(1, **synced, order_id: 10, resource: "order", resource_id: 10, date_created: 10.days.ago, reason: { "name" => "broken_item" })
+      claim(2, **synced, date_created: 55.days.ago, resolution: { "reason" => "warehouse_decision", "benefited" => [ "complainant" ] })
+      claim(3, **synced, date_created: 20.days.ago, resolution: { "benefited" => [ "respondent" ] })
+      claim(4, **synced, date_created: 30.days.ago, reason: { "name" => "different_than_published" })
+      claim(5, **synced, date_created: 70.days.ago) # fora dos 60 dias
+      claim(6, **synced, affects_reputation: false) # não afeta a reputação
+    end
+
+    it "classifica, reúne as provas e redige o texto, pelo prazo dos 60 dias" do
+      get "/api/claims/contests", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(response).to have_http_status(:ok)
+      expect(json["claims"].map { |c| [ c["claim_id"], c["group"] ] }).to eq([ [ 2, "deposito" ], [ 4, "anuncio" ], [ 3, "decisao_favor" ], [ 1, "full" ] ])
+      full = json["claims"].last
+      expect(full).to include("order_id" => 10, "sku" => "KIT-1", "strength" => "média", "days_left" => 49)
+      expect(full["evidence"].join(" ")).to include("Secador")
+      expect(full["draft"]).to include("Solicito a revisão da reclamação 1", "Full", "Agradeço a análise.")
+      expect(full["contest"]).to include("status" => "pendente")
+      expect(json["summary"]).to include("total" => 4, "due_7d" => 1)
+    end
+
+    it "guarda o andamento e o texto (só admin), sem enviar nada ao Mercado Livre" do
+      patch "/api/claims/1/contest", params: { account_id: account.id, status: "contestada", text: "meu texto" }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+
+      patch "/api/claims/1/contest", params: { account_id: account.id, status: "contestada", text: "meu texto" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:ok)
+      expect(MlClaimContest.last).to have_attributes(claim_id: 1, status: "contestada", text: "meu texto", user: admin)
+      expect(MlClaimContest.last.contested_at).to be_present
+
+      patch "/api/claims/1/contest", params: { account_id: account.id, status: "vencida" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+
+      get "/api/claims/contests", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["claims"].find { |c| c["claim_id"] == 1 }["contest"]).to include("status" => "contestada", "text" => "meu texto")
+      expect(json["summary"]["by_status"]).to include("contestada" => 1, "pendente" => 3)
+    end
+  end
 end

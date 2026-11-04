@@ -5,7 +5,28 @@
 class ClaimsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :reply ]
+  before_action :require_admin!, only: [ :reply, :contest ]
+
+  # Assistente de contestação: as que afetam a reputação, no prazo de 60 dias, com grupo, provas e texto sugerido.
+  def contests
+    render json: Painel::ClaimContest.list(Current.account)
+  end
+
+  # Andamento da contestação (feita pelo vendedor no ML): status e o texto usado. Não envia nada ao ML.
+  def contest
+    claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)
+    record = Current.account.ml_claim_contests.find_or_initialize_by(claim_id: claim.claim_id)
+    record.assign_attributes(status: params[:status].presence || record.status, user: Current.user)
+    record.text = params[:text] if params.key?(:text)
+    record.contested_at ||= Time.current if record.status == "contestada"
+    if record.save
+      render json: { claim_id: claim.claim_id, status: record.status, contested_at: record.contested_at }
+    else
+      render_errors(record.errors.full_messages, status: :unprocessable_content)
+    end
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  end
 
   def index
     render json: Painel::ClaimsQuery.list(Current.account, params)
