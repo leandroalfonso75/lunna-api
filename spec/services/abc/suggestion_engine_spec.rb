@@ -1,8 +1,11 @@
 require "rails_helper"
 
 RSpec.describe Abc::SuggestionEngine do
-  def call(item: build_item, metric: build_metric, curve: nil, group: nil, price: { kind: "none" }, median: nil, params: abc_params)
-    ctx = described_class::Context.new(item: item, metric: metric, curve: curve, group: group, price: price, conversion_median: median, params: params)
+  def call(item: build_item, metric: build_metric, curve: nil, group: nil, price: { kind: "none" }, median: nil, params: abc_params,
+           cost: nil, in_ads: nil)
+    economics = cost && Abc::Economics.call(metric: metric, item: item, cost: cost, params: params)
+    ctx = described_class::Context.new(item: item, metric: metric, curve: curve, group: group, price: price, conversion_median: median,
+                                       params: params, economics: economics, in_ads: in_ads)
     described_class.call(ctx)
   end
 
@@ -394,5 +397,44 @@ RSpec.describe Abc::SuggestionEngine do
     # regra 2 (moderação) vem antes da regra 17 (fotos) — ambas prioridade 1, moderação está antes na tabela
     prio1_titles = result.select { |s| s[:priority] == 1 }.map { |s| s[:title] }
     expect(prio1_titles.index("Resolver revisão do Mercado Livre")).to be < prio1_titles.index("Adicionar fotos")
+  end
+
+  describe "detalhes das ações (pedido de 04/11/2026)" do
+    it "exposição traz as medidas, sem sugerir Ads para quem já está em campanha" do
+      result = call(metric: build_metric(visits_30d: 10), item: build_item(free_shipping: false), in_ads: false)
+      steps = find(result, "Aumentar exposição")[:steps]
+      expect(steps.join(" ")).to include("Product Ads", "promoções", "frete grátis", "Full")
+
+      in_ads = call(metric: build_metric(visits_30d: 10), in_ads: true)
+      expect(find(in_ads, "Aumentar exposição")[:steps].join(" ")).not_to include("Product Ads")
+    end
+
+    it "preço traz opções com tarifa, frete, imposto, custo, lucro e margem" do
+      price = { kind: "suggestion", suggested: 90.0, diff_pct: -10.0 }
+      result = call(price: price, cost: 40.0)
+      options = find(result, "Reduzir preço")[:options]
+      expect(options.map { |o| o[:label] }).to include("Referência do Mercado Livre", "Preço para margem de 9.0%", "Preço para margem de 14.0%")
+      ref = options.find { |o| o[:label] == "Referência do Mercado Livre" }
+      # tarifa 10% do preço (10 em 100), frete 5, imposto 11,3%, custo 40
+      expect(ref).to include(price: 90.0, fee: 9.0, shipping: 5.0, tax: 10.17, cost: 40.0, profit: 25.83, margin_pct: 28.7)
+      min = options.find { |o| o[:label] == "Preço para margem de 9.0%" }
+      expect(min[:margin_pct]).to be_within(0.1).of(9.0)
+    end
+
+    it "frete grátis mostra hoje, com frete grátis e o preço que mantém a margem" do
+      item = build_item(free_shipping: false, ship_cost: 0.0, ship_cost_free: 20.0)
+      result = call(metric: build_metric(price: 70, free_shipping: false), item: item, cost: 30.0)
+      options = find(result, "Testar frete grátis")[:options]
+      today, free, keep = options
+      expect(free[:shipping]).to eq(20.0)
+      expect(free[:profit]).to be_within(0.01).of(today[:profit] - 20.0)
+      expect(keep[:label]).to eq("Frete grátis mantendo a margem de hoje")
+      expect(keep[:margin_pct]).to be_within(0.1).of(today[:margin_pct])
+    end
+
+    it "fotos trazem a ação de gerar imagens com a quantidade sugerida" do
+      result = call(item: build_item(pictures_count: 4))
+      expect(find(result, "Adicionar mais fotos")[:action]).to eq(kind: "gerar_fotos", suggested_count: 2)
+    end
   end
 end

@@ -83,6 +83,33 @@ module Ml
       write(:post, "/seller-promotions/items/#{item_id}", { app_version: "v2" }, body)
     end
 
+    # Fotos do anúncio (Curva ABC > Fotos): [{ "id", "secure_url", "max_size" }], na ordem do anúncio.
+    def item_pictures(item_id)
+      Array(get("/items/#{item_id}", attributes: "id,pictures,catalog_listing")["pictures"])
+    end
+
+    # Sobe uma imagem para o Mercado Livre (multipart) => { "id" => "...", ... }. Escrita: uma tentativa só.
+    def upload_picture(bytes, filename:, mime:)
+      boundary = "LunnaBoundary#{SecureRandom.hex(12)}"
+      body = +""
+      body << "--#{boundary}\r\n"
+      body << "Content-Disposition: form-data; name=\"file\"; filename=\"#{filename}\"\r\n"
+      body << "Content-Type: #{mime}\r\n\r\n"
+      body.force_encoding(Encoding::BINARY)
+      body << bytes.b << "\r\n--#{boundary}--\r\n".b
+      response = connection.post("/pictures/items/upload", body, "Content-Type" => "multipart/form-data; boundary=#{boundary}")
+      return JSON.parse(response.body) if success?(response)
+
+      raise_for(response, "/pictures/items/upload")
+    rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
+      raise Error.new(status: nil, path: "/pictures/items/upload", body: e.message)
+    end
+
+    # Troca a lista de fotos do anúncio (as que ficam + as novas), por id, na ordem dada.
+    def update_item_pictures(item_id, picture_ids)
+      write(:put, "/items/#{item_id}", {}, { pictures: picture_ids.map { |id| { id: id } } })
+    end
+
     # Sai de uma promoção do anúncio.
     def leave_promotion(item_id, promotion_type:, promotion_id: nil, offer_id: nil)
       params = { app_version: "v2", promotion_type: promotion_type, promotion_id: promotion_id, offer_id: offer_id }.compact

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_04_130001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -52,6 +52,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
     t.boolean "promo_allow_lightning", default: false, null: false
     t.integer "ads_cost_days", default: 15, null: false
     t.decimal "ads_daily_budget_max", precision: 12, scale: 2
+    t.string "ai_image_model", default: "google/gemini-2.5-flash-image"
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -359,6 +360,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
     t.index ["ml_account_id", "inventory_id"], name: "index_ml_full_stocks_on_ml_account_id_and_inventory_id", unique: true
   end
 
+  create_table "ml_generated_photos", force: :cascade do |t|
+    t.bigint "ml_photo_job_id", null: false
+    t.string "kind", default: "gerada", null: false
+    t.integer "position", default: 0, null: false
+    t.string "mime", null: false
+    t.binary "data", null: false
+    t.boolean "approved", default: false, null: false
+    t.string "ml_picture_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_photo_job_id"], name: "index_ml_generated_photos_on_ml_photo_job_id"
+  end
+
   create_table "ml_item_visits", primary_key: ["item_id", "day"], force: :cascade do |t|
     t.string "item_id", null: false
     t.uuid "ml_account_id", null: false
@@ -420,6 +434,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
     t.decimal "catalog_winner_price", precision: 12, scale: 2
     t.jsonb "catalog_reasons", default: [], null: false
     t.datetime "catalog_checked_at"
+    t.decimal "ship_cost_free", precision: 12, scale: 2
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
   end
@@ -471,6 +486,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
     t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"
+  end
+
+  create_table "ml_photo_jobs", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.uuid "user_id"
+    t.integer "count", null: false
+    t.text "instructions"
+    t.jsonb "reference_urls", default: [], null: false
+    t.string "model"
+    t.string "status", default: "gerando", null: false
+    t.text "error"
+    t.datetime "published_at"
+    t.text "publish_error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ml_photo_jobs_on_ml_account_id_and_item_id"
+    t.index ["ml_account_id"], name: "index_ml_photo_jobs_on_ml_account_id"
+    t.index ["user_id"], name: "index_ml_photo_jobs_on_user_id"
   end
 
   create_table "ml_promotion_actions", force: :cascade do |t|
@@ -960,12 +994,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_010001) do
   add_foreign_key "ml_claims", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_generated_photos", "ml_photo_jobs", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_items", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_oauth_states", "companies", on_delete: :cascade
   add_foreign_key "ml_oauth_states", "users", on_delete: :cascade
   add_foreign_key "ml_order_items", "ml_orders", column: "order_id", primary_key: "order_id", on_delete: :cascade
   add_foreign_key "ml_orders", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_photo_jobs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_photo_jobs", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_actions", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "ml_promotion_runs", column: "run_id", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "users", on_delete: :nullify

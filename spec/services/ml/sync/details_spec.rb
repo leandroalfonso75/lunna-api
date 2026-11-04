@@ -151,6 +151,7 @@ RSpec.describe Ml::Sync::Details do
     stub_suggestion(suggested: 79.00)
     stub_fee(price: 50.0)
     stub_ship(item_price: 50.0, free_shipping: false)
+    stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 79.00)
     stub_ship(item_price: 79.00, free_shipping: true)
 
@@ -168,6 +169,7 @@ RSpec.describe Ml::Sync::Details do
     stub_suggestion(suggested: 78.99)
     stub_fee(price: 50.0)
     stub_ship(item_price: 50.0, free_shipping: false)
+    stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 78.99)
     stub_ship(item_price: 78.99, free_shipping: false)
 

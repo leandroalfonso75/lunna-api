@@ -58,6 +58,11 @@ module Abc
       classification = Abc::Classifier.call(metrics, @params)
       classified_by_id = classification.rows.index_by { |row| row.metric.item_id }
 
+      # sem custo manual: o do Olist (PEPS, kit = soma) e, sem ele, o das variações vendidas (igual a Promoções;
+      # 04/11/2026, para as sugestões de preço e frete mostrarem a margem)
+      @olist_costs = Olist::UnitCost.for_skus(@account.company, metrics.filter_map(&:sku).uniq - costs_by_sku.keys)
+      missing = metrics.reject { |m| m.sku.present? && (costs_by_sku[m.sku] || @olist_costs[m.sku]) }.map(&:item_id)
+      @variation_costs = Painel::VariationCost.for_items(@account, missing)
       entries = build_entries(metrics, items_by_id, costs_by_sku, classification, classified_by_id)
       universe_rows = classification.rows.map { |row| row_payload(entries[row.metric.item_id]) }
       details = details_payload(classification, entries)
@@ -70,6 +75,11 @@ module Abc
       }
     end
 
+    # Anúncios com publicidade ativa (Exposição: "ativar Product Ads" só para quem não está em campanha).
+    def ads_item_ids
+      @ads_item_ids ||= MlAdItem.where(ml_account_id: @account.id, status: "active").pluck(:item_id).to_set
+    end
+
     def build_entries(metrics, items_by_id, costs_by_sku, classification, classified_by_id)
       metrics.each_with_object({}) do |metric, memo|
         item = items_by_id[metric.item_id]
@@ -80,7 +90,8 @@ module Abc
         price = Abc::PriceSuggestion.call(item: item, metric: metric, economics: economics, cost: cost, params: @params)
         ctx = Abc::SuggestionEngine::Context.new(
           item: item, metric: metric, curve: classified&.curve, group: classified&.group,
-          price: price, conversion_median: classification.conversion_median, params: @params
+          price: price, conversion_median: classification.conversion_median, params: @params,
+          economics: economics, in_ads: ads_item_ids.include?(metric.item_id)
         )
 
         memo[metric.item_id] = {
@@ -96,10 +107,13 @@ module Abc
     end
 
     def cost_for(metric, costs_by_sku)
-      return nil if metric.sku.blank?
+      record = metric.sku.present? && costs_by_sku[metric.sku]
+      return record.cost.to_f + record.extra.to_f if record
 
-      record = costs_by_sku[metric.sku]
-      record && (record.cost.to_f + record.extra.to_f)
+      olist = metric.sku.present? && @olist_costs&.dig(metric.sku)
+      return olist.value.to_f if olist
+
+      @variation_costs&.dig(metric.item_id)&.value&.to_f
     end
 
     def period_payload

@@ -45,6 +45,11 @@ Rails.application.routes.draw do
     # Leituras do painel (SPEC 10), sempre com ?account_id= (concern CurrentAccount).
     get "painel", to: "painel#show"
     get "items", to: "items#index"
+    get "items/:item_id/photos", to: "photo_jobs#index"
+    post "items/:item_id/photos", to: "photo_jobs#create"
+    get "photo_images/:id", to: "photo_jobs#image"
+    patch "photo_images/:id", to: "photo_jobs#approve"
+    post "photo_jobs/:id/publish", to: "photo_jobs#publish"
     get "items/:id/ai-plan", to: "ai_plans#show"
     post "items/:id/ai-plan", to: "ai_plans#create", as: :item_ai_plan
     delete "items/:id/ai-plan", to: "ai_plans#destroy"

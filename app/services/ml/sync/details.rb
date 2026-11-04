@@ -73,6 +73,11 @@ module Ml
 
         ship_cost = safe(notes, item.item_id, "frete") { fetch_ship_cost(client, account, item, effective_price, item.free_shipping) }
         attrs[:ship_cost] = ship_cost unless ship_cost == FAILED
+        # sem frete grátis: quanto custaria oferecer (Curva ABC, "Testar frete grátis")
+        unless item.free_shipping
+          free = safe(notes, item.item_id, "frete_gratis") { fetch_ship_cost(client, account, item, effective_price, true) }
+          attrs[:ship_cost_free] = free unless free == FAILED
+        end
 
         missing_required, missing_main = missing_attrs(category_attributes, item.attrs_filled)
         attrs[:attrs_missing_required] = missing_required

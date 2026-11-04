@@ -17,7 +17,7 @@ module AbcHelpers
     :item_id, :brand, :model, :listing_type_id, :free_shipping, :has_video,
     :pictures_count, :description_len, :quality_score, :quality_pending,
     :attrs_missing_required, :attrs_missing_main, :price, :fee_now, :ship_cost,
-    :price_ref, :fee_at_ref, :ship_at_ref, :details_checked_at,
+    :price_ref, :fee_at_ref, :ship_at_ref, :details_checked_at, :ship_cost_free,
     keyword_init: true
   )
 

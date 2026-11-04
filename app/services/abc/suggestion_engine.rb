@@ -8,7 +8,7 @@ require "set"
 # params (Abc::Params). Serviço puro.
 module Abc
   class SuggestionEngine
-    Context = Struct.new(:item, :metric, :curve, :group, :price, :conversion_median, :params, keyword_init: true)
+    Context = Struct.new(:item, :metric, :curve, :group, :price, :conversion_median, :params, :economics, :in_ads, keyword_init: true)
 
     BANNED_TERMS = %w[
       frete\ gratis promocao oferta desconto barato imperdivel queima liquidacao
@@ -34,6 +34,8 @@ module Abc
       @price = ctx.price
       @median = ctx.conversion_median
       @params = ctx.params
+      @unit = ctx.economics&.unit
+      @in_ads = ctx.in_ads
     end
 
     def call
@@ -93,7 +95,8 @@ module Abc
       low_conversion = @metric.conversion_30d.present? && @median.present? && @metric.conversion_30d.to_f < @median.to_f * 0.7
       priority = (highest || low_conversion) ? 1 : 2
       pct = @price[:diff_pct].to_f.abs.round(1)
-      [ suggestion(priority, "preço", "Reduzir preço", "Preço #{pct}% acima da referência do Mercado Livre — considere reduzir.") ]
+      [ suggestion(priority, "preço", "Reduzir preço", "Preço #{pct}% acima da referência do Mercado Livre — considere reduzir.",
+                   options: price_options) ]
     end
 
     # 6 — Preço sugerido acima do atual.
@@ -101,7 +104,8 @@ module Abc
       return [] unless @price[:kind] == "suggestion" && @price[:diff_pct].to_f > 0
 
       pct = @price[:diff_pct].to_f.round(1)
-      [ suggestion(2, "preço", "Avaliar aumento de preço", "Preço sugerido #{pct}% acima do atual — há espaço para subir.") ]
+      [ suggestion(2, "preço", "Avaliar aumento de preço", "Preço sugerido #{pct}% acima do atual — há espaço para subir.",
+                   options: price_options) ]
     end
 
     # 7 — Exposição: curva A em queda e visitas 30d caíram > 15%.
@@ -113,7 +117,7 @@ module Abc
       return [] unless prev_visits.positive?
       return [] unless (visits - prev_visits).to_f / prev_visits * 100 < -15
 
-      [ suggestion(1, "exposição", "Recuperar exposição", "Visitas caíram mais de 15% em 30 dias.") ]
+      [ suggestion(1, "exposição", "Recuperar exposição", "Visitas caíram mais de 15% em 30 dias.", steps: exposure_steps) ]
     end
 
     # 8 — Conversão: curva A em queda e conversão < 80% da anterior.
@@ -143,7 +147,7 @@ module Abc
       return [] unless status == "active" && @metric.visits_30d.to_i < 60
 
       priority = @curve == "C" ? 1 : 2
-      [ suggestion(priority, "exposição", "Aumentar exposição", "Menos de 60 visitas em 30 dias.") ]
+      [ suggestion(priority, "exposição", "Aumentar exposição", "Menos de 60 visitas em 30 dias.", steps: exposure_steps) ]
     end
 
     # 11 — Título com menos de 40 caracteres.
@@ -206,7 +210,8 @@ module Abc
       pictures = @item&.pictures_count.to_i
       return [] unless pictures < 3
 
-      [ suggestion(1, "fotos", "Adicionar fotos", "Apenas #{pictures} foto(s) — o mínimo recomendado é 6 a 10.") ]
+      [ suggestion(1, "fotos", "Adicionar fotos", "Apenas #{pictures} foto(s) — o mínimo recomendado é 6 a 10.",
+                   action: { kind: "gerar_fotos", suggested_count: [ 6 - pictures, 1 ].max }) ]
     end
 
     # 18 — 3 a 5 fotos (meta 6-10).
@@ -214,7 +219,8 @@ module Abc
       pictures = @item&.pictures_count.to_i
       return [] unless pictures.between?(3, 5)
 
-      [ suggestion(2, "fotos", "Adicionar mais fotos", "#{pictures} fotos — a meta é 6 a 10.") ]
+      [ suggestion(2, "fotos", "Adicionar mais fotos", "#{pictures} fotos — a meta é 6 a 10.",
+                   action: { kind: "gerar_fotos", suggested_count: [ 6 - pictures, 1 ].max }) ]
     end
 
     # 19 — Sem vídeo em curva A ou B.
@@ -268,7 +274,8 @@ module Abc
       price = @metric.price.to_f
       return [] unless price >= 60 && price < 79
 
-      [ suggestion(3, "frete", "Testar frete grátis", "Preço entre R$ 60 e R$ 79 sem frete grátis — o frete grátis pode aumentar as vendas.") ]
+      [ suggestion(3, "frete", "Testar frete grátis", "Preço entre R$ 60 e R$ 79 sem frete grátis — o frete grátis pode aumentar as vendas.",
+                   options: free_shipping_options) ]
     end
 
     # 24 — Fora do Full, curva A, ≥ 30 vendas em 30d.
@@ -308,6 +315,88 @@ module Abc
       [ suggestion(3, "dados", "Aguardar carregamento dos detalhes", "Detalhes de cadastro ainda não foram carregados pelo Mercado Livre.") ]
     end
 
-    def suggestion(priority, area, title, why) = { priority: priority, area: area, title: title, why: why }
+    def suggestion(priority, area, title, why, **extra) = { priority: priority, area: area, title: title, why: why, **extra.compact }
+
+    # --- Exposição: medidas concretas, conforme o que o anúncio já tem (pedido do usuário em 04/11/2026) ---
+    def exposure_steps
+      steps = []
+      steps << "Colocar o anúncio no Product Ads (campanha com ROAS objetivo pela margem): é a forma mais rápida de ganhar visitas." unless @in_ads
+      steps << "Revisar o título: as palavras que o comprador busca primeiro (produto, marca, modelo, característica principal), até 60 caracteres." if title.length < 55
+      steps << "Entrar nas promoções do Mercado Livre que cabem na margem (aba Promoções): o selo de desconto aumenta cliques e posição."
+      steps << "Oferecer frete grátis: anúncios com frete grátis ganham destaque na busca." unless @item&.free_shipping || @metric.free_shipping
+      steps << "Enviar para o Full: o selo Full e a entrega rápida melhoram a posição na busca." unless full?
+      steps << "Completar a ficha técnica: atributos preenchidos fazem o anúncio aparecer nos filtros da busca." if Array(@item&.attrs_missing_main).any? || Array(@item&.attrs_missing_required).any?
+      steps << "Melhorar a qualidade do anúncio (#{@item.quality_score}/100): fotos, ficha e descrição completas sobem a posição." if @item&.quality_score.present? && @item.quality_score.to_i < 80
+      steps << "Revisar o preço frente aos concorrentes (veja a referência de preço do Mercado Livre)." if @price[:kind] == "suggestion" && @price[:diff_pct].to_f.negative?
+      steps
+    end
+
+    # --- Preço: opções com a conta da margem (preço − tarifa − frete − imposto − custo) ---
+    # Tarifa proporcional ao preço (a % de hoje); frete por unidade igual ao de hoje; imposto pela % da empresa.
+    # Sem custo cadastrado: só a referência do ML, com o lucro ANTES do custo (cost: nil).
+    def price_options
+      return [] unless @unit && @metric.price.to_f.positive?
+
+      fee_pct = @unit[:fee].to_f / @metric.price.to_f
+      options = []
+      options << price_option("Referência do Mercado Livre", @price[:suggested].to_f, fee_pct) if @price[:suggested].to_f.positive?
+      options << price_option("Preço de hoje", @metric.price.to_f, fee_pct) if options.any?
+      return options unless @unit[:cost]
+
+      [ @params.min_margin_pct, @params.min_margin_pct + 5 ].each do |target|
+        p = price_for_margin(target, fee_pct)
+        options << price_option("Preço para margem de #{target.round(1)}%", p, fee_pct) if p
+      end
+      options.uniq { |o| o[:price] }.sort_by { |o| o[:price] }
+    end
+
+    def price_for_margin(margin_pct, fee_pct)
+      divisor = 1 - fee_pct - @params.tax_pct / 100.0 - margin_pct / 100.0
+      return nil unless divisor.positive?
+
+      ((@unit[:shipping].to_f + @unit[:cost].to_f) / divisor).ceil(2)
+    end
+
+    def price_option(label, price, fee_pct)
+      fee = price * fee_pct
+      tax = price * @params.tax_pct / 100.0
+      shipping = @unit[:shipping].to_f
+      cost = @unit[:cost]
+      profit = price - fee - shipping - tax - cost.to_f
+      { label: label, price: price.round(2), fee: fee.round(2), shipping: shipping.round(2), tax: tax.round(2), cost: cost&.round(2),
+        profit: profit.round(2), margin_pct: (profit / price * 100).round(1), low: cost ? profit / price * 100 < @params.min_margin_pct : false }
+    end
+
+    # --- Frete grátis: como ficam custos e margem pagando o frete (ml_items.ship_cost_free) ---
+    def free_shipping_options
+      free = @item&.ship_cost_free
+      return [] unless @unit && free.present?
+
+      price = @metric.price.to_f
+      today = { label: "Hoje (comprador paga o frete)", price: price, fee: @unit[:fee].to_f.round(2), shipping: @unit[:shipping].to_f.round(2),
+                tax: @unit[:tax].to_f.round(2), cost: @unit[:cost]&.round(2) }
+      with_free = today.merge(label: "Com frete grátis (você paga R$ #{format('%.2f', free.to_f).tr('.', ',')})", shipping: free.to_f.round(2))
+      opts = [ today, with_free ].map do |o|
+        profit = o[:price] - o[:fee] - o[:shipping] - o[:tax] - o[:cost].to_f
+        o.merge(profit: profit.round(2), margin_pct: (profit / o[:price] * 100).round(1), low: o[:cost] ? profit / o[:price] * 100 < @params.min_margin_pct : false)
+      end
+      if @unit[:cost]
+        p = keep_margin_price(free.to_f)
+        opts << price_option("Frete grátis mantendo a margem de hoje", p, @unit[:fee].to_f / price).merge(shipping: free.to_f.round(2)).then { |o| recalc(o) } if p
+      end
+      opts
+    end
+
+    def keep_margin_price(free)
+      price = @metric.price.to_f
+      margin = @unit[:margin_pct].to_f / 100.0
+      divisor = 1 - @unit[:fee].to_f / price - @params.tax_pct / 100.0 - margin
+      divisor.positive? ? ((free + @unit[:cost].to_f) / divisor).ceil(2) : nil
+    end
+
+    def recalc(o)
+      profit = o[:price] - o[:fee] - o[:shipping] - o[:tax] - o[:cost].to_f
+      o.merge(profit: profit.round(2), margin_pct: (profit / o[:price] * 100).round(1), low: profit / o[:price] * 100 < @params.min_margin_pct)
+    end
   end
 end
