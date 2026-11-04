@@ -55,6 +55,7 @@ module Painel
     # Com price: aplica nesse preço (só ofertas de preço livre, dentro da faixa do ML). Com force: aplica mesmo
     # ferindo as regras do Lunna (margem, valor, aumento) e guarda no Histórico a regra ferida.
     def apply(item_id, target = nil)
+      @attempt = target&.dig(:attempt).to_i
       client = fresh_client
       Ml::Sync::Promotions.call(client, @account, item_ids: [ item_id ])
       ev = PromotionsQuery.evaluate_item(@account, item_id)
@@ -252,7 +253,8 @@ module Painel
       rescue Ml::Client::Error => e
         back = current && rejoin(client, item.item_id, current)
         note = current ? (back ? " O anúncio voltou para #{name_of(current)}." : " Atenção: o anúncio ficou sem promoção.") : ""
-        note += retry_later(item, chosen) if current && !back
+        # sem promoção (saiu antes ou numa nova tentativa) e o ML ainda diz "No candidates": tenta de novo depois
+        note += retry_later(item, chosen) if (current && !back) || (current.nil? && e.message.include?(NO_CANDIDATES))
         return failed(log, "O Mercado Livre recusou a entrada em #{name_of(chosen)}: #{ml_message(e)}.#{note}", e)
       end
 
@@ -265,13 +267,20 @@ module Painel
 
     # O anúncio saiu da promoção e o ML recusou tanto a nova quanto a volta (ex.: "No candidates found" logo depois
     # de sair): deixa uma nova tentativa agendada para não ficar no preço cheio.
+    # Até 04/11/2026 só havia uma nova tentativa; o ML às vezes recusa por mais de 1 hora (16 variações do Stick Boca
+    # Rosa: 12 entraram na 1ª nova tentativa, 4 não). Agora tenta de hora em hora, até MAX_RETRIES vezes.
     RETRY_AFTER = 1.hour
+    MAX_RETRIES = 6
+    NO_CANDIDATES = "No candidates found"
 
     def retry_later(item, chosen)
-      target = { "promotion_id" => chosen[:offer].promotion_id.to_s, "promotion_type" => chosen[:offer].promotion_type }
+      return " Não houve nova tentativa: o Mercado Livre recusou #{MAX_RETRIES} vezes; tente pela tela mais tarde." if @attempt.to_i >= MAX_RETRIES
+
+      target = { "promotion_id" => chosen[:offer].promotion_id.to_s, "promotion_type" => chosen[:offer].promotion_type,
+                 "attempt" => @attempt.to_i + 1 }
       target["force"] = true if @forced_reason
       Ml::PromotionsApplyJob.set(wait: RETRY_AFTER).perform_later(@account.id, [ item.item_id ], @user&.id, target)
-      " Nova tentativa agendada para daqui a 1 hora."
+      " Nova tentativa agendada para daqui a 1 hora (#{@attempt.to_i + 1} de #{MAX_RETRIES})."
     end
 
     def rejoin(client, item_id, current)

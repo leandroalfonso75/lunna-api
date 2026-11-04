@@ -54,9 +54,31 @@ RSpec.describe Painel::PromotionActions do
 
     result = nil
     expect { result = described_class.apply(account, item.item_id, user: user) }.to have_enqueued_job(Ml::PromotionsApplyJob)
-      .with(account.id, [ item.item_id ], user.id, { "promotion_id" => "P-2", "promotion_type" => "DEAL" })
+      .with(account.id, [ item.item_id ], user.id, { "promotion_id" => "P-2", "promotion_type" => "DEAL", "attempt" => 1 })
     expect(result.ok).to be false
-    expect(result.message).to include("ficou sem promoção", "Nova tentativa agendada")
+    expect(result.message).to include("ficou sem promoção", "Nova tentativa agendada", "1 de 6")
+  end
+
+  it "sem promoção atual e o ML ainda diz \"No candidates\": tenta de novo, até 6 vezes" do
+    MlPromotionOffer.where(promotion_id: "C-1").delete_all
+    stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "No candidates found for item" }.to_json)
+    target = { promotion_id: "P-2", promotion_type: "DEAL", force: true }
+
+    expect { described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 2)) }
+      .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], user.id, hash_including("attempt" => 3))
+
+    result = nil
+    expect { result = described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 6)) }
+      .not_to have_enqueued_job(Ml::PromotionsApplyJob)
+    expect(result.message).to include("recusou 6 vezes")
+  end
+
+  it "sem promoção atual e outra recusa do ML: não fica tentando de novo" do
+    MlPromotionOffer.where(promotion_id: "C-1").delete_all
+    stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "item not eligible" }.to_json)
+
+    expect { described_class.apply(account, item.item_id, user: user, target: { promotion_id: "P-2", promotion_type: "DEAL", force: true }) }
+      .not_to have_enqueued_job(Ml::PromotionsApplyJob)
   end
 
   it "não aplica oferta abaixo da margem mínima" do
