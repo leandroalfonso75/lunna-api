@@ -5,7 +5,7 @@
 class ClaimsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :reply, :contest, :resolve, :partial_refund_offers ]
+  before_action :require_admin!, only: [ :reply, :contest, :resolve, :partial_refund_offers, :return_cost ]
 
   # Assistente de contestação: as que afetam a reputação, no prazo de 60 dias, com grupo, provas e texto sugerido.
   def contests
@@ -56,6 +56,19 @@ class ClaimsController < ApplicationController
     render_errors([ "Reclamação não encontrada." ], status: :not_found)
   rescue Ml::Client::Error => e
     render_errors([ "O Mercado Livre não informou os valores de reembolso parcial: #{e.message.truncate(120)}" ], status: :unprocessable_content)
+  end
+
+  # Antes de "Oferecer devolução": quanto o frete da devolução custa ao vendedor (aviso, como no ML). Só leitura.
+  def return_cost
+    claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)
+    Ml::OAuth.refresh!(Current.account)
+    data = Ml::Client.new(access_token: Current.account.reload.access_token).claim_return_cost(claim.claim_id)
+    amount = data["amount"].to_f
+    render json: { amount: amount, currency_id: data["currency_id"], free: amount.zero? }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  rescue Ml::Client::Error, Ml::OAuth::Error
+    render_errors([ "O Mercado Livre não informou o custo do frete de devolução agora." ], status: :unprocessable_content)
   end
 
   # Escrita no Mercado Livre: exige confirm=true em cada envio.

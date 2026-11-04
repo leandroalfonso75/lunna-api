@@ -207,6 +207,15 @@ RSpec.describe "/api/claims", type: :request do
       expect(MlClaimAction.last).to have_attributes(claim_id: 1, action: "refund", status: "done", user_id: admin.id)
     end
 
+    it "informa o custo do frete de devolução antes de oferecer a devolução (só leitura)" do
+      allow(Ml::OAuth).to receive(:refresh!)
+      stub_request(:get, "#{base}/1/charges/return-cost").to_return(status: 200, body: { currency_id: "BRL", amount: 23.45 }.to_json)
+
+      get "/api/claims/1/return_cost", params: { account_id: account.id }, headers: auth_headers(admin)
+
+      expect(json).to eq("amount" => 23.45, "currency_id" => "BRL", "free" => false)
+    end
+
     it "reembolso parcial manda o percentual escolhido; pedir mediação usa open-dispute" do
       MlClaim.find_by(claim_id: 1).update!(players: [ { "role" => "respondent", "available_actions" => [ { "action" => "allow_partial_refund" }, { "action" => "open_dispute" } ] } ])
       partial = stub_request(:post, "#{base}/1/expected-resolutions/partial-refund").with(body: { percentage: 30.0 }.to_json).to_return(status: 200, body: "[]")

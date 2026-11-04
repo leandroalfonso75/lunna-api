@@ -167,6 +167,11 @@ module Ml
       write(:post, "/post-purchase/v1/claims/#{claim_id}/#{path}", {}, action == "partial_refund" ? { percentage: percentage } : nil)
     end
 
+    # Quanto o vendedor paga pelo frete da devolução, se oferecer a devolução: { currency_id, amount } (0 = grátis).
+    def claim_return_cost(claim_id)
+      get("/post-purchase/v1/claims/#{claim_id}/charges/return-cost")
+    end
+
     # Percentuais/valores possíveis de reembolso parcial: { available_offers: [{ amount, percentage }], recommendations, restrictions }.
     def claim_partial_refund_offers(claim_id)
       get("/post-purchase/v1/claims/#{claim_id}/partial-refund/available-offers")

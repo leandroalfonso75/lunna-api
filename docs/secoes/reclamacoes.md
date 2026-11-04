@@ -92,7 +92,8 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   sem nenhuma, o botão vira "Resolver no Mercado Livre" (abre a venda no ML em outra guia). Cada ação explica o efeito e
   pede segundo clique ("Confirmar no Mercado Livre"). API: `POST /api/claims/:id/resolve` (admin, `action_name`,
   `percentage`, `confirm: true`), `GET /api/claims/:id/partial_refund_offers`; `Painel::ClaimAction`; registro em
-  `ml_claim_actions` (quem, quando, ação, resultado) e a reclamação é relida em seguida.
+  `ml_claim_actions` (quem, quando, ação, resultado) e a reclamação é relida em seguida. Antes de "Oferecer devolução", o card
+  mostra o frete da devolução para o vendedor (`GET /api/claims/:id/return_cost` → ML `.../charges/return-cost`: grátis ou o valor).
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como

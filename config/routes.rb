@@ -67,6 +67,7 @@ Rails.application.routes.draw do
     get "claims/:id", to: "claims#show"
     post "claims/:id/resolve", to: "claims#resolve"
     get "claims/:id/partial_refund_offers", to: "claims#partial_refund_offers"
+    get "claims/:id/return_cost", to: "claims#return_cost"
     post "claims/:id/reply", to: "claims#reply"
     get "promotions", to: "promotions#index"
     get "promotions/export", to: "promotions#export"
