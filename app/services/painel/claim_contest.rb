@@ -23,6 +23,13 @@ module Painel
     LOGISTICS = { "fulfillment" => "Full", "xd_drop_off" => "agência", "cross_docking" => "coleta", "self_service" => "Flex",
                   "drop_off" => "agência" }.freeze
     STATUSES = %w[pendente contestada aceita negada].freeze
+    # Frases que dependem de fatos do caso (pedido do usuário em 04/11/2026: mesmo com modelo, analisar as
+    # peculiaridades e acrescentar, tirar ou adaptar texto). Num texto-modelo elas são retiradas e recolocadas
+    # conforme os fatos do caso atual.
+    ADDONS = {
+      packaging_ok: "Além disso, o próprio relato registrado pelo mediador informa que a embalagem não estava danificada, o que afasta falha de envio da minha parte.",
+      returned: "O produto já foi devolvido e pode ser conferido pelo Mercado Livre para confirmar o relato."
+    }.freeze
     # O texto do motivo no ML às vezes é o título do grupo ("Chegou bem"); o código diz o problema de fato.
     REASON_LABELS = {
       "broken_item" => "produto chegou quebrado ou danificado", "not_working_item" => "produto não funciona",
@@ -77,15 +84,53 @@ module Painel
 
         r[:generic_draft] = r[:draft]
         r[:draft] = adapt(src, r)
-        r[:model] = { claim_id: src[:claim_id], same_group: true }
+        r[:model] = { claim_id: src[:claim_id], same_group: true, peculiarities: peculiarities(src, r) }
       end
     end
 
+    # Troca os números e o título e refaz as frases que dependem dos fatos (tira as do caso-modelo, põe as deste).
     def adapt(src, row)
       text = src[:contest][:text].gsub(src[:claim_id].to_s, row[:claim_id].to_s)
       text = text.gsub(src[:order_id].to_s, row[:order_id].to_s) if src[:order_id] && row[:order_id]
       text = text.gsub(src[:title], row[:title]) if src[:title].present? && row[:title].present?
-      text
+      ADDONS.each_value { |sentence| text = text.gsub(/ ?#{Regexp.escape(sentence)}/, "") }
+      paragraphs = text.split(/\n{2,}/)
+      target = paragraphs.size >= 3 ? paragraphs.size - 2 : paragraphs.size - 1 # o corpo, antes do fecho
+      paragraphs[target] = with_addons(paragraphs[target], row[:traits])
+      paragraphs.join("\n\n")
+    end
+
+    # O que muda entre o caso-modelo e este, para o vendedor revisar o texto (e o que o Lunna já ajustou).
+    def peculiarities(src, row)
+      a = src[:traits]
+      b = row[:traits]
+      notes = []
+      if a[:packaging_ok] != b[:packaging_ok]
+        notes << (b[:packaging_ok] ? "Neste caso o mediador registrou que a embalagem não estava danificada: frase incluída." :
+                                     "No caso-modelo o mediador registrou embalagem intacta; neste não: frase retirada.")
+      end
+      if a[:return] != b[:return]
+        notes << "Devolução: no caso-modelo #{a[:return] || 'não houve'}; neste #{b[:return] || 'não houve'}#{b[:returned] ? ' (frase sobre a devolução incluída)' : ''}."
+      end
+      notes << "Cobertura do ML: #{b[:coverage] ? 'aplicada' : 'não aplicada'} neste caso (no modelo, #{a[:coverage] ? 'aplicada' : 'não aplicada'})." if a[:coverage] != b[:coverage]
+      notes << "Produto diferente do caso-modelo: confira se o argumento vale para este item." if a[:sku] != b[:sku]
+      notes << "Relato do comprador: \"#{b[:statement]}\" Veja se pede algo a mais no texto." if b[:statement] && b[:statement] != a[:statement]
+      notes
+    end
+
+    def traits_for(group, f)
+      stated = f[:stated]
+      {
+        packaging_ok: stated.to_s.match?(/embalagem n[ãa]o estava danificada/i) && group.in?(%w[full deposito]),
+        returned: f[:dev]["status"] == "delivered" && group != "nao_devolvido",
+        return: f[:dev].present? ? dev_label(f[:dev]["status"]).downcase : nil,
+        coverage: f[:res]["applied_coverage"].present?, sku: f[:line]&.sku, statement: stated
+      }
+    end
+
+    def with_addons(body, traits)
+      extra = ADDONS.filter_map { |k, sentence| sentence if traits&.dig(k) }
+      extra.empty? ? body : "#{body.rstrip} #{extra.join(' ')}"
     end
 
     def load_orders(claims)
@@ -101,6 +146,7 @@ module Painel
       group = group_for(c, logistic)
       label, strength = GROUPS.fetch(group)
       facts = facts_for(c, order, line, ship, logistic)
+      facts[:traits] = traits_for(group, facts)
       {
         claim_id: c.claim_id, status: c.status, opened_at: c.date_created, deadline: c.date_created + WINDOW,
         days_left: ((c.date_created + WINDOW - Time.current) / 1.day).floor,
@@ -108,7 +154,7 @@ module Painel
         reason: reason_text(c), reason_code: c.reason&.dig("name"),
         order_id: order&.order_id, sku: line&.sku, title: line&.title, logistic: LOGISTICS[logistic] || logistic,
         open_with_mediator: c.status == "opened" && ClaimsQuery.reply_targets(c).include?("mediator"),
-        evidence: facts[:evidence], draft: draft(group, c, facts),
+        evidence: facts[:evidence], draft: draft(group, c, facts), traits: facts[:traits],
         contest: contest ? { status: contest.status, text: contest.text, contested_at: contest.contested_at, user: contest.user&.name }
                          : { status: "pendente", text: nil, contested_at: nil, user: nil },
         link: order ? "https://www.mercadolivre.com.br/vendas/#{order.order_id}/detalhe" : nil
@@ -182,9 +228,7 @@ module Painel
         else
           "O envio foi feito pelo Mercado Envios, com o produto em perfeitas condições na postagem. O problema relatado decorre do transporte, que é de responsabilidade da logística do Mercado Livre."
         end
-      stated = f[:stated] && f[:stated].match?(/embalagem n[ãa]o estava danificada/i) && group.in?(%w[full deposito]) ?
-        " Além disso, o próprio relato registrado pelo mediador informa que a embalagem não estava danificada, o que afasta falha de envio da minha parte." : ""
-      "#{intro}\n\n#{body}#{stated}\n\nAgradeço a análise."
+      "#{intro}\n\n#{with_addons(body, f[:traits])}\n\nAgradeço a análise."
     end
 
     # Full: o argumento depende do problema relatado (dano = transporte; item diferente/faltando = separação no depósito;

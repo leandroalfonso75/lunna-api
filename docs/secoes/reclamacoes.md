@@ -78,6 +78,11 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   título). O card avisa "Texto baseado na contestação aceita #X" e oferece "Usar o texto padrão" (`generic_draft`).
   Outro grupo não reaproveita, porque o texto traz fatos do caso (ex.: "venda pelo Full"). Vale o texto **salvo no
   Lunna**: se o texto enviado no ML foi editado lá, cole-o no card e salve, senão o modelo é o texto padrão.
+  **Peculiaridades do caso** (regra do usuário, 04/11/2026: mesmo com modelo, sempre analisar o caso e acrescentar,
+  tirar ou adaptar texto): as frases que dependem de fatos (`ADDONS`: embalagem intacta segundo o mediador; produto já
+  devolvido) são retiradas do texto-modelo e recolocadas conforme os fatos deste caso (`traits`), e o card lista o que
+  difere do caso-modelo (embalagem, devolução, cobertura do ML, produto/SKU, relato do comprador) em "Peculiaridades
+  deste caso (revise o texto)". Nova frase dependente de fato entra em `ADDONS` + `traits_for`.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como
