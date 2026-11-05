@@ -118,6 +118,8 @@ RSpec.describe Painel::PromotionRoutine do
 
     row = Painel::PromotionRunReport.detail(account, run.id)[:rows].find { |r| r[:item_id] == item.item_id }
     expect(row[:effect]).to include(key: "programada", label: "Programada")
+    expect(Painel::PromotionRunReport.detail(account, run.id)[:highlights])
+      .to include(a_string_including("anúncios avaliados"), a_string_including("ficou programado"), "Nenhuma recusa do Mercado Livre.")
     expect(row[:before][:finish]).to be_within(1.second).of(finish)
     sim = described_class.call(account, mode: "simulation", trigger: "manual")
     other_row = Painel::PromotionRunReport.detail(account, sim.id)[:rows].find { |r| r[:item_id] == other.item_id }

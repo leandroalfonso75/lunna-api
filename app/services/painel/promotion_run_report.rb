@@ -43,8 +43,45 @@ module Painel
         price_down: changed.count { |r| r[:price_change_pct].to_f.negative? },
         gain_up: changed.sum { |r| r[:gain].to_f.positive? ? r[:gain].to_f : 0.0 }.round(2),
         gain_down: changed.sum { |r| r[:gain].to_f.negative? ? r[:gain].to_f : 0.0 }.round(2),
+        highlights: highlights(run, rows),
         rows: rows
       )
+    end
+
+    # Resumo em frases da rodada (pedido do usuário em 05/11/2026), o mesmo que o assistente escreve: quantos entraram,
+    # trocaram, ajustaram, ficaram programados, sem mudança, para revisar, fora da automação e recusas do ML.
+    def highlights(run, rows)
+      sim = run.mode != "apply"
+      t = run.totals || {}
+      ok = rows.select { |r| r[:changes] && r[:ok] }
+      now = ok.reject { |r| r[:effect]&.dig(:key) == "programada" }
+      plural = ->(n, one, many) { "#{n} #{n == 1 ? one : many}" }
+      lines = []
+      if run.status == "failed"
+        lines << "A rodada parou com erro: #{run.error}. Nada foi alterado no Mercado Livre depois do erro."
+        return lines
+      end
+      joined = now.count { |r| r[:kind] == "aderir" }
+      if joined.positive?
+        empty = now.count { |r| r[:kind] == "aderir" && r[:before].nil? }
+        lines << "#{plural.(joined, sim ? 'entraria' : 'entrou', sim ? 'entrariam' : 'entraram')} numa promoção" +
+                 (empty.positive? ? " (#{empty} estava#{empty == 1 ? '' : 'm'} sem promoção, no preço cheio)." : ".")
+      end
+      switched = now.count { |r| r[:kind] == "trocar" }
+      lines << "#{plural.(switched, sim ? 'trocaria' : 'trocou', sim ? 'trocariam' : 'trocaram')} por uma promoção melhor." if switched.positive?
+      adjusted = now.count { |r| r[:kind] == "ajustar_preco" }
+      lines << "#{plural.(adjusted, sim ? 'ajustaria' : 'ajustou', sim ? 'ajustariam' : 'ajustaram')} o preço na promoção atual." if adjusted.positive?
+      scheduled = ok.size - now.size
+      lines << "#{plural.(scheduled, sim ? 'ficaria programado' : 'ficou programado', sim ? 'ficariam programados' : 'ficaram programados')} para entrar quando a promoção atual acabar." if scheduled.positive?
+      rest = [ [ "sem_mudanca", "sem mudança (já na melhor oferta)" ], [ "revisar", "para revisar" ],
+               [ "automacao_desligada", "com automação desligada" ], [ "catalogo_fora", "de catálogo fora da automação" ],
+               [ "regra_propria", "com regra própria" ] ]
+        .filter_map { |k, label| t[k].to_i.positive? ? "#{t[k]} #{label}" : nil }
+      lines << "#{rest.join(', ')}." if rest.any?
+      failed = rows.count { |r| r[:changes] && !r[:ok] } + t["erro"].to_i
+      lines << (failed.positive? ? "#{plural.(failed, 'anúncio teve', 'anúncios tiveram')} erro ou recusa do Mercado Livre (veja abaixo)." :
+                                   (sim ? "Simulação: nada foi alterado no Mercado Livre." : "Nenhuma recusa do Mercado Livre."))
+      lines.unshift("#{t['anuncios'].to_i} anúncios avaliados.")
     end
 
     def row(a, item)

@@ -210,7 +210,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   antes e depois: preço, margem, lucro, período de cada promoção `from_start/from_finish/to_start/to_finish`, e
   `effective_at` quando a mudança passa a valer depois). Na lista do antes e depois, cada mudança mostra **"Em vigor"**
   (aplicada na hora) ou **"Programada"** (com a data em que passa a valer: a nova começa depois ou espera a atual
-  acabar) e o período de cada promoção; o CSV traz as mesmas colunas. Aba "Rotina automática" em Promoções: lista as execuções, mostra o antes e o
+  acabar) e o período de cada promoção; o CSV traz as mesmas colunas. Aba "Rotina automática" em Promoções: lista as execuções e, no topo de cada uma, o **Resumo da rodada** em frases (`highlights`: avaliados, entraram e quantos estavam sem promoção, trocaram, ajustaram, programados, sem mudança, revisar, fora da automação e recusas do ML; pedido de 05/11/2026); mostra o antes e o
   depois e exporta CSV; "Simular agora" (administrador) roda uma simulação na hora.
 - Precisa do Lunna ligado no horário escolhido (computador com Docker, ou servidor).
 
