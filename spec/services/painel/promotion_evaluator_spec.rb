@@ -126,6 +126,13 @@ RSpec.describe Painel::PromotionEvaluator do
     expect(allowed.evaluate([ current, smart ]).find { |x| x[:offer] == smart }).to include(valid: true)
   end
 
+  it "promoção atual sem preço lido do ML não quebra a avaliação (rotina de 05/11/2026 caiu por isso)" do
+    current = offer("SELLER_CAMPAIGN", status: "started", price: nil, min_price: 50, max_price: 95, fees: campaign.fees)
+    e = evaluator(min: 5, max: 40, allow_increase: false)
+
+    expect { e.evaluate([ current, smart, campaign ]) }.not_to raise_error
+  end
+
   describe "trava de lucro" do
     # hoje: campanha a 90 (lucro 17,50, margem 19,44%), dentro dos limites
     let(:current) { offer("SELLER_CAMPAIGN", status: "started", price: 90, min_price: 50, max_price: 95, fees: campaign.fees) }

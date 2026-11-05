@@ -139,4 +139,19 @@ RSpec.describe Painel::PromotionRoutine do
     expect { described_class.call(account, mode: "apply", trigger: "agendada") }
       .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], nil, anything)
   end
+
+  it "um anúncio que dá erro na avaliação fica de fora com o motivo, e a rotina segue com os demais" do
+    real = Painel::PromotionsQuery.instance_method(:build_row)
+    allow_any_instance_of(Painel::PromotionsQuery).to receive(:build_row) do |query, it, *rest|
+      raise TypeError, "can't convert nil into Float" if it.item_id == item.item_id
+
+      real.bind_call(query, it, *rest)
+    end
+
+    run = described_class.call(account, mode: "simulation", trigger: "manual")
+
+    expect(run.status).to eq("done")
+    expect(run.totals["erro"]).to eq(1)
+    expect(run.actions.find_by(item_id: item.item_id).error).to include("não avaliado", "can't convert nil into Float")
+  end
 end

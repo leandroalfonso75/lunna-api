@@ -43,7 +43,7 @@ module Painel
 
       totals = Hash.new(0)
       PromotionsQuery.evaluate_all(@account).each do |ev|
-        outcome = handle(run, ev)
+        outcome = ev[:error] ? failed_item(run, ev) : handle(run, ev)
         totals[outcome] += 1
       end
       run.update!(status: "done", finished_at: Time.current, totals: totals.merge("anuncios" => totals.values.sum))
@@ -57,6 +57,15 @@ module Painel
     end
 
     private
+
+    # Anúncio que não deu para avaliar: registra no relatório e segue com os demais.
+    def failed_item(run, ev)
+      @account.ml_promotion_actions.create!(run: run, item_id: ev[:item].item_id, kind: "pular", ok: false,
+                                            source: @mode == "apply" ? "rotina" : "simulacao", error: "não avaliado: #{ev[:error]}")
+      "erro"
+    rescue StandardError
+      "erro"
+    end
 
     # => chave do total: aplicado | simulado | erro | revisar | regra_propria | automacao_desligada | sem_mudanca
     def handle(run, ev)

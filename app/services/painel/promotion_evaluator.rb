@@ -175,10 +175,12 @@ module Painel
 
     # Sem permissão de aumento, o preço final não sobe enquanto a promoção atual estiver valendo.
     def increase_reason(price)
-      return nil if @rules.allow_increase || @current.nil?
+      # promoção atual sem preço lido do ML (acontece logo após uma troca): não dá para comparar; não barra (05/11/2026,
+      # o format com nil derrubou a rotina inteira das 01:00)
+      return nil if @rules.allow_increase || @current.nil? || @current[:price].nil?
       return nil if price <= @current[:price].to_f + 0.005
 
-      format("aumentaria o preço de R$ %.2f para R$ %.2f (aumento não permitido enquanto a promoção atual não acabar)", @current[:price], price).tr(".", ",")
+      format("aumentaria o preço de R$ %.2f para R$ %.2f (aumento não permitido enquanto a promoção atual não acabar)", @current[:price].to_f, price.to_f).tr(".", ",")
     end
 
     # Hoje: a promoção atual ou, sem ela, o preço do anúncio. Dentro dos limites, vira a trava de lucro (@guard).
@@ -199,13 +201,15 @@ module Painel
 
       if @rules.allow_margin_drop
         tol = @rules.margin_drop_tol.to_f
+        return nil if rule_margin(@guard).nil? || rule_margin(eco).nil?
         return nil if rule_margin(eco) >= rule_margin(@guard) - tol - 0.005
 
-        format("reduziria a margem de %.1f%% para %.1f%% (tolerância de %g p.p.)", rule_margin(@guard), rule_margin(eco), tol)
+        format("reduziria a margem de %.1f%% para %.1f%% (tolerância de %g p.p.)", rule_margin(@guard).to_f, rule_margin(eco).to_f, tol)
       else
+        return nil if rule_profit(@guard).nil? || rule_profit(eco).nil?
         return nil if rule_profit(eco) >= rule_profit(@guard) - 0.005
 
-        format("reduziria o lucro de R$ %.2f para R$ %.2f por unidade", rule_profit(@guard), rule_profit(eco)).tr(".", ",")
+        format("reduziria o lucro de R$ %.2f para R$ %.2f por unidade", rule_profit(@guard).to_f, rule_profit(eco).to_f).tr(".", ",")
       end
     end
 

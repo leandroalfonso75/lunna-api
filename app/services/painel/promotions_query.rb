@@ -97,6 +97,10 @@ module Painel
         row, evaluated = build_row(item, ctx[:offers][item.item_id] || [], ctx)
         { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id],
           evaluated: evaluated, evaluator: @last_evaluator, catalog_entry: @last_catalog_entry }
+      rescue StandardError => e
+        # um anúncio com dado inesperado não pode derrubar a rotina inteira (05/11/2026): fica de fora, com o motivo
+        Rails.logger.error("PromotionsQuery.evaluate_all #{item.item_id}: #{e.class}: #{e.message}")
+        { item: item, error: "#{e.class}: #{e.message}".truncate(200) }
       end
     end
 
