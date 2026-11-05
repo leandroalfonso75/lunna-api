@@ -33,6 +33,8 @@ x-app: &app
 services:
   postgres:
     image: postgres:16
+    # sobe sozinho depois que o computador reinicia (sem isso a API ficava fora do ar; 04 e 05/11/2026)
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
