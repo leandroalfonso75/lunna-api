@@ -146,7 +146,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   depois de sair, tenta voltar para a anterior com o preço de antes e avisa se não conseguiu.
 - Escrita sem retentativa automática (`Ml::Client#write`), para não aplicar duas vezes. Exceção: se o anúncio saiu da promoção
   e o ML recusou tanto a nova quanto a volta (ex.: "No candidates found for item" logo após sair), fica agendada uma nova
-  tentativa em 1 hora (`PromotionActions#retry_later`), para o anúncio não ficar no preço cheio. Relâmpago e oferta do dia (pedem
+  tentativa em 1 hora (`PromotionActions#retry_later`), para o anúncio não ficar no preço cheio. Desde 04/11/2026 tenta
+  de hora em hora até 6 vezes (`MAX_RETRIES`, contador `attempt` no alvo do `Ml::PromotionsApplyJob`), inclusive quando o
+  anúncio já está sem promoção e o ML repete "No candidates found" (caso real: 12 de 16 variações do Stick Boca Rosa
+  entraram na 1ª nova tentativa; 4 seguiram recusadas pelo ML, sem diferença no anúncio). Relâmpago e oferta do dia (pedem
   estoque reservado) entram com o estoque mínimo que o ML sugere (`stock`), se o anúncio tiver esse estoque.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 
@@ -189,6 +192,8 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
     Já programada (mesma oferta, `effective_at` futuro) não programa de novo. Atual sem data de fim: não programa;
   - ferindo a trava de lucro: não aplica (registra como "para revisar"); anúncio com regra própria em texto, "não
     automatizar" e catálogo fora da automação seguem as regras de sempre.
+  A checagem "oferta cabível já programada" só conta agendamentos reais: até 04/11/2026 o registro de uma **simulação**
+  contava, e a rotina pulava o anúncio sem criar a tarefa (23 anúncios na rodada de 04/11)
 - `config/recurring.yml` dispara o job a cada hora cheia (`0 * * * * America/Sao_Paulo`); o job roda para cada conta
   ativa cuja empresa ligou a rotina e escolheu aquela hora e aquele dia da semana (`companies.promo_routine_enabled`,
   `promo_routine_mode`, `promo_schedule_hour` 0–23, `promo_schedule_days` 0 = domingo … 6 = sábado; `Company#promo_due?`).

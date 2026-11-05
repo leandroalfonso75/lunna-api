@@ -10,10 +10,10 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
 | Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
-| Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta no ML; assistente de contestação (A contestar / Contestadas) |
+| Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta e resolução no ML (devolução, reembolso total/parcial, mediação); assistente de contestação (A contestar / Contestadas) |
 | Ads | [ads.md](ads.md) | Campanhas e anúncios de publicidade (Product Ads) dos últimos 3 meses, com ACOS, ROAS e investimento |
 | Promoções | [promocoes.md](promocoes.md) | Central de Promoções do ML por anúncio: promoção atual, melhor oferta pela margem, margens por anúncio e exportação |
-| Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA |
+| Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA; ações com medidas, preço e frete com margem; gerar fotos com IA (OpenRouter), ordenar e publicar no anúncio |
 | Radar Mercado Livre | [radar-ml.md](radar-ml.md) | Consulta de anúncios coletados do Mercado Livre, com histórico de pesquisas |
 | Configurações | [configuracoes.md](configuracoes.md) | Empresa, impostos e margem, usuários e contas do Mercado Livre |
 
@@ -24,8 +24,8 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 - **Vendas e envios:** pedidos dos últimos 3 meses e o envio de cada um (frete, rastreio, etapas) vêm da mesma leitura
   do Mercado Livre; o envio é completado 60 pedidos por rodada (ver [vendas.md](vendas.md)).
 - **Reclamações:** `Ml::Sync::ClaimsCenter`, dentro da mesma leitura: lista completa uma vez por dia (incremental nas
-  demais) e detalhes 30 por rodada (ver [reclamacoes.md](reclamacoes.md)). Única escrita no ML: responder a reclamação
-  (admin, com confirmação e registro). A contestação é feita pelo vendedor no ML; o Lunna sugere o texto e guarda o
+  demais) e detalhes 30 por rodada (ver [reclamacoes.md](reclamacoes.md)). Escritas no ML: responder e resolver a
+  reclamação (admin, com confirmação e registro). A contestação é feita pelo vendedor no ML; o Lunna sugere o texto e guarda o
   andamento.
 - **Publicidade (Ads):** campanhas, anúncios em campanha e métricas por dia; leitura completa a cada 3 horas e ontem/hoje
   a cada 30 minutos (ver [ads.md](ads.md)).
