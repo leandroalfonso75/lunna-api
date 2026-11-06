@@ -63,6 +63,7 @@ Rails.application.routes.draw do
     post "ads/sync", to: "ads#sync"
     get "claims", to: "claims#index"
     get "finance", to: "finance#show"
+    get "finance/repasses", to: "finance#repasses"
     get "finance/entries", to: "finance_entries#index"
     post "finance/entries", to: "finance_entries#create"
     patch "finance/entries/:id", to: "finance_entries#update"

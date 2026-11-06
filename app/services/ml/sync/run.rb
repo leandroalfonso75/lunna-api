@@ -62,6 +62,7 @@ module Ml
         sync_claims(client)
         sync_claims_center(client)
         sync_billing_charges(client)
+        sync_mercado_pago
         sync_ads(client)
         sync_promotions(client)
         sync_catalog(client)
@@ -176,6 +177,15 @@ module Ml
         return unless Ml::Sync::BillingCharges.due?(@account)
 
         @notes.concat(Ml::Sync::BillingCharges.call(client, @account, sleeper: @sleeper).notes)
+      end
+
+      # Aba Repasses (Financeiro): pagamentos e relatório de liberações do Mercado Pago, com o mesmo token do ML.
+      def sync_mercado_pago
+        mp = Mp::Client.new(access_token: @account.access_token, sleeper: @sleeper)
+        @notes.concat(Mp::Sync::Payments.call(mp, @account).notes)
+        @notes.concat(Mp::Sync::ReleaseReports.call(mp, @account).notes)
+      rescue StandardError => e # o Mercado Pago é complementar: uma falha aqui não derruba a rodada do ML
+        @notes << "Mercado Pago: #{e.message.truncate(160)}"
       end
 
       # Seção Reclamações: lista de todas as reclamações e os detalhes de 30 por rodada (Ml::Sync::ClaimsCenter).

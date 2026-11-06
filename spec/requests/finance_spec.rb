@@ -121,4 +121,37 @@ RSpec.describe "/api/finance (seção Financeiro)", type: :request do
     delete "/api/finance/entries/#{id}", params: { account_id: account.id }, headers: auth_headers(admin)
     expect(response).to have_http_status(:no_content)
   end
+
+  it "concilia os repasses: previsto x faturado x pagamento do Mercado Pago x crédito na conta" do
+    pay = lambda do |id, order_id, net, coupon: 0, release: nil|
+      release ||= zone.now - 1.hour
+      MpPayment.create!(ml_account: account, payment_id: id, order_id: order_id, status: "approved", transaction_amount: 100, net_received: net,
+                        ml_fee: 14, mp_fee: 1, shipping_fee: 10, coupon_amount: coupon, date_created: zone.now, date_approved: zone.now,
+                        money_release_date: release, money_release_status: release.past? ? "released" : "pending")
+    end
+    pay.(901, 1, 75)                                          # venda 1: conferida e creditada
+    pay.(902, 2, 71, coupon: 4, release: zone.now + 5.days)   # venda 2: cupom do vendedor, ainda a liberar
+    line = lambda do |key, desc, credit, debit, balance, source: nil|
+      MpReleaseLine.create!(ml_account: account, file_name: "r.csv", line_key: key, record_type: "release", description: desc, date: zone.now.beginning_of_day + 1.second,
+                            net_credit: credit, net_debit: debit, balance: balance, source_id: source)
+    end
+    line.("a", "payment", 75, 0, 575, source: 901)
+    line.("b", "payout", 0, 500, 75)
+    line.("c", "reserve_for_dispute", 0, 20, 55)
+
+    get "/api/finance/repasses", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
+
+    expect(response).to have_http_status(:ok)
+    expect(json["totals"]).to include("sales" => 2, "expected" => 150.0, "mp_net" => 146.0, "credited" => 75.0, "coupon" => 4.0, "to_release" => 71.0)
+    expect(json["by_status"].to_h { |s| [ s["key"], s["count"] ] }).to eq("conferido" => 1, "cupom" => 1)
+    expect(json["by_credit"].to_h { |s| [ s["key"], s["count"] ] }).to eq("creditado" => 1, "a_liberar" => 1)
+    expect(json["divergent"].map { |s| s["order_ids"] }).to eq([ [ 2 ] ]) # só a venda com cupom fica na lista
+    legs = json["legs"].to_h { |l| [ l["key"], l ] }
+    expect(legs["fee"]).to include("lunna" => 15.0, "billed" => 14.0, "mp" => 15.0, "sales" => 1) # só a venda já faturada entra nas pernas
+    expect(legs["coupon"]).to include("lunna" => 0.0, "mp" => 0.0)
+    acc = json["account"]
+    expect(acc).to include("credits" => 75.0, "debits" => 520.0, "closing" => 55.0)
+    expect(acc["rows"].map { |r| r["label"] }).to include("Saques / transferências", "Liberação de vendas")
+    expect(acc["reserves"]).to eq([ { "key" => "reserve_for_dispute", "label" => "Reservas por reclamação", "amount" => -20.0 } ])
+  end
 end

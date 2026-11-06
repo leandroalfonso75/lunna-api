@@ -24,6 +24,7 @@ module Painel
     FULL_LABELS = { "CFWA" => "Armazenamento Full", "CFCBE" => "Coleta Full", "CFBA" => "Estoque antigo no Full" }.freeze
 
     def self.call(account, params = {}) = new(account, params).call
+    def self.repasses(account, params = {}) = new(account, params).repasses
 
     def initialize(account, params)
       @account = account
@@ -55,6 +56,19 @@ module Painel
         reconciliation: reconciliation(cur),
         coverage: coverage(current[:from], current[:to]),
         months: sales.send(:available_months)
+      }
+    end
+
+    # Aba Repasses: conciliação com o Mercado Pago, carregada à parte (só quando a aba abre), com os mesmos filtros.
+    def repasses
+      sales = SalesQuery.new(@account, @params)
+      current = sales.period_rows
+      prev_from, prev_to = previous_window(current[:from], current[:to], sales)
+      active = current[:rows].select { |r| r[:economics] }
+      {
+        period: { from: current[:from].iso8601, to: current[:to].iso8601, previous_from: prev_from.iso8601, previous_to: prev_to.iso8601,
+                  previous_label: previous_label(current[:from], current[:to], prev_from, prev_to) },
+        **RepassesQuery.call(@account, active, current[:from], current[:to], prev_from, prev_to, zone: @zone)
       }
     end
 

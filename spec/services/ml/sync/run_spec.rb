@@ -10,6 +10,7 @@ RSpec.describe Ml::Sync::Run do
   # o que importa pro cenário.
   before do
     stub_request(:get, %r{\Ahttps://api\.mercadolibre\.com/}).to_return(status: 404, body: '{"message":"not found"}')
+    stub_request(:get, %r{\Ahttps://api\.mercadopago\.com/}).to_return(status: 404, body: '{"message":"not found"}')
   end
 
   def stub_empty_scan_and_orders

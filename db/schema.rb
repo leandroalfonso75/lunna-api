@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -136,6 +136,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_010001) do
     t.datetime "claims_listed_at"
     t.datetime "claims_full_listed_at"
     t.datetime "billing_synced_at"
+    t.datetime "mp_payments_synced_at"
+    t.datetime "mp_releases_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -695,6 +697,66 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_010001) do
     t.index ["ml_account_id"], name: "index_ml_sync_runs_on_ml_account_id"
   end
 
+  create_table "mp_payments", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "payment_id", null: false
+    t.bigint "order_id"
+    t.string "description"
+    t.string "operation_type"
+    t.string "status"
+    t.string "status_detail"
+    t.datetime "date_created"
+    t.datetime "date_approved"
+    t.datetime "date_last_updated"
+    t.datetime "money_release_date"
+    t.string "money_release_status"
+    t.decimal "transaction_amount", precision: 12, scale: 2
+    t.decimal "refunded_amount", precision: 12, scale: 2, default: "0.0"
+    t.decimal "net_received", precision: 12, scale: 2
+    t.decimal "ml_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "mp_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "financing_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "shipping_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "coupon_amount", precision: 12, scale: 2, default: "0.0"
+    t.decimal "other_charges", precision: 12, scale: 2, default: "0.0"
+    t.jsonb "charges", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "date_approved"], name: "index_mp_payments_on_ml_account_id_and_date_approved"
+    t.index ["ml_account_id", "order_id"], name: "index_mp_payments_on_ml_account_id_and_order_id"
+    t.index ["ml_account_id", "payment_id"], name: "index_mp_payments_on_ml_account_id_and_payment_id", unique: true
+    t.index ["ml_account_id"], name: "index_mp_payments_on_ml_account_id"
+  end
+
+  create_table "mp_release_lines", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "file_name", null: false
+    t.string "line_key", null: false
+    t.datetime "date"
+    t.bigint "source_id"
+    t.string "external_reference"
+    t.string "record_type"
+    t.string "description"
+    t.decimal "net_credit", precision: 12, scale: 2, default: "0.0"
+    t.decimal "net_debit", precision: 12, scale: 2, default: "0.0"
+    t.decimal "gross", precision: 12, scale: 2, default: "0.0"
+    t.decimal "mp_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "financing_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "shipping_fee", precision: 12, scale: 2, default: "0.0"
+    t.decimal "coupon_amount", precision: 12, scale: 2, default: "0.0"
+    t.decimal "balance", precision: 14, scale: 2
+    t.bigint "order_id"
+    t.bigint "shipping_id"
+    t.bigint "pack_id"
+    t.string "payment_method"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "date"], name: "index_mp_release_lines_on_ml_account_id_and_date"
+    t.index ["ml_account_id", "line_key"], name: "index_mp_release_lines_on_ml_account_id_and_line_key", unique: true
+    t.index ["ml_account_id", "order_id"], name: "index_mp_release_lines_on_ml_account_id_and_order_id"
+    t.index ["ml_account_id"], name: "index_mp_release_lines_on_ml_account_id"
+  end
+
   create_table "olist_changes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "company_id", null: false
     t.uuid "user_id"
@@ -1078,6 +1140,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_010001) do
   add_foreign_key "ml_promotion_settings", "users", column: "updated_by_id", on_delete: :nullify
   add_foreign_key "ml_promotions", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "mp_payments", "ml_accounts", on_delete: :cascade
+  add_foreign_key "mp_release_lines", "ml_accounts", on_delete: :cascade
   add_foreign_key "olist_changes", "companies", on_delete: :cascade
   add_foreign_key "olist_changes", "users", on_delete: :nullify
   add_foreign_key "olist_connections", "companies", on_delete: :cascade

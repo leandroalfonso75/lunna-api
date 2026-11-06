@@ -7,4 +7,9 @@ class FinanceController < ApplicationController
   def show
     render json: Painel::FinanceQuery.call(Current.account, params)
   end
+
+  # GET /api/finance/repasses: conciliação com o Mercado Pago (previsto x faturado x pagamento x crédito na conta)
+  def repasses
+    render json: Painel::FinanceQuery.repasses(Current.account, params)
+  end
 end
