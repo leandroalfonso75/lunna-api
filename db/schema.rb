@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_05_230001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -53,6 +53,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_230001) do
     t.integer "ads_cost_days", default: 15, null: false
     t.decimal "ads_daily_budget_max", precision: 12, scale: 2
     t.string "ai_image_model", default: "google/gemini-2.5-flash-image"
+  end
+
+  create_table "finance_entries", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.uuid "user_id"
+    t.string "entry_type", null: false
+    t.date "date", null: false
+    t.string "category", null: false
+    t.string "description", null: false
+    t.decimal "amount", precision: 12, scale: 2, null: false
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "date"], name: "index_finance_entries_on_ml_account_id_and_date"
+    t.index ["ml_account_id"], name: "index_finance_entries_on_ml_account_id"
+    t.index ["user_id"], name: "index_finance_entries_on_user_id"
   end
 
   create_table "item_metrics", primary_key: "item_id", id: :string, force: :cascade do |t|
@@ -1019,6 +1035,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_05_230001) do
   end
 
   add_foreign_key "ai_plans", "ml_accounts", on_delete: :cascade
+  add_foreign_key "finance_entries", "ml_accounts", on_delete: :cascade
+  add_foreign_key "finance_entries", "users", on_delete: :nullify
   add_foreign_key "item_metrics", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_accounts", "companies", on_delete: :cascade
   add_foreign_key "ml_accounts", "users", column: "connected_by_user_id", on_delete: :nullify

@@ -71,12 +71,53 @@ RSpec.describe "/api/finance (seção Financeiro)", type: :request do
     expect(lines["shipping"]["value"]).to eq(-4.0) # só a bonificação do frete no extrato
   end
 
-  it "mês compara com o mês anterior inteiro" do
+  it "mês atual compara com os mesmos dias do mês anterior; mês fechado, com o mês anterior inteiro" do
     month = zone.today.strftime("%Y-%m")
     get "/api/finance", params: { account_id: account.id, month: month }, headers: auth_headers(member)
-
     prev = Date.strptime(month, "%Y-%m").prev_month
     expect(json["period"]["previous_from"]).to start_with(prev.iso8601)
-    expect(json["period"]["previous_to"]).to start_with(prev.end_of_month.iso8601)
+    expect(json["period"]["previous_to"]).to start_with([ prev + (zone.today.day - 1), prev.end_of_month ].min.iso8601)
+
+    get "/api/finance", params: { account_id: account.id, period: "mtd" }, headers: auth_headers(member)
+    expect(json["period"]["previous_from"]).to start_with(prev.iso8601)
+
+    closed = zone.today.prev_month.strftime("%Y-%m")
+    get "/api/finance", params: { account_id: account.id, month: closed }, headers: auth_headers(member)
+    if json["months"].any? { |m| m["value"] == closed }
+      before = Date.strptime(closed, "%Y-%m").prev_month
+      expect(json["period"]["previous_to"]).to start_with(before.end_of_month.iso8601)
+    end
+  end
+
+  it "lançamentos manuais entram no DRE e nas abas Receita e Despesas (escrita só admin)" do
+    admin = create(:user, :admin, company: company)
+    post "/api/finance/entries", params: { account_id: account.id, entry_type: "despesa", date: zone.today.iso8601, category: "Embalagens e insumos", description: "Caixas", amount: 30 },
+                                 headers: auth_headers(member), as: :json
+    expect(response).to have_http_status(:forbidden)
+
+    post "/api/finance/entries", params: { account_id: account.id, entry_type: "despesa", date: zone.today.iso8601, category: "Embalagens e insumos", description: "Caixas", amount: 30 },
+                                 headers: auth_headers(admin), as: :json
+    expect(response).to have_http_status(:created)
+    post "/api/finance/entries", params: { account_id: account.id, entry_type: "receita", date: zone.today.iso8601, category: "Rendimentos", description: "Mercado Pago", amount: 5 },
+                                 headers: auth_headers(admin), as: :json
+    id = json["id"]
+
+    get "/api/finance", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
+    lines = json["statement"].to_h { |l| [ l["key"], l ] }
+    expect(lines["other_income"]["value"]).to eq(5.0)
+    expect(lines["other_expenses"]["value"]).to eq(30.0)
+    expect(lines["net"]["value"]).to eq(15.0 + 5 - 30)
+    expect(json["revenue"]["entries"].size).to eq(1)
+    expect(json["revenue"]["by_logistic"].first).to include("label" => "Full", "value" => 200.0, "previous" => 100.0)
+    expect(json["revenue"]["by_product"].size).to eq(2)
+    expect(json["expenses"]["items"].find { |i| i["key"] == "other_expenses" }).to include("value" => 30.0)
+    expect(json["expenses"]["entries"].first).to include("description" => "Caixas")
+
+    patch "/api/finance/entries/#{id}", params: { account_id: account.id, amount: 7 }, headers: auth_headers(admin), as: :json
+    expect(json["amount"]).to eq(7.0)
+    get "/api/finance/entries", params: { account_id: account.id, entry_type: "receita" }, headers: auth_headers(member)
+    expect(json["entries"].map { |e| e["amount"] }).to eq([ 7.0 ])
+    delete "/api/finance/entries/#{id}", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:no_content)
   end
 end

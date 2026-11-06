@@ -50,6 +50,8 @@ module Painel
         health: health(cur),
         charts: charts(current, previous, cur),
         statement_ml: statement_ml(current[:from], current[:to]),
+        revenue: revenue_tab(cur, prev),
+        expenses: expenses_tab(cur, prev),
         reconciliation: reconciliation(cur),
         coverage: coverage(current[:from], current[:to]),
         months: sales.send(:available_months)
@@ -60,13 +62,28 @@ module Painel
 
     # --- período anterior ---
 
+    # Mês fechado compara com o mês anterior inteiro; mês em andamento (mês atual ou "mês até hoje") compara com os
+    # mesmos dias do mês anterior (05/11 → 01 a 05/10; pedido do usuário em 05/11/2026). Os demais: mesmo nº de dias logo antes.
     def previous_window(from, to, sales)
-      if (key = sales.send(:month_key))
+      key = sales.send(:month_key)
+      key ||= @zone.today.strftime("%Y-%m") if sales.send(:preset_key) == "mtd"
+      if key
         start = Date.strptime(key, "%Y-%m").prev_month
-        return [ start.in_time_zone(@zone).beginning_of_day, start.end_of_month.in_time_zone(@zone).end_of_day ]
+        last = to.to_date < to.to_date.end_of_month ? [ start + (to.to_date.day - 1), start.end_of_month ].min : start.end_of_month
+        return [ start.in_time_zone(@zone).beginning_of_day, last.in_time_zone(@zone).end_of_day ]
       end
       days = (to.to_date - from.to_date).to_i + 1
       [ from - days.days, from - 1.second ]
+    end
+
+    # Lançamentos manuais (abas Receita e Despesas) no período.
+    def manual(from, to)
+      rows = @account.finance_entries.where(date: from.to_date..to.to_date).order(:date).to_a
+      { income: rows.select { |e| e.entry_type == "receita" }, expenses: rows.select { |e| e.entry_type == "despesa" } }
+    end
+
+    def entry_json(e)
+      { id: e.id, entry_type: e.entry_type, date: e.date, category: e.category, description: e.description, amount: e.amount.to_f, notes: e.notes }
     end
 
     def previous_label(from, to, pfrom, pto)
@@ -103,14 +120,18 @@ module Painel
       gross = revenue - refunds
       cogs = s[:cost].to_f
       gross_profit = gross - cogs
-      operating = gross_profit - fee - shipping - s[:tax].to_f - s[:fixed_expenses].to_f - returns[:total] - ml[:full][:net] - ml[:outro][:charge] + credits
+      entries = manual(from, to)
+      other_income = entries[:income].sum { |e| e.amount.to_f }
+      other_expenses = entries[:expenses].sum { |e| e.amount.to_f }
+      operating = gross_profit - fee - shipping - s[:tax].to_f - s[:fixed_expenses].to_f - returns[:total] - ml[:full][:net] - ml[:outro][:charge] + credits +
+                  other_income - other_expenses
       net = operating - ads
       {
         from: from, to: to, orders: s[:orders].to_i, units: s[:units].to_i, cancelled: s[:cancelled].to_i, ticket: s[:ticket],
         revenue: revenue, refunds: refunds, net_revenue: gross, cogs: cogs, gross_profit: gross_profit,
         fee: fee, shipping: shipping, tax: s[:tax].to_f, fixed: s[:fixed_expenses].to_f,
         returns: returns, full: ml[:full], other_ml: ml[:outro][:charge], credits: credits, installments: ml[:parcelamento],
-        operating: operating, ads: ads, net: net,
+        operating: operating, ads: ads, net: net, other_income: other_income, other_expenses: other_expenses, entries: entries, rows: active,
         fee_lunna: s[:fee].to_f, shipping_lunna: s[:shipping_cost].to_f, ads_lunna: ads_lunna, ml: ml,
         orders_without_cost: s[:orders_without_cost].to_i, known_revenue: known.sum { |r| r[:economics][:revenue] },
         daily: period[:daily]
@@ -212,6 +233,10 @@ module Painel
         row.(:other_ml, "(−) Outras cobranças do Mercado Livre", "expense", c[:other_ml], p[:other_ml], note: "extrato: Minha página, DIFAL e cobranças não classificadas",
              breakdown: c[:ml][:outro][:lines].select { |_, v| v.positive? }.map { |k, v| { label: k, amount: v } }),
         row.(:credits, "(+) Créditos e bonificações do Mercado Livre", "credit", c[:credits], p[:credits], note: "tarifas e fretes devolvidos pelo ML (devoluções, cancelamentos de cobrança)"),
+        row.(:other_income, "(+) Outras receitas (lançadas)", "credit", c[:other_income], p[:other_income], note: "lançamentos manuais da aba Receita",
+             breakdown: c[:entries][:income].group_by(&:category).map { |k, v| { label: k, amount: v.sum { |e| e.amount.to_f }.round(2) } }),
+        row.(:other_expenses, "(−) Outras despesas (lançadas)", "expense", c[:other_expenses], p[:other_expenses], note: "lançamentos manuais da aba Despesas",
+             breakdown: c[:entries][:expenses].group_by(&:category).map { |k, v| { label: k, amount: v.sum { |e| e.amount.to_f }.round(2) } }),
         row.(:operating, "= Lucro antes de Ads", "subtotal", c[:operating], p[:operating], note: "margem #{pct(c[:operating], c[:revenue])}%"),
         row.(:ads, "(−) Product Ads", "expense", c[:ads], p[:ads], note: basis_note(:ads, c)),
         row.(:net, "= Lucro líquido pós Ads", "total", c[:net], p[:net], note: "margem líquida #{pct(c[:net], c[:revenue])}%")
@@ -298,6 +323,76 @@ module Painel
         item.(:ads, "Product Ads", c[:ads_lunna], c[:ml][:ads][:net], "Lunna: gasto por dia da seção Ads. Extrato: tarifa de Product Ads (costuma ser cobrada no dia seguinte)."),
         item.(:returns, "Fretes de devolução", c[:returns][:by_kind]["frete_devolucao"].to_f, c[:ml][:devolucao][:net], "Lunna: custo por devolução informado pelo ML. Extrato: tarifas de devolução cobradas.")
       ]
+    end
+
+    # --- aba Receita: de onde vem a receita, com o período anterior ---
+
+    def revenue_tab(c, p)
+      by = ->(rows, &key) { rows.group_by(&key).transform_values { |rs| { revenue: rs.sum { |r| r[:economics][:revenue] }.round(2), orders: rs.map { |r| r[:pack_id] || r[:order_id] }.uniq.size, units: rs.sum { |r| r[:units] } } } }
+      logistic = ->(r) { Painel::ClaimContest::LOGISTICS[r.dig(:shipping, :logistic_type)] || r.dig(:shipping, :logistic_type) || "sem envio" }
+      cur_log = by.(c[:rows], &logistic)
+      prev_log = by.(p[:rows], &logistic)
+      cur_items = item_revenue(c[:rows])
+      prev_items = item_revenue(p[:rows])
+      ads_cur = ads_sales(c[:from], c[:to])
+      ads_prev = ads_sales(p[:from], p[:to])
+      {
+        totals: { revenue: cmp(c[:revenue], p[:revenue]), refunds: cmp(c[:refunds], p[:refunds], invert: true), net_revenue: cmp(c[:net_revenue], p[:net_revenue]),
+                  orders: cmp(c[:orders], p[:orders]), units: cmp(c[:units], p[:units]), ticket: cmp(c[:ticket], p[:ticket]),
+                  other_income: cmp(c[:other_income], p[:other_income]), cancelled: cmp(c[:cancelled], p[:cancelled], invert: true) },
+        by_logistic: (cur_log.keys | prev_log.keys).map { |k| { label: k, **cmp(cur_log.dig(k, :revenue), prev_log.dig(k, :revenue)), orders: cur_log.dig(k, :orders).to_i, units: cur_log.dig(k, :units).to_i, share: pct(cur_log.dig(k, :revenue), c[:revenue]) } }.sort_by { |x| -x[:value] },
+        by_product: cur_items.sort_by { |_, v| -v[:revenue] }.first(15).map { |id, v| { item_id: id, title: v[:title], sku: v[:sku], units: v[:units], **cmp(v[:revenue], prev_items.dig(id, :revenue)), share: pct(v[:revenue], c[:revenue]) } },
+        ads_vs_organic: { ads: cmp(ads_cur, ads_prev), organic: cmp([ c[:revenue] - ads_cur, 0 ].max, [ p[:revenue] - ads_prev, 0 ].max), ads_share: pct(ads_cur, c[:revenue]) },
+        weekly: weekly(c[:daily], p[:daily]),
+        entries: c[:entries][:income].map { |e| entry_json(e) }
+      }
+    end
+
+    def item_revenue(rows)
+      rows.each_with_object(Hash.new { |h, k| h[k] = { revenue: 0.0, units: 0, title: nil, sku: nil } }) do |r, memo|
+        r[:items].each do |i|
+          m = memo[i[:item_id]]
+          m[:revenue] += i[:unit_price].to_f * i[:quantity].to_i
+          m[:units] += i[:quantity].to_i
+          m[:title] ||= i[:title]
+          m[:sku] ||= i[:sku]
+        end
+      end.transform_values { |v| v.merge(revenue: v[:revenue].round(2)) }
+    end
+
+    # Vendas atribuídas ao Ads no período (diretas + indiretas), pela seção Ads.
+    def ads_sales(from, to) = @account.ml_ad_daily_metrics.where(date: from.to_date..to.to_date).sum(:total_amount).to_f
+
+    # Receita por semana (7 dias corridos a partir do 1º dia do período), atual x anterior pela mesma posição.
+    def weekly(cur, prev)
+      cur.each_slice(7).with_index.map do |days, i|
+        pdays = prev.each_slice(7).to_a[i] || []
+        { label: "#{days.first[:date][5..].tr('-', '/')} a #{days.last[:date][5..].tr('-', '/')}", revenue: days.sum { |d| d[:revenue] }.round(2),
+          previous_revenue: pdays.empty? ? nil : pdays.sum { |d| d[:revenue] }.round(2), orders: days.sum { |d| d[:orders] } }
+      end
+    end
+
+    # --- aba Despesas: cada despesa com o período anterior, as do extrato e os lançamentos ---
+
+    def expenses_tab(c, p)
+      items = [
+        [ :cogs, "Custo dos produtos vendidos", c[:cogs], p[:cogs], "Olist (PEPS) ou custo manual" ],
+        [ :fee, "Tarifas de venda do ML", c[:fee], p[:fee], basis_note(:fee, c) ],
+        [ :shipping, "Fretes pagos pelo vendedor", c[:shipping], p[:shipping], basis_note(:shipping, c) ],
+        [ :tax, "Impostos", c[:tax], p[:tax], "#{@company.tax_pct.to_f}% da receita" ],
+        [ :fixed, "Despesas fixas", c[:fixed], p[:fixed], "#{@company.fixed_expenses_pct.to_f}% da receita" ],
+        [ :returns, "Devoluções", c[:returns][:total], p[:returns][:total], "card Devoluções em Reclamações" ],
+        [ :refunds, "Reembolsos a compradores", c[:refunds], p[:refunds], "reduzem a receita" ],
+        [ :full, "Full (armazenamento, coleta, estoque antigo)", c[:full][:net], p[:full][:net], "extrato do ML" ],
+        [ :other_ml, "Outras cobranças do ML", c[:other_ml], p[:other_ml], "extrato do ML" ],
+        [ :ads, "Product Ads", c[:ads], p[:ads], basis_note(:ads, c) ],
+        [ :other_expenses, "Outras despesas (lançadas)", c[:other_expenses], p[:other_expenses], "lançamentos manuais" ]
+      ].map { |key, label, cur, prev, note| { key: key, label: label, note: note, share: pct(cur, c[:revenue]), **cmp(cur, prev, invert: true) } }
+      total = items.sum { |i| i[:value] }
+      {
+        items: items.sort_by { |i| -i[:value] }, total: cmp(total, items.sum { |i| i[:previous] }, invert: true), total_share: pct(total, c[:revenue]),
+        entries: c[:entries][:expenses].map { |e| entry_json(e) }
+      }
     end
 
     def coverage(from, to)

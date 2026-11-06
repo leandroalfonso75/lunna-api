@@ -6,6 +6,15 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 (`Painel::FinanceQuery`); o front só exibe.
 
 ## O que mostra
+- **Três abas** (pedido do usuário em 05/11/2026), com os mesmos filtros no topo e abrindo no **mês atual**:
+  **Visão geral e DRE** (indicadores, saúde, gráficos e o demonstrativo), **Receita** (totais, receita por dia e por
+  semana x período anterior, com Ads x orgânica, por logística, produtos que mais faturam, e os lançamentos de outras
+  receitas) e **Despesas** (cada despesa com o período anterior e % da receita, extrato do ML por grupo, conciliação e
+  os lançamentos de outras despesas).
+- **Lançamentos manuais** (`finance_entries`, `FinanceEntriesController`, `GET/POST/PATCH/DELETE /api/finance/entries`;
+  escrita só admin): outra receita (rendimentos, venda fora do ML, crédito) ou outra despesa (embalagens, pessoal,
+  contador, software, marketing fora do ML, logística própria, perda). Entram no DRE como "(+) Outras receitas
+  (lançadas)" e "(−) Outras despesas (lançadas)", antes do lucro antes de Ads.
 - **Filtros, os mesmos de Vendas:** Hoje, Ontem, 7 dias, Mês até hoje, 30, 60 dias, 3 meses, mês (lista) ou datas;
   logística (Full, Flex, Coleta, Agência, Outras) e busca (produto, SKU, anúncio, comprador). Com filtro de logística
   ou busca, as despesas da conta que não são por venda (Full, outras do ML, créditos) continuam as do período inteiro,
@@ -48,15 +57,17 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 - Devoluções: `Painel::ReturnsQuery` com `from/to` do período (pela abertura da reclamação).
 - Extrato: `ml_billing_charges` (`Ml::Sync::BillingCharges`, ver reclamacoes.md), grupos em `FinanceQuery::GROUPS`
   (bonificação = código da cobrança com B no lugar do C; `BPAD` é a de Ads).
-- Período anterior de um mês = o mês anterior inteiro; o restante = mesmo número de dias logo antes. Quando o anterior
-  começa antes da venda mais antiga guardada, a tela avisa "comparação parcial".
+- Período anterior: mês **fechado** = o mês anterior inteiro; mês **em andamento** (mês atual ou "mês até hoje") = os
+  mesmos dias do mês anterior (05/11 → 01 a 05/10; pedido do usuário em 05/11/2026); o restante = mesmo número de dias
+  logo antes. Quando o anterior começa antes da venda mais antiga guardada, a tela avisa "comparação parcial".
 - Limites: vendas guardadas por 3 meses (desde 11/06/2026); extrato desde fevereiro/2026 (período aberto e anterior).
 
 ## Arquivos
 - API: `app/services/painel/finance_query.rb`, `app/controllers/finance_controller.rb`, rota `GET /api/finance`;
   teste `spec/requests/finance_spec.rb`.
 - Front (`lunna-web-radar`): `app/pages/financeiro.vue`, `app/components/financeiro/FinanceDailyChart.vue`,
-  `app/types/finance.ts`; item "Financeiro" no menu, depois de Curva ABC.
+  `FinanceEntriesPanel.vue`, `app/types/finance.ts`; item "Financeiro" no menu, depois de Curva ABC.
+- Lançamentos: `app/models/finance_entry.rb`, `app/controllers/finance_entries_controller.rb`.
 
 ## Próximos passos (a definir com o usuário)
 - Metas por indicador (hoje só a margem mínima vem da empresa; TACOS, custo do ML e devoluções usam referências fixas).
