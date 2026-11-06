@@ -165,7 +165,7 @@ module Painel
           net: (c[:credit] - c[:debit]).round(2), count: c[:count], previous: (p[:credit] - p[:debit]).round(2) }
       end.sort_by { |r| -(r[:credit] + r[:debit]) }
       reserves = @account.mp_release_lines.where("description LIKE 'reserve_for_%'").where(date: ..@to).group(:description).sum("net_credit - net_debit")
-                         .reject { |_, v| v.to_f.abs < 0.01 }.map { |k, v| { key: k, label: MpReleaseLine::LABELS[k] || k, amount: v.to_f.round(2) } }
+                         .select { |_, v| v.to_f <= -0.01 }.map { |k, v| { key: k, label: MpReleaseLine::LABELS[k] || k, amount: v.to_f.round(2) } }
       { opening: cur[:opening], closing: cur[:closing], credits: cur[:credits], debits: cur[:debits], previous_credits: prev[:credits], previous_debits: prev[:debits],
         rows: rows, reserves: reserves,
         note: "Do relatório de liberações do Mercado Pago (gerado toda segunda-feira com a semana anterior). Reservas: valores retidos e devolvidos; o saldo negativo é o que ainda está retido desde #{@account.mp_release_lines.minimum(:date)&.in_time_zone(@zone)&.strftime('%d/%m/%Y') || '—'}." }

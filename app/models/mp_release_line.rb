@@ -8,7 +8,10 @@ class MpReleaseLine < ApplicationRecord
     "mediation" => "Mediações", "reserve_for_dispute" => "Reservas por reclamação", "reserve_for_debt_payment" => "Reserva para pagar dívida com o ML",
     "reserve_for_bpp_shipping_return" => "Frete de devolução (reserva)", "reserve_for_payment" => "Reserva para pagamento",
     "fee-release_in_advance" => "Tarifa de antecipação", "payout" => "Saques / transferências", "withdrawal" => "Saques / transferências",
-    "chargeback" => "Contestação de cartão (chargeback)", "credit_payment" => "Pagamento de crédito"
+    "chargeback" => "Contestação de cartão (chargeback)", "credit_payment" => "Pagamento de crédito / fatura (entra e sai)",
+    "reserve_for_payout" => "Reserva para saque (entra e sai)", "reserve_for_collateral" => "Reserva de garantia",
+    "reserve_for_refund" => "Reserva para reembolso", "shipping_cancel" => "Estorno de frete", "mediation_cancel" => "Mediação cancelada (devolvido)",
+    "cashback" => "Cashback"
   }.freeze
 
   def amount = net_credit.to_f - net_debit.to_f

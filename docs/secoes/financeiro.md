@@ -6,6 +6,7 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 (`Painel::FinanceQuery`); o front só exibe.
 
 ## O que mostra
+- **Quatro abas**: as três abaixo (pedido do usuário em 05/11/2026) e **Repasses** (06/11/2026, seção própria abaixo).
 - **Três abas** (pedido do usuário em 05/11/2026), com os mesmos filtros no topo e abrindo no **mês atual**:
   **Visão geral e DRE** (indicadores, saúde, gráficos e o demonstrativo), **Receita** (totais, receita por dia e por
   semana x período anterior, com Ads x orgânica, por logística, produtos que mais faturam, e os lançamentos de outras
@@ -59,6 +60,36 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 - Exportação do DRE em CSV. Rodapé com a cobertura dos dados (vendas desde 11/06/2026; extrato desde o início do
   período de faturamento guardado).
 
+## Aba Repasses: conciliação com o Mercado Pago (06/11/2026)
+Pedido do usuário: cruzar o valor previsto da venda, o faturado pelo ML e o que de fato foi descontado e creditado na
+conta do Mercado Pago. Carrega à parte (`GET /api/finance/repasses`, `Painel::RepassesQuery`), com os mesmos filtros.
+- **Fontes** (o token do ML já lê a API do Mercado Pago; nada é escrito):
+  - `mp_payments` (`Mp::Sync::Payments`, `/v1/payments/search` por data de atualização): cada pagamento com as taxas
+    de `charges_details` separadas e o líquido (`net_received_amount`). A busca do MP não mantém a ordem entre
+    páginas, então o import lê **janelas de 3 dias inteiras** (80 páginas por rodada; o resto segue na próxima).
+  - `mp_release_lines` (`Mp::Sync::ReleaseReports`, `/v1/account/release_report`): o extrato da conta (cada crédito,
+    débito e o saldo). O MP gera o relatório **toda segunda-feira** com a semana anterior; a semana corrente aparece
+    como "Liberado, aguardando relatório". CSV com `;` lido por split (o `CSV` do Ruby recusa as aspas do arquivo);
+    cada linha gravada uma vez (`line_key`), mesmo que venha em dois relatórios.
+  - As duas rodam na rodada diária (`Ml::Sync::Run#sync_mercado_pago`); uma falha vira nota e não derruba a rodada.
+    Histórico carregado: 120 dias (pagamentos desde 04/06/2026, movimentos desde 06/07/2026).
+- **Quatro pernas por venda** (agrupada por envio, porque o carrinho tem uma etiqueta): 1) previsto no Lunna =
+  receita − tarifa − frete do vendedor; 2) faturado pelo ML (`ml_billing_charges`); 3) líquido do pagamento no MP,
+  somando o pagamento do frete pago pelo comprador (`description = marketplace_shipment`, com `order_id` = id do
+  envio); 4) creditado na conta (linhas `payment`/`shipping` do relatório com `source_id` = pagamento).
+- **Composição das taxas no MP**: tarifa do Lunna = `ml_sale_fee` + `mp_processing_fee` + `mp_financing_*`;
+  `financing_fee` é o juro do parcelamento pago pelo comprador (`financing_transfer`) e fica de fora; frete = `shp_*`
+  (etiqueta cheia); `coupon_fee` (de `collector`) = participação do vendedor no cupom, **custo que o Lunna não contava**.
+- **Situações**: Conferido; Conferido (frete descontado na liberação: carrinho com frete na fatura, o pagamento não
+  desconta a etiqueta e a liberação sim); Cupom com participação do vendedor; Frete previsto que o ML não cobrou; Em
+  mediação; Reembolsada/cancelada; Pagamento não localizado; Diferença a verificar. Crédito: Creditado, A liberar (data
+  de liberação futura), Liberado aguardando relatório, Não localizado no extrato, Sem crédito. Tolerância R$ 0,05.
+- **Descontos nas três fontes**: tarifa, frete, cupom e líquido em Lunna x faturado x MP, só nas vendas pagas e já
+  faturadas (o mesmo conjunto nas três colunas).
+- **Movimentos da conta** no período (pela data do movimento), por tipo (`MpReleaseLine::LABELS`), com o período
+  anterior, saldo no início e no fim e as reservas ainda retidas (soma negativa de `reserve_for_*` desde o início dos dados).
+- Resultado de outubro/2026: 1.262 de 1.266 vendas explicadas; R$ 384 de cupom do vendedor em 98 vendas.
+
 ## Regras e fontes
 - Vendas e custos por venda: `Painel::SalesQuery#period_rows` (mesma conta de Vendas: receita − custo − tarifa − frete −
   despesas fixas − imposto; Ads rateado por anúncio no período). Período anterior: `window` com `@window_override`.
@@ -77,7 +108,13 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 - Front (`lunna-web-radar`): `app/pages/financeiro.vue`, `app/components/financeiro/FinanceDailyChart.vue`,
   `FinanceEntriesPanel.vue`, `app/types/finance.ts`; item "Financeiro" no menu, depois de Curva ABC.
 - Lançamentos: `app/models/finance_entry.rb`, `app/controllers/finance_entries_controller.rb`.
+- Repasses: `app/services/painel/repasses_query.rb`, `FinanceQuery.repasses`, rota `GET /api/finance/repasses`;
+  `app/services/mp/client.rb`, `app/services/mp/sync/payments.rb`, `app/services/mp/sync/release_reports.rb`;
+  modelos `MpPayment`, `MpReleaseLine`; migração `20261106030001`; testes `spec/services/mp/sync_spec.rb` e o exemplo de
+  repasses em `spec/requests/finance_spec.rb`. Front: `app/components/financeiro/FinanceRepassesTab.vue`.
 
 ## Próximos passos (a definir com o usuário)
 - Metas por indicador (hoje só a margem mínima vem da empresa; TACOS, custo do ML e devoluções usam referências fixas).
 - Guardar o extrato de mais períodos (hoje: aberto e anterior) para fechar meses mais antigos.
+- Levar o cupom com participação do vendedor (`mp_payments.coupon_amount`) para o custo da venda em Vendas e no DRE.
+- Pedir ao MP um relatório de liberações sob demanda (POST) para fechar a semana corrente sem esperar a segunda-feira.
