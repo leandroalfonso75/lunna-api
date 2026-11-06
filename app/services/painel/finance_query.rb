@@ -139,13 +139,15 @@ module Painel
       entries = manual(from, to)
       other_income = entries[:income].sum { |e| e.amount.to_f }
       other_expenses = entries[:expenses].sum { |e| e.amount.to_f }
-      operating = gross_profit - fee - shipping - s[:tax].to_f - s[:fixed_expenses].to_f - returns[:total] - ml[:full][:net] - ml[:outro][:charge] + credits +
+      # cupom com participação do vendedor: descontado no pagamento do Mercado Pago (não aparece no extrato do ML)
+      coupon = s[:coupon_cost].to_f
+      operating = gross_profit - fee - shipping - coupon - s[:tax].to_f - s[:fixed_expenses].to_f - returns[:total] - ml[:full][:net] - ml[:outro][:charge] + credits +
                   other_income - other_expenses
       net = operating - ads
       {
         from: from, to: to, orders: s[:orders].to_i, units: s[:units].to_i, cancelled: s[:cancelled].to_i, ticket: s[:ticket],
         revenue: revenue, refunds: refunds, net_revenue: gross, cogs: cogs, gross_profit: gross_profit,
-        fee: fee, shipping: shipping, tax: s[:tax].to_f, fixed: s[:fixed_expenses].to_f,
+        fee: fee, shipping: shipping, coupon: coupon, coupon_discount: s[:coupon_discount].to_f, coupon_orders: s[:coupon_orders].to_i, tax: s[:tax].to_f, fixed: s[:fixed_expenses].to_f,
         returns: returns, full: ml[:full], other_ml: ml[:outro][:charge], credits: credits, installments: ml[:parcelamento],
         operating: operating, ads: ads, net: net, other_income: other_income, other_expenses: other_expenses, entries: entries, rows: active,
         matched: matched(active, from, to),
@@ -240,6 +242,8 @@ module Painel
         row.(:gross_profit, "= Lucro bruto", "subtotal", c[:gross_profit], p[:gross_profit], note: "margem bruta #{pct(c[:gross_profit], c[:net_revenue])}%"),
         row.(:fee, "(−) Tarifas de venda do Mercado Livre", "expense", c[:fee], p[:fee], note: basis_note(:fee, c)),
         row.(:shipping, "(−) Fretes pagos pelo vendedor", "expense", c[:shipping], p[:shipping], note: basis_note(:shipping, c)),
+        row.(:coupon, "(−) Cupons (parte do vendedor)", "expense", c[:coupon], p[:coupon],
+             note: "#{c[:coupon_orders]} venda(s) com cupom · desconto total #{money(c[:coupon_discount])}, descontado no pagamento do Mercado Pago"),
         row.(:tax, "(−) Impostos (#{@company.tax_pct.to_f}% da receita)", "expense", c[:tax], p[:tax]),
         row.(:fixed, "(−) Despesas fixas (#{@company.fixed_expenses_pct.to_f}% da receita)", "expense", c[:fixed], p[:fixed]),
         row.(:returns, "(−) Despesas com devoluções", "expense", c[:returns][:total], p[:returns][:total],
@@ -303,7 +307,7 @@ module Painel
           orders: d[:orders], previous_orders: pd&.dig(:orders) }
       end
       expenses = [
-        [ "Custo dos produtos", c[:cogs] ], [ "Tarifas de venda", c[:fee] ], [ "Fretes", c[:shipping] ], [ "Impostos", c[:tax] ],
+        [ "Custo dos produtos", c[:cogs] ], [ "Tarifas de venda", c[:fee] ], [ "Fretes", c[:shipping] ], [ "Cupons", c[:coupon] ], [ "Impostos", c[:tax] ],
         [ "Despesas fixas", c[:fixed] ], [ "Devoluções e reembolsos", c[:returns][:total] + c[:refunds] ], [ "Full", c[:full][:net] ],
         [ "Outras do ML", c[:other_ml] ], [ "Product Ads", c[:ads] ]
       ].map { |label, v| { label: label, amount: v.to_f.round(2), pct: pct(v, c[:revenue]) } }.reject { |e| e[:amount].abs < 0.005 }
@@ -461,6 +465,7 @@ module Painel
         [ :cogs, "Custo dos produtos vendidos", c[:cogs], p[:cogs], "Olist (PEPS) ou custo manual" ],
         [ :fee, "Tarifas de venda do ML", c[:fee], p[:fee], basis_note(:fee, c) ],
         [ :shipping, "Fretes pagos pelo vendedor", c[:shipping], p[:shipping], basis_note(:shipping, c) ],
+        [ :coupon, "Cupons (parte do vendedor)", c[:coupon], p[:coupon], "descontado no pagamento do Mercado Pago" ],
         [ :tax, "Impostos", c[:tax], p[:tax], "#{@company.tax_pct.to_f}% da receita" ],
         [ :fixed, "Despesas fixas", c[:fixed], p[:fixed], "#{@company.fixed_expenses_pct.to_f}% da receita" ],
         [ :returns, "Devoluções", c[:returns][:total], p[:returns][:total], "card Devoluções em Reclamações" ],

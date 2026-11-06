@@ -130,7 +130,7 @@ RSpec.describe "/api/finance (seção Financeiro)", type: :request do
                         money_release_date: release, money_release_status: release.past? ? "released" : "pending")
     end
     pay.(901, 1, 75)                                          # venda 1: conferida e creditada
-    pay.(902, 2, 71, coupon: 4, release: zone.now + 5.days)   # venda 2: cupom do vendedor, ainda a liberar
+    pay.(902, 2, 71, coupon: 4, release: zone.now + 5.days)   # venda 2: cupom do vendedor (custo da venda no Lunna), a liberar
     line = lambda do |key, desc, credit, debit, balance, source: nil|
       MpReleaseLine.create!(ml_account: account, file_name: "r.csv", line_key: key, record_type: "release", description: desc, date: zone.now.beginning_of_day + 1.second,
                             net_credit: credit, net_debit: debit, balance: balance, source_id: source)
@@ -142,10 +142,10 @@ RSpec.describe "/api/finance (seção Financeiro)", type: :request do
     get "/api/finance/repasses", params: { account_id: account.id, period: "today" }, headers: auth_headers(member)
 
     expect(response).to have_http_status(:ok)
-    expect(json["totals"]).to include("sales" => 2, "expected" => 150.0, "mp_net" => 146.0, "credited" => 75.0, "coupon" => 4.0, "to_release" => 71.0)
-    expect(json["by_status"].to_h { |s| [ s["key"], s["count"] ] }).to eq("conferido" => 1, "cupom" => 1)
+    expect(json["totals"]).to include("sales" => 2, "expected" => 146.0, "mp_net" => 146.0, "credited" => 75.0, "coupon" => 4.0, "to_release" => 71.0)
+    expect(json["by_status"].to_h { |s| [ s["key"], s["count"] ] }).to eq("conferido" => 2)
     expect(json["by_credit"].to_h { |s| [ s["key"], s["count"] ] }).to eq("creditado" => 1, "a_liberar" => 1)
-    expect(json["divergent"].map { |s| s["order_ids"] }).to eq([ [ 2 ] ]) # só a venda com cupom fica na lista
+    expect(json["divergent"]).to eq([]) # o cupom já é custo da venda: nada fica na lista
     legs = json["legs"].to_h { |l| [ l["key"], l ] }
     expect(legs["fee"]).to include("lunna" => 15.0, "billed" => 14.0, "mp" => 15.0, "sales" => 1) # só a venda já faturada entra nas pernas
     expect(legs["coupon"]).to include("lunna" => 0.0, "mp" => 0.0)

@@ -63,7 +63,7 @@ module Painel
         pays = sale_pays + buyer_pays
         approved = pays.select { |p| p.status == "approved" }
         e = ->(k) { rs.sum { |r| r[:economics][k].to_f } }
-        expected = e.(:revenue) - e.(:fee) - e.(:shipping_cost)
+        expected = e.(:revenue) - e.(:fee) - e.(:shipping_cost) - e.(:coupon_cost)
         net = approved.sum { |p| p.net_received.to_f }
         coupon = approved.sum { |p| p.coupon_amount.to_f }
         sale_lines = approved.flat_map { |p| Array(lines[p.payment_id]).select { |l| SALE_DESCRIPTIONS.include?(l.description) } }
@@ -82,7 +82,7 @@ module Painel
           key: key.to_s, shipment_id: sid, order_ids: rs.map { |r| r[:order_id] }, pack_id: rs.first[:pack_id], date: rs.first[:date_created],
           items: rs.flat_map { |r| Array(r[:items]).map { |i| i[:title] } }.uniq.first(3),
           revenue: e.(:revenue).round(2), expected: expected.round(2),
-          lunna_fee: e.(:fee).round(2), lunna_shipping: (e.(:shipping_cost) + (sid ? rs.first.dig(:shipping, :buyer_cost).to_f : 0)).round(2),
+          lunna_fee: e.(:fee).round(2), lunna_coupon: e.(:coupon_cost).round(2), lunna_shipping: (e.(:shipping_cost) + (sid ? rs.first.dig(:shipping, :buyer_cost).to_f : 0)).round(2),
           billed_fee: fee_billed.round(2), billed_shipping: ship_billed.round(2), billed: billing.any? && (fee_billed.nonzero? || ship_billed.nonzero?) ? true : false,
           mp_gross: sale_pays.select { |p| p.status == "approved" }.sum { |p| p.transaction_amount.to_f }.round(2),
           mp_fee: approved.sum { |p| p.ml_fee.to_f + p.mp_fee.to_f + p.financing_fee.to_f }.round(2),
@@ -142,10 +142,10 @@ module Painel
             note: "Lunna: tarifa da venda. Faturado: tarifas de venda do extrato do ML. Mercado Pago: tarifa do ML + processamento + parcelamento sem juros descontados no pagamento." },
           { key: "shipping", label: "Frete (etiqueta cheia)", lunna: sum.(billed, :lunna_shipping), billed: sum.(billed, :billed_shipping), mp: sum.(billed, :mp_shipping),
             note: "Custo do vendedor + parte do comprador. O comprador paga a parte dele num pagamento à parte, creditado na conta (#{money(sum.(billed, :buyer_paid))} aqui)." },
-          { key: "coupon", label: "Cupom com participação do vendedor", lunna: 0.0, billed: nil, mp: sum.(billed, :mp_coupon),
-            note: "Desconto no pagamento quando o cupom tem participação do vendedor. O Lunna ainda não conta esse custo na venda." },
+          { key: "coupon", label: "Cupom com participação do vendedor", lunna: sum.(billed, :lunna_coupon), billed: nil, mp: sum.(billed, :mp_coupon),
+            note: "Desconto no pagamento quando o cupom tem participação do vendedor; o Lunna conta essa parte como custo da venda." },
           { key: "net", label: "Líquido da venda", lunna: sum.(billed, :expected), billed: nil, mp: sum.(billed, :mp_net),
-            note: "Receita − tarifa − frete do vendedor (Lunna) x valor líquido do pagamento no Mercado Pago, já com a parte do comprador no frete." }
+            note: "Receita − tarifa − frete do vendedor − cupom (Lunna) x valor líquido do pagamento no Mercado Pago, já com a parte do comprador no frete." }
         ].map { |l| l.merge(diff: (l[:mp].to_f - l[:lunna].to_f).round(2), sales: billed.size) },
         divergent: list.reject { |r| %w[conferido frete_liberacao].include?(r[:status]) && %w[creditado a_liberar aguardando_relatorio sem_credito].include?(r[:credit]) }
                        .sort_by { |r| [ r[:status] == "diferenca" || r[:credit] == "nao_localizado" ? 0 : 1, -r[:diff].abs ] }.first(150)

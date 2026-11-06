@@ -142,6 +142,7 @@ module Painel
       groups = shipment_groups(orders)
       ads = ads_context(orders, items)
       billed = billed_shipping(orders)
+      @coupons = coupons(orders)
 
       orders.map do |order|
         row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id], ads, billed[order.shipping_id])
@@ -153,6 +154,22 @@ module Painel
     # paga parte do frete, o ML cobra do vendedor a etiqueta cheia (list_cost) e o valor do comprador entra no
     # pagamento da venda; cobrado = previsto + parte do comprador (conferido em 217 de 217 casos em 06/11/2026).
     SHIPPING_CODES = %w[CFFE CXDE CFFI].freeze
+
+    # Cupom com participação do vendedor: o Mercado Pago desconta a parte do vendedor (coupon_fee) no pagamento da
+    # venda. seller = custo do vendedor (entra no lucro); total = desconto dado ao comprador no cupom.
+    COUPON_STATUSES = %w[approved in_mediation authorized].freeze
+
+    def coupons(orders)
+      ids = orders.map(&:order_id)
+      return {} if ids.empty?
+
+      @account.mp_payments.where(order_id: ids, status: COUPON_STATUSES).where("description IS DISTINCT FROM 'marketplace_shipment'")
+        .where("coupon_amount <> 0 OR charges @> '[{\"type\":\"coupon\"}]'")
+        .to_a.group_by(&:order_id).transform_values do |pays|
+          total = pays.sum { |p| Array(p.charges).select { |c| c["type"] == "coupon" && c["from"] != "collector" }.sum { |c| c["amount"].to_f - c["refunded"].to_f } }
+          { seller: pays.sum { |p| p.coupon_amount.to_f }.round(2), total: total.round(2) }
+        end
+    end
 
     def billed_shipping(orders)
       ids = orders.filter_map(&:shipping_id).uniq
@@ -335,13 +352,16 @@ module Painel
       tax = revenue * @company.tax_pct.to_f / 100.0
       fixed = revenue * @company.fixed_expenses_pct.to_f / 100.0
       cost = total_cost(lines, olist, manual)
-      profit = cost.nil? ? nil : revenue - cost - fee - shipping_cost - fixed - tax
+      coupon = (@coupons || {})[order.order_id] || {}
+      coupon_cost = coupon[:seller].to_f
+      profit = cost.nil? ? nil : revenue - cost - fee - shipping_cost - coupon_cost - fixed - tax
       ads_info = ads_for(order, lines, ads)
       after_ads = profit.nil? ? nil : profit - ads_info[:cost]
 
       {
         revenue: revenue, cost: cost, fee: fee, shipping_cost: shipping_cost,
         shipping_known: shipment.present? && !shipment["seller_cost"].nil?,
+        coupon_cost: coupon_cost, coupon_discount: coupon[:total].to_f,
         fixed_expenses: fixed, tax: tax,
         net_profit: profit, net_profit_pct: profit && revenue.positive? ? profit / revenue * 100.0 : nil,
         ads_cost: ads_info[:cost], ads_state: ads_info[:state], ads_lines: ads_info[:lines],
@@ -454,7 +474,7 @@ module Painel
     # parcial: começa no limite).
     def available_months
       @available_months ||= begin
-        first = @zone.today - MAX_DAYS
+        first = data_start
         months = []
         month = @zone.today.beginning_of_month
         while month >= first.beginning_of_month
@@ -466,10 +486,22 @@ module Painel
       end
     end
 
+    # Início dos dados: os últimos 92 dias que a sincronização diária mantém, ou antes, quando há vendas antigas
+    # importadas (até 13 meses).
+    MAX_HISTORY_DAYS = 400
+
+    def data_start
+      @data_start ||= begin
+        oldest = @account.ml_orders.minimum(:date_created)&.in_time_zone(@zone)&.to_date
+        recent = @zone.today - MAX_DAYS
+        [ [ oldest || recent, recent ].min, @zone.today - MAX_HISTORY_DAYS ].max
+      end
+    end
+
     def window
       return @window_override if @window_override
 
-      limit = @zone.today - MAX_DAYS
+      limit = data_start
       if (key = month_key)
         start = Date.strptime(key, "%Y-%m")
         first = [ start, limit ].max
@@ -558,6 +590,9 @@ module Painel
         revenue: revenue, ticket: active.empty? ? nil : revenue / sales_count(active),
         fee: active.sum { |r| r[:economics][:fee] },
         shipping_cost: active.sum { |r| r[:economics][:shipping_cost] },
+        coupon_cost: active.sum { |r| r[:economics][:coupon_cost].to_f },
+        coupon_discount: active.sum { |r| r[:economics][:coupon_discount].to_f },
+        coupon_orders: active.count { |r| r[:economics][:coupon_discount].to_f.positive? || r[:economics][:coupon_cost].to_f.positive? },
         tax: active.sum { |r| r[:economics][:tax] },
         fixed_expenses: active.sum { |r| r[:economics][:fixed_expenses] },
         cost: known.sum { |r| r[:economics][:cost] },

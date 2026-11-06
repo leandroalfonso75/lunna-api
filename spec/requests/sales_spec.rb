@@ -274,14 +274,32 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["daily"].size).to eq(1)
   end
 
-  it "aceita intervalo de datas e limita a 92 dias" do
+  it "aceita intervalo de datas e vai até a venda mais antiga guardada (no máximo 400 dias)" do
     sale(1, at: 10.days.ago)
     sale(2, at: 120.days.ago)
+    sale(3, at: 420.days.ago)
 
-    get "/api/sales", params: { account_id: account.id, from: 200.days.ago.to_date.iso8601, to: Date.current.iso8601 },
+    get "/api/sales", params: { account_id: account.id, from: 500.days.ago.to_date.iso8601, to: Date.current.iso8601 },
       headers: auth_headers(member)
 
-    expect(json["sales"].map { |s| s["order_id"] }).to eq([ 1 ])
+    expect(json["sales"].map { |s| s["order_id"] }).to eq([ 1, 2 ])
+  end
+
+  it "cupom com participação do vendedor entra no custo da venda e mostra o desconto dado" do
+    with_cost("SKU-A", 50)
+    sale(1, at: 2.days.ago)
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+    base = json["sales"].first["economics"]
+    MpPayment.create!(ml_account: account, payment_id: 9001, order_id: 1, status: "approved", coupon_amount: 4,
+           charges: [ { "name" => "coupon_code", "type" => "coupon", "from" => "ml", "amount" => 10, "refunded" => 0 },
+                      { "name" => "coupon_fee", "type" => "coupon", "from" => "collector", "amount" => 4, "refunded" => 0 } ])
+
+    get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
+
+    economics = json["sales"].first["economics"]
+    expect(economics).to include("coupon_cost" => 4.0, "coupon_discount" => 10.0)
+    expect(economics["net_profit"]).to be_within(0.01).of(base["net_profit"] - 4)
+    expect(json["summary"]).to include("coupon_cost" => 4.0, "coupon_orders" => 1)
   end
 
   it "busca por número, comprador, SKU e título" do
