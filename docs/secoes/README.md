@@ -13,6 +13,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 | Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta e resolução no ML (devolução, reembolso total/parcial, mediação); assistente de contestação (A contestar / Contestadas); card Devoluções (expiradas, sem custo, com custos itemizados pelo extrato do ML) |
 | Ads | [ads.md](ads.md) | Campanhas e anúncios de publicidade (Product Ads) dos últimos 3 meses, com ACOS, ROAS e investimento |
 | Promoções | [promocoes.md](promocoes.md) | Central de Promoções do ML por anúncio: promoção atual, melhor oferta pela margem, margens por anúncio e exportação |
+| Financeiro | [financeiro.md](financeiro.md) | DRE do período x período anterior (receita, custos, tarifas, fretes, impostos, Full, devoluções, créditos, Ads), indicadores de saúde, gráficos, extrato do ML e conciliação |
 | Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA; ações com medidas, preço e frete com margem; gerar fotos com IA (OpenRouter), ordenar e publicar no anúncio |
 | Radar Mercado Livre | [radar-ml.md](radar-ml.md) | Consulta de anúncios coletados do Mercado Livre, com histórico de pesquisas |
 | Configurações | [configuracoes.md](configuracoes.md) | Empresa, impostos e margem, usuários e contas do Mercado Livre |

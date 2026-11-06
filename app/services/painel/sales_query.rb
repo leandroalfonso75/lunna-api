@@ -101,6 +101,19 @@ module Painel
       }
     end
 
+    # Seção Financeiro: todas as vendas de uma janela (a do filtro ou outra, ex.: o período anterior), com a mesma conta
+    # da lista e os mesmos filtros, sem paginação. O rateio de Ads segue a janela pedida.
+    def period_rows(from = nil, to = nil)
+      @window_override = [ from, to ] if from && to
+      from, to = window
+      rows = build_rows(apply_filters(@account.ml_orders.where(date_created: from..to)).select(*LIST_COLUMNS, CANCEL_DETAIL).to_a)
+      { from: from, to: to, rows: rows, summary: summary(rows, filtered: filtered?), daily: daily(rows, from, to) }
+    ensure
+      @window_override = nil
+    end
+
+    def current_window = window
+
     def detail(order_id)
       order = @account.ml_orders.includes(:ml_order_items).find_by!(order_id: order_id)
       row = build_rows([ order ]).first
@@ -433,6 +446,8 @@ module Painel
     end
 
     def window
+      return @window_override if @window_override
+
       limit = @zone.today - MAX_DAYS
       if (key = month_key)
         start = Date.strptime(key, "%Y-%m")

@@ -62,6 +62,7 @@ Rails.application.routes.draw do
     delete "ads/decisions/:id", to: "ads#undecide"
     post "ads/sync", to: "ads#sync"
     get "claims", to: "claims#index"
+    get "finance", to: "finance#show"
     get "claims/returns", to: "claims#returns"
     get "claims/contests", to: "claims#contests"
     patch "claims/:id/contest", to: "claims#contest"
