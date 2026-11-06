@@ -7,6 +7,11 @@ class ClaimsController < ApplicationController
 
   before_action :require_admin!, only: [ :reply, :contest, :resolve, :partial_refund_offers, :return_cost ]
 
+  # Card Devoluções: expiradas, efetivadas sem custo, efetivadas com custos (itemizados) e em andamento, com totais.
+  def returns
+    render json: Painel::ReturnsQuery.call(Current.account, params)
+  end
+
   # Assistente de contestação: as que afetam a reputação, no prazo de 60 dias, com grupo, provas e texto sugerido.
   def contests
     render json: Painel::ClaimContest.list(Current.account)

@@ -94,6 +94,33 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   `percentage`, `confirm: true`), `GET /api/claims/:id/partial_refund_offers`; `Painel::ClaimAction`; registro em
   `ml_claim_actions` (quem, quando, ação, resultado) e a reclamação é relida em seguida. Antes de "Oferecer devolução", o card
   mostra o frete da devolução para o vendedor (`GET /api/claims/:id/return_cost` → ML `.../charges/return-cost`: grátis ou o valor).
+- **Devoluções** (card ao lado de Contestar; pedido do usuário em 05/11/2026): as devoluções liberadas pelo ML (com
+  devolução gerada, ou autorizada por `allow_return`/`generate_return`), no período escolhido, em quatro guias
+  (`Painel::ReturnsQuery`, `GET /api/claims/returns?period|month|from|to`):
+  - **Expiradas:** liberadas e não efetivadas — devolução `expired`/`cancelled`/`failed`/`not_delivered`, ou autorizada
+    sem devolução gerada com a reclamação encerrada (o comprador perdeu o prazo ou desistiu). Sem custo: a etiqueta não
+    foi usada, então o custo de devolução não conta.
+  - **Sem custo:** devolvidas (`delivered`) sem nenhum custo para o vendedor.
+  - **Com custos:** devolvidas com custo, itemizado por linha: **Frete de envio retido** (o ML cobrou o frete da venda e
+    não reintegrou), **Frete de devolução**, **Tarifas da venda não devolvidas** (custo por vender/cobrar, taxa de
+    recebimento/parcelamento não canceladas), **Reembolso parcial dado ao comprador** (resolução `partial_refund`
+    aceita, `seller_amount`) e **Outras cobranças** do extrato ligadas à venda depois da abertura da reclamação.
+  - **Em andamento:** etiqueta gerada / a caminho (ainda sem resultado).
+  Fontes: (1) `ml_claims.return_cost` = `GET /post-purchase/v1/claims/{id}/charges/return-cost` (o que o ML cobra do
+  vendedor por aquela devolução; 0 = grátis; lido na importação dos detalhes quando há devolução e preenchido para as
+  265 existentes em 05/11); o custo do envio de retorno (`/shipments/{id}/costs`, `return_shipping`) é só o valor da
+  etiqueta e **não** serve para saber o que foi cobrado. (2) **Extrato de faturamento** da conta
+  (`Ml::Sync::BillingCharges`, `GET /billing/integration/periods/key/{KEY}/group/ML/details`, período aberto e o
+  anterior, 1.000 linhas por página, **limite do ML de 5 chamadas/min** → pausa de 13 s; uma vez por dia na
+  sincronização; tabela `ml_billing_charges`, ligada à venda por `sales_info[0].order_id` e ao envio por
+  `shipping_info.shipping_id`). Categoria pelo código do ML: devolução `DSDB`/`XDED`/`XDID`; envio `FFE`/`XDE`/`FFI`;
+  venda `VVML`/`VVPRC`/`VVFNU`/`VVFN`/`FONPN` (prefixo C = cobrança, B = bonificação/cancelamento). Custo da categoria =
+  cobranças − bonificações da mesma venda/envio; frete de envio e tarifas só contam como custo se a venda foi
+  desfeita (dinheiro devolvido). Frete de devolução: a cobrança do extrato quando já existe, senão `return_cost`.
+  Venda sem linha no extrato (anterior aos períodos guardados): o card avisa "frete de envio: sem linhas no extrato".
+  Resumo no topo (custo total, por tipo, dinheiro devolvido, motivos que mais custam), ordenação (recentes, maior custo,
+  maior reembolso), o extrato de cada venda ao abrir a linha e exportação CSV da guia. Em 05/11/2026: 65 expiradas,
+  142 sem custo, 54 com custos (R$ 2.609,21: devolução R$ 2.306, envio retido R$ 295, tarifas R$ 8) e 17 em andamento.
 - Busca por nº da reclamação ou da venda, comprador (apelido ou nome), produto, SKU ou motivo. Paginação de 50.
 - Linha de andamento da importação (total, abertas, quantas já têm detalhes completos, quando a lista foi lida).
 - Ao clicar: o detalhe completo — o que fazer e prazo (`detail`), venda, mensagens (texto sem HTML; anexos só como
@@ -132,11 +159,12 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   `expected_resolutions`, `evidences`, `changes`, `reputation`, `devolution`, `reason_info`, `resolution_raw`, `raw`).
 
 ## Arquivos
-- API: `app/services/ml/sync/claims_center.rb`, `app/services/painel/claims_query.rb`, `app/services/painel/claim_contest.rb`,
+- API: `app/services/ml/sync/claims_center.rb`, `app/services/ml/sync/billing_charges.rb`, `app/services/painel/claims_query.rb`,
+  `app/services/painel/returns_query.rb`, `app/services/painel/claim_contest.rb`,
   `app/services/painel/claim_reply.rb`, `app/controllers/claims_controller.rb`, `app/models/ml_claim.rb`, `MlClaimContest`, `Ml::Client#claims_search`/`#claim_sub`; testes `spec/services/ml/sync/claims_center_spec.rb`,
   `spec/requests/claims_spec.rb`.
 - Front (`lunna-web-radar`): `app/pages/reclamacoes.vue`, `app/components/reclamacoes/ClaimDetailPanel.vue`,
-  `ClaimAttentionCard.vue`, `ClaimContestCard.vue`, `app/types/claims.ts`; item "Reclamações" no menu, logo abaixo de Vendas.
+  `ClaimAttentionCard.vue`, `ClaimContestCard.vue`, `ReturnsPanel.vue`, `app/types/claims.ts`; item "Reclamações" no menu, logo abaixo de Vendas.
 
 ## Próximos passos (a definir com o usuário)
 - Filtros (tipo, situação, etapa, quem age, prazo, reputação, período, produto) e regras (alertas de prazo, custo das

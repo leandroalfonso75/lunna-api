@@ -167,6 +167,15 @@ module Ml
       write(:post, "/post-purchase/v1/claims/#{claim_id}/#{path}", {}, action == "partial_refund" ? { percentage: percentage } : nil)
     end
 
+    # Extrato de faturamento da conta (card Devoluções): períodos e as linhas de um período (5 chamadas/min no ML).
+    def billing_periods(limit: 2)
+      Array(get("/billing/integration/monthly/periods", group: "ML", document_type: "BILL", offset: 0, limit: limit)["results"])
+    end
+
+    def billing_details(period_key, limit: 1000, offset: 0)
+      get("/billing/integration/periods/key/#{period_key}/group/ML/details", document_type: "BILL", limit: limit, offset: offset)
+    end
+
     # Quanto o vendedor paga pelo frete da devolução, se oferecer a devolução: { currency_id, amount } (0 = grátis).
     def claim_return_cost(claim_id)
       get("/post-purchase/v1/claims/#{claim_id}/charges/return-cost")

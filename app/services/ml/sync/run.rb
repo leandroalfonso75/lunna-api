@@ -61,6 +61,7 @@ module Ml
         sync_billing(client)
         sync_claims(client)
         sync_claims_center(client)
+        sync_billing_charges(client)
         sync_ads(client)
         sync_promotions(client)
         sync_catalog(client)
@@ -168,6 +169,13 @@ module Ml
       def sync_billing(client)
         result = Ml::Sync::BillingInfo.call(client, @account, limit: BILLING_BATCH, since: 95.days.ago)
         @notes.concat(result.notes)
+      end
+
+      # Extrato de faturamento (card Devoluções em Reclamações): período aberto e o anterior, uma vez por dia.
+      def sync_billing_charges(client)
+        return unless Ml::Sync::BillingCharges.due?(@account)
+
+        @notes.concat(Ml::Sync::BillingCharges.call(client, @account, sleeper: @sleeper).notes)
       end
 
       # Seção Reclamações: lista de todas as reclamações e os detalhes de 30 por rodada (Ml::Sync::ClaimsCenter).

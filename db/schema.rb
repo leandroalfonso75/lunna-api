@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_04_180001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_05_230001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -119,6 +119,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_180001) do
     t.datetime "promotions_synced_at"
     t.datetime "claims_listed_at"
     t.datetime "claims_full_listed_at"
+    t.datetime "billing_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -233,6 +234,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_180001) do
     t.index ["ml_account_id", "family_id"], name: "index_ml_ad_items_on_ml_account_id_and_family_id"
   end
 
+  create_table "ml_billing_charges", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "detail_id", null: false
+    t.string "period_key", null: false
+    t.string "detail_type"
+    t.string "detail_sub_type"
+    t.string "transaction_detail"
+    t.decimal "amount", precision: 12, scale: 2
+    t.string "currency_id"
+    t.bigint "order_id"
+    t.bigint "shipment_id"
+    t.string "item_id"
+    t.datetime "charged_at"
+    t.jsonb "raw", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "detail_id"], name: "index_ml_billing_charges_on_ml_account_id_and_detail_id", unique: true
+    t.index ["ml_account_id", "order_id"], name: "index_ml_billing_charges_on_ml_account_id_and_order_id"
+    t.index ["ml_account_id", "shipment_id"], name: "index_ml_billing_charges_on_ml_account_id_and_shipment_id"
+    t.index ["ml_account_id"], name: "index_ml_billing_charges_on_ml_account_id"
+  end
+
   create_table "ml_catalog_checks", force: :cascade do |t|
     t.uuid "ml_account_id", null: false
     t.string "item_id", null: false
@@ -344,6 +367,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_180001) do
     t.datetime "updated_at", null: false
     t.string "reputation_status"
     t.jsonb "return_shipping"
+    t.decimal "return_cost", precision: 12, scale: 2
+    t.datetime "return_cost_at"
     t.index ["ml_account_id", "claim_id"], name: "index_ml_claims_on_ml_account_id_and_claim_id", unique: true
     t.index ["ml_account_id", "date_created"], name: "index_ml_claims_on_ml_account_id_and_date_created"
     t.index ["ml_account_id", "status"], name: "index_ml_claims_on_ml_account_id_and_status"
@@ -1004,6 +1029,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_180001) do
   add_foreign_key "ml_ad_decisions", "users"
   add_foreign_key "ml_ad_item_dailies", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_ad_items", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_billing_charges", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_catalog_checks", "ml_accounts"
   add_foreign_key "ml_catalog_checks", "ml_promotion_actions", column: "action_id"
   add_foreign_key "ml_claim_actions", "ml_accounts", on_delete: :cascade

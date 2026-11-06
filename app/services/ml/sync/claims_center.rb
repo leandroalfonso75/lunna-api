@@ -125,6 +125,12 @@ module Ml
         if attrs[:return_shipping] && (stated = stated_freight(attrs[:messages]))
           attrs[:return_shipping] = attrs[:return_shipping].merge("stated_cost" => stated)
         end
+        # Custo real do frete da devolução para o vendedor (card Devoluções, 05/11/2026): o ML decide por reclamação
+        # (0 = grátis). O custo do envio de retorno (/shipments/{id}/costs) é o valor da etiqueta, não o cobrado.
+        if attrs[:devolution].present?
+          cost = safe(errors, :return_cost) { client.claim_return_cost(claim.claim_id) }
+          attrs.merge!(return_cost: cost["amount"].to_f.round(2), return_cost_at: Time.current) if cost.is_a?(Hash)
+        end
         reason_id = (full || {})["reason_id"] || claim.reason_id
         if reason_id.present? && (reason = reason(client, reason_id, reasons))
           attrs.merge!(reason: reason, reason_name: reason["name"], reason_detail: reason["detail"], reason_flow: reason["flow"])

@@ -31,6 +31,7 @@ RSpec.describe Ml::Sync::ClaimsCenter do
       stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 404, body: "{}")
     else
       stub_request(:get, "#{api}/v2/claims/#{id}/returns").to_return(status: 200, body: { id: 77, status: "label_generated" }.to_json)
+      stub_request(:get, "#{api}/v1/claims/#{id}/charges/return-cost").to_return(status: 200, body: { currency_id: "BRL", amount: 12.5 }.to_json)
     end
     stub_request(:get, "#{api}/v1/claims/reasons/PDD9941").to_return(status: 200, body: { id: "PDD9941", name: "different_color", detail: "Não é da cor que escolhi", flow: "post_purchase_delivered" }.to_json)
   end
@@ -50,6 +51,7 @@ RSpec.describe Ml::Sync::ClaimsCenter do
                                  reason_detail: "Não é da cor que escolhi", reason_flow: "post_purchase_delivered")
     expect(c.messages.first["message"]).to include("<strong>vendedor</strong>")
     expect(c.devolution).to include("id" => 77)
+    expect(c.return_cost).to eq(12.5)
     expect(c.changes_log).to eq([ { "field" => "stage" } ])
     expect(c.detail_errors.keys).to eq([ "evidences" ])
     expect(account.ml_claims.find_by(claim_id: 2)).to have_attributes(order_id: nil, resource: "shipment", devolution: nil,
