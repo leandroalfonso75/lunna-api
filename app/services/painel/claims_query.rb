@@ -43,10 +43,13 @@ module Painel
       Array(Array(claim.players).find { |p| p["role"] == "respondent" }&.dig("available_actions"))
     end
 
-    # A atender: aberta e o ML aguarda o vendedor (é o responsável pela próxima ação ou tem ação obrigatória).
+    # A atender: aberta, o ML aguarda o vendedor (é o responsável pela próxima ação ou tem ação obrigatória) e há o que
+    # fazer. Sem nenhuma ação liberada ao vendedor (ex.: o comprador aceitou a solução e a devolução está em curso), a
+    # reclamação fica só em Abertas.
     def self.to_attend?(claim)
-      claim.status == "opened" &&
-        (SELLER_ROLES.include?(claim.action_responsible.to_s) || seller_actions(claim).any? { |a| a["mandatory"] })
+      actions = seller_actions(claim)
+      claim.status == "opened" && actions.any? &&
+        (SELLER_ROLES.include?(claim.action_responsible.to_s) || actions.any? { |a| a["mandatory"] })
     end
 
     def self.list(account, params) = new(account, params).list

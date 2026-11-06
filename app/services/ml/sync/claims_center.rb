@@ -91,7 +91,7 @@ module Ml
       def self.details(client, account, limit, notes)
         reasons = {}
         done = 0
-        pending(account).order(Arel.sql("details_synced_at IS NOT NULL, date_created DESC")).limit(limit).each do |claim|
+        pending(account).order(Arel.sql("status = 'opened' DESC, details_synced_at IS NOT NULL, date_created DESC")).limit(limit).each do |claim|
           claim.update_columns(fetch_details(client, claim, reasons).merge(details_synced_at: Time.current, updated_at: Time.current))
           done += 1
         rescue Ml::Client::Error => e
@@ -178,7 +178,8 @@ module Ml
       rescue Ml::Client::NotFound
         nil
       rescue Ml::Client::Error => e
-        raise if e.status == 401 || (e.status == 403 && key == :claim)
+        # 401 "not available for Claims 1.0": reclamação antiga sem esse recurso; não é falta de permissão (seguir para as próximas)
+        raise if (e.status == 401 && !e.message.include?("Claims 1.0")) || (e.status == 403 && key == :claim)
 
         errors[key.to_s] = e.message.truncate(200)
         nil

@@ -60,6 +60,20 @@ RSpec.describe Ml::Sync::ClaimsCenter do
     expect(account.reload.claims_full_listed_at).to be_present
   end
 
+  it "reclamação antiga (Claims 1.0) que recusa uma parte com 401 não trava a leitura das seguintes" do
+    old = claim(1, updated: "2026-11-02T09:00:00.000-03:00")
+    stub_search([ claim(2), old ])
+    stub_details(1)
+    stub_request(:get, "#{api}/v1/claims/1/detail").to_return(status: 401, body: { message: "This functionality is not available for Claims 1.0. Please see the documentation" }.to_json)
+    stub_details(2)
+
+    result = described_class.call(client, account)
+
+    expect(result.detailed).to eq(2)
+    expect(account.ml_claims.find_by(claim_id: 1).detail_errors.keys).to include("detail")
+    expect(account.ml_claims.find_by(claim_id: 2).detail_title).to eq("Envie o produto")
+  end
+
   it "depois da lista completa, só relê as alteradas e para quando chega na última leitura" do
     account.update_columns(claims_full_listed_at: 1.hour.ago, claims_listed_at: Time.zone.parse("2026-11-02T12:00:00-03:00"))
     stub_search([ claim(3, updated: "2026-11-03T09:00:00.000-03:00"), claim(1, updated: "2026-10-01T09:00:00.000-03:00") ], total: 500)

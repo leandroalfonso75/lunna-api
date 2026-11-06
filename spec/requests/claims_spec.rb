@@ -184,6 +184,16 @@ RSpec.describe "/api/claims", type: :request do
       expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1, 2 ]) # a atender primeiro, depois pelo prazo
     end
 
+    it "sem nenhuma ação liberada ao vendedor (comprador aceitou a solução), fica só em Abertas" do
+      done = [ { "role" => "complainant", "type" => "buyer", "available_actions" => [] }, { "role" => "respondent", "type" => "seller", "available_actions" => [] } ]
+      claim(4, status: "opened", action_responsible: "respondent", due_date: 3.days.from_now, players: done, details_synced_at: Time.current)
+
+      get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
+
+      expect(json["claims"].map { |c| c["claim_id"] }).to eq([ 1 ])
+      expect(json["attention"]).to include("to_attend" => 1, "open" => 3)
+    end
+
     it "resolve pelo Lunna só com as ações que o ML libera, com confirmação, e registra" do
       refund = stub_request(:post, "#{base}/1/expected-resolutions/refund").to_return(status: 200, body: [ { expected_resolution: "refund" } ].to_json)
       allow(Ml::OAuth).to receive(:refresh!)
