@@ -49,10 +49,13 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
   como "pendente"; "diferente" conta os que o ML cobrou com outro valor; "calendário" é o total do extrato pela data da
   cobrança (mistura outros períodos e canceladas, por isso dava +7% / +12% até 05/11). Ads compara o gasto por dia com
   a tarifa `PADS` deslocada em um dia (o ML lança no dia seguinte). Fretes de devolução: custo por reclamação x tarifas
-  cobradas no período. Achado da investigação de 06/11: as tarifas de venda batem venda a venda (1.335 de 1.344); no
-  frete, em ~12% dos envios o ML cobra o valor cheio da etiqueta (`list_cost`), maior que o custo "previsto" de
-  `/shipments/{id}/costs`; por isso **Vendas passou a usar o frete cobrado no extrato quando ele já existe**
-  (`SalesQuery#billed_shipping`, `shipping.cost_source = "extrato"`, `seller_cost_estimated` guarda o previsto).
+  cobradas no período. Achado da investigação de 06/11: as tarifas de venda
+  batem venda a venda (1.335 de 1.344). No frete, quando o **comprador paga parte do frete** (venda sem frete grátis),
+  o ML cobra do vendedor a **etiqueta cheia** (`list_cost`) e a parte do comprador entra no pagamento da venda:
+  cobrado = previsto + parte do comprador em 217 de 217 casos (60 dias). Não é cobrança a maior. Por isso a conciliação
+  de fretes compara cobrado x (previsto + parte do comprador), lista os envios fora dessa conta (`divergent`) e a base
+  "Extrato" desconta o frete pago pelos compradores. O custo da venda em Vendas segue o previsto (líquido);
+  `shipping.seller_cost_billed` traz o cobrado, só para conferência.
 - Exportação do DRE em CSV. Rodapé com a cobertura dos dados (vendas desde 11/06/2026; extrato desde o início do
   período de faturamento guardado).
 

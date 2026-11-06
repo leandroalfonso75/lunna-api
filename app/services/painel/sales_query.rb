@@ -148,10 +148,10 @@ module Painel
       end
     end
 
-    # Frete realmente cobrado pelo ML no extrato de faturamento (tarifas de envio menos cancelamentos), por envio.
-    # /shipments/{id}/costs informa o custo "previsto" para o vendedor; em parte dos envios o ML cobra o valor cheio
-    # da etiqueta (conciliação de 06/11/2026: 155 de 1.320 envios, +2,6%). Quando o extrato já tem a cobrança, ela
-    # vale como o frete da venda; sem ela, fica o de /costs.
+    # Frete cobrado pelo ML no extrato de faturamento (tarifas de envio menos cancelamentos), por envio, só para
+    # conferência (Financeiro › conciliação). O custo da venda continua o de /shipments/{id}/costs: quando o comprador
+    # paga parte do frete, o ML cobra do vendedor a etiqueta cheia (list_cost) e o valor do comprador entra no
+    # pagamento da venda; cobrado = previsto + parte do comprador (conferido em 217 de 217 casos em 06/11/2026).
     SHIPPING_CODES = %w[CFFE CXDE CFFI].freeze
 
     def billed_shipping(orders)
@@ -245,7 +245,7 @@ module Painel
 
     def row(order, lines, olist, manual, thumbs, group, ads, billed = nil)
       shipment = order.shipment
-      shipment = shipment.merge("seller_cost" => billed, "cost_source" => "extrato", "seller_cost_estimated" => shipment["seller_cost"]) if shipment && billed
+      shipment = shipment.merge("seller_cost_billed" => billed) if shipment && billed
       units = lines.sum { |line| line.quantity.to_i }
       share = shipping_share(shipment, units, group)
       items = lines.map do |line|
@@ -311,7 +311,7 @@ module Painel
         logistic_label: LOGISTICS.fetch(shipment["logistic_type"], shipment["logistic_type"]),
         method_name: shipment["method_name"], tracking_number: shipment["tracking_number"],
         seller_cost: shipment["seller_cost"]&.to_f, seller_cost_share: share,
-        cost_source: shipment["cost_source"] || "ml_costs", seller_cost_estimated: shipment["seller_cost_estimated"]&.to_f,
+        seller_cost_billed: shipment["seller_cost_billed"]&.to_f,
         shared_with: group ? (group[:orders] - [ order_id ]) : [],
         buyer_cost: shipment["buyer_cost"]&.to_f,
         list_cost: shipment["list_cost"]&.to_f,

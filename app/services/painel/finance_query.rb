@@ -111,7 +111,9 @@ module Painel
       ml = ml_groups(from, to, active)
       ads_lunna = ads_cost(from, to)
       fee = @basis == "extrato" ? ml[:venda][:net] : s[:fee]
-      shipping = @basis == "extrato" ? ml[:envio][:net] : s[:shipping_cost]
+      # base extrato: o ML cobra a etiqueta cheia; a parte paga pelos compradores (que veio no pagamento da venda) sai
+      buyer_shipping = active.group_by { |r| r.dig(:shipping, :id) }.sum { |sid, rs| sid ? rs.first.dig(:shipping, :buyer_cost).to_f : 0.0 }
+      shipping = @basis == "extrato" ? ml[:envio][:net] - buyer_shipping : s[:shipping_cost]
       ads = @basis == "extrato" ? ml[:ads][:net] : ads_lunna
       # créditos: bonificações do extrato não ligadas às linhas já líquidas (na base Lunna, as de tarifa/frete das vendas
       # do período contam como crédito, porque a linha de tarifa/frete é a cheia)
@@ -133,7 +135,7 @@ module Painel
         returns: returns, full: ml[:full], other_ml: ml[:outro][:charge], credits: credits, installments: ml[:parcelamento],
         operating: operating, ads: ads, net: net, other_income: other_income, other_expenses: other_expenses, entries: entries, rows: active,
         matched: matched(active, from, to),
-        fee_lunna: s[:fee].to_f, shipping_lunna: s[:shipping_cost].to_f, ads_lunna: ads_lunna, ml: ml,
+        fee_lunna: s[:fee].to_f, shipping_lunna: s[:shipping_cost].to_f, ads_lunna: ads_lunna, ml: ml, buyer_shipping: buyer_shipping,
         orders_without_cost: s[:orders_without_cost].to_i, known_revenue: known.sum { |r| r[:economics][:revenue] },
         daily: period[:daily]
       }
@@ -247,7 +249,7 @@ module Painel
     def basis_note(key, c)
       lunna, extrato = case key
       when :fee then [ c[:fee_lunna], c[:ml][:venda][:net] ]
-      when :shipping then [ c[:shipping_lunna], c[:ml][:envio][:net] ]
+      when :shipping then [ c[:shipping_lunna], c[:ml][:envio][:net] - c[:buyer_shipping].to_f ]
       else [ c[:ads_lunna], c[:ml][:ads][:net] ]
       end
       @basis == "extrato" ? "cobrado no extrato do ML (por venda: #{money(lunna)})" : "por venda, pela data da venda (extrato do ML: #{money(extrato)})"
@@ -336,21 +338,28 @@ module Painel
           fee[:different] += 1 if (b - l).abs >= 0.02
         end
       end
-      ship = { lunna: 0.0, extrato: 0.0, pending: 0, pending_amount: 0.0, different: 0, estimated: 0 }
+      # Frete: o ML cobra do vendedor a etiqueta cheia e o comprador paga a parte dele junto com a venda; o custo
+      # líquido (previsto) = cobrado − parte do comprador. Compara cobrado x (previsto + parte do comprador).
+      ship = { lunna: 0.0, extrato: 0.0, pending: 0, pending_amount: 0.0, different: 0, buyer_paid: 0.0, over: [] }
       active.group_by { |r| r.dig(:shipping, :id) }.each do |sid, rs|
         next unless sid
 
-        l = rs.first.dig(:shipping, :seller_cost).to_f
+        est = rs.first.dig(:shipping, :seller_cost).to_f
+        buyer = rs.first.dig(:shipping, :buyer_cost).to_f
         billed = Array(by_ship[sid]).select { |x| envio.include?(x.detail_sub_type.to_s.sub(/\AB/, "C")) }
-        ship[:lunna] += l
-        ship[:estimated] += 1 if rs.first.dig(:shipping, :cost_source) != "extrato"
+        ship[:lunna] += est + buyer
         if billed.empty?
           ship[:pending] += 1
-          ship[:pending_amount] += l
+          ship[:pending_amount] += est + buyer
         else
           b = billed.sum(&:signed_amount)
           ship[:extrato] += b
-          ship[:different] += 1 if (b - l).abs >= 0.02
+          ship[:buyer_paid] += buyer
+          if (b - est - buyer).abs >= 0.02
+            ship[:different] += 1
+            ship[:over] << { shipment_id: sid, order_id: rs.first[:order_id], date: rs.first[:date_created], logistic: rs.first.dig(:shipping, :logistic_type),
+                             expected: est.round(2), buyer_paid: buyer.round(2), billed: b.round(2), diff: (b - est - buyer).round(2) }
+          end
         end
       end
       # Ads: o ML lança a tarifa do dia no dia seguinte; compara o gasto por dia com a cobrança deslocada em um dia
@@ -372,9 +381,9 @@ module Painel
         item.(:fee, "Tarifas de venda", fee[:lunna] - fee[:pending_amount], fee[:extrato],
               "Mesmas vendas do período. #{fee[:pending]} venda(s) ainda sem cobrança no extrato (#{money(fee[:pending_amount])}) ficam fora; #{fee[:different]} com valor diferente (ajustes do ML, como reembolso parcial da tarifa).",
               { pending: fee[:pending], different: fee[:different], calendar: c[:ml][:venda][:net] }),
-        item.(:shipping, "Fretes", ship[:lunna] - ship[:pending_amount], ship[:extrato],
-              "Mesmos envios do período. #{ship[:pending]} envio(s) ainda sem cobrança no extrato (#{money(ship[:pending_amount])}) ficam fora; quando o extrato já cobrou, o Lunna usa esse valor como frete da venda (#{ship[:estimated]} envio(s) ainda com o custo previsto).",
-              { pending: ship[:pending], different: ship[:different], calendar: c[:ml][:envio][:net] }),
+        item.(:shipping, "Fretes (previsto + parte do comprador)", ship[:lunna] - ship[:pending_amount], ship[:extrato],
+              "Mesmos envios do período. O ML cobra a etiqueta cheia e o comprador paga a parte dele junto com a venda (#{money(ship[:buyer_paid])} neste período); o custo do vendedor é a diferença. #{ship[:pending]} envio(s) ainda sem cobrança ficam fora; #{ship[:different]} cobrado(s) fora dessa conta.",
+              { pending: ship[:pending], different: ship[:different], calendar: c[:ml][:envio][:net], buyer_paid: ship[:buyer_paid].round(2), divergent: ship[:over].sort_by { |o| -o[:diff].abs }.first(50) }),
         item.(:ads, "Product Ads", c[:ads_lunna], m[:ads_extrato],
               "Gasto por dia da seção Ads x tarifa de Product Ads do extrato, que o ML lança no dia seguinte (comparação deslocada em um dia).",
               { calendar: c[:ml][:ads][:net] }),

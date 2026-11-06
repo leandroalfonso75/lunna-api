@@ -406,15 +406,15 @@ RSpec.describe "/api/sales", type: :request do
     expect(json["buyer"]).to include("name" => "Maria Souza", "doc" => "123.456.789-01", "nickname" => "COMPRADOR1")
   end
 
-  it "frete do vendedor passa a ser o cobrado no extrato do ML quando a cobrança já existe" do
-    sale(1, shipment: { "status" => "delivered", "logistic_type" => "fulfillment", "seller_cost" => 21.75 })
+  it "frete do vendedor segue o previsto; o cobrado no extrato do ML (etiqueta cheia quando o comprador paga parte) fica informativo" do
+    sale(1, shipment: { "status" => "delivered", "logistic_type" => "fulfillment", "seller_cost" => 21.75, "buyer_cost" => 4.99 })
     MlBillingCharge.create!(ml_account: account, detail_id: 1, period_key: "2026-11-01", detail_type: "CHARGE", detail_sub_type: "CFFE",
                             transaction_detail: "Tarifa de envio extra ou intermunicipal", amount: 26.74, shipment_id: account.ml_orders.find_by(order_id: 1).shipping_id, charged_at: Time.current)
 
     get "/api/sales", params: { account_id: account.id }, headers: auth_headers(member)
 
     row = json["sales"].find { |r| r["order_id"] == 1 }
-    expect(row["shipping"]).to include("seller_cost" => 26.74, "cost_source" => "extrato", "seller_cost_estimated" => 21.75)
-    expect(row["economics"]["shipping_cost"]).to eq(26.74)
+    expect(row["shipping"]).to include("seller_cost" => 21.75, "seller_cost_billed" => 26.74, "buyer_cost" => 4.99)
+    expect(row["economics"]["shipping_cost"]).to eq(21.75)
   end
 end
