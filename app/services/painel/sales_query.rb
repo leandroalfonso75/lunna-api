@@ -141,8 +141,27 @@ module Painel
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
       groups = shipment_groups(orders)
       ads = ads_context(orders, items)
+      billed = billed_shipping(orders)
 
-      orders.map { |order| row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id], ads) }
+      orders.map do |order|
+        row(order, items[order.order_id] || [], olist, manual, thumbs, groups[order.shipping_id], ads, billed[order.shipping_id])
+      end
+    end
+
+    # Frete realmente cobrado pelo ML no extrato de faturamento (tarifas de envio menos cancelamentos), por envio.
+    # /shipments/{id}/costs informa o custo "previsto" para o vendedor; em parte dos envios o ML cobra o valor cheio
+    # da etiqueta (conciliação de 06/11/2026: 155 de 1.320 envios, +2,6%). Quando o extrato já tem a cobrança, ela
+    # vale como o frete da venda; sem ela, fica o de /costs.
+    SHIPPING_CODES = %w[CFFE CXDE CFFI].freeze
+
+    def billed_shipping(orders)
+      ids = orders.filter_map(&:shipping_id).uniq
+      return {} if ids.empty?
+
+      @account.ml_billing_charges.where(shipment_id: ids).to_a
+        .select { |r| SHIPPING_CODES.include?(r.detail_sub_type.to_s.sub(/\AB/, "C")) }
+        .group_by(&:shipment_id).transform_values { |rows| rows.sum(&:signed_amount).round(2) }
+        .select { |_, net| net.positive? }
     end
 
     # --- custo de Ads por venda ---
@@ -224,8 +243,9 @@ module Painel
       end
     end
 
-    def row(order, lines, olist, manual, thumbs, group, ads)
+    def row(order, lines, olist, manual, thumbs, group, ads, billed = nil)
       shipment = order.shipment
+      shipment = shipment.merge("seller_cost" => billed, "cost_source" => "extrato", "seller_cost_estimated" => shipment["seller_cost"]) if shipment && billed
       units = lines.sum { |line| line.quantity.to_i }
       share = shipping_share(shipment, units, group)
       items = lines.map do |line|
@@ -291,6 +311,7 @@ module Painel
         logistic_label: LOGISTICS.fetch(shipment["logistic_type"], shipment["logistic_type"]),
         method_name: shipment["method_name"], tracking_number: shipment["tracking_number"],
         seller_cost: shipment["seller_cost"]&.to_f, seller_cost_share: share,
+        cost_source: shipment["cost_source"] || "ml_costs", seller_cost_estimated: shipment["seller_cost_estimated"]&.to_f,
         shared_with: group ? (group[:orders] - [ order_id ]) : [],
         buyer_cost: shipment["buyer_cost"]&.to_f,
         list_cost: shipment["list_cost"]&.to_f,

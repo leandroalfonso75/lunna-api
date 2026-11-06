@@ -44,9 +44,15 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
 - **Extrato do Mercado Livre no período**, por grupo (cobrado, devolvido, líquido, linhas): tarifas de venda, fretes,
   devoluções, Product Ads, taxa de parcelamento (**neutra**: o comprador paga o acréscimo e o ML repassa a mesma
   cobrança), Full e outras.
-- **Conciliação Lunna x extrato:** tarifas de venda, fretes, Product Ads e fretes de devolução, com a diferença e %.
-  Diferenças vêm do calendário (venda x cobrança; Ads é cobrado no dia seguinte) e de cancelamentos. Em 05/11, 30 dias:
-  tarifas +7%, fretes +11,5%, Ads +0,9%.
+- **Conciliação Lunna x extrato** (refeita em 06/11/2026 pelas **mesmas vendas e envios**): tarifas de venda e fretes
+  comparam o calculado x o cobrado para as vendas/envios do período; o que ainda não foi cobrado fica fora e aparece
+  como "pendente"; "diferente" conta os que o ML cobrou com outro valor; "calendário" é o total do extrato pela data da
+  cobrança (mistura outros períodos e canceladas, por isso dava +7% / +12% até 05/11). Ads compara o gasto por dia com
+  a tarifa `PADS` deslocada em um dia (o ML lança no dia seguinte). Fretes de devolução: custo por reclamação x tarifas
+  cobradas no período. Achado da investigação de 06/11: as tarifas de venda batem venda a venda (1.335 de 1.344); no
+  frete, em ~12% dos envios o ML cobra o valor cheio da etiqueta (`list_cost`), maior que o custo "previsto" de
+  `/shipments/{id}/costs`; por isso **Vendas passou a usar o frete cobrado no extrato quando ele já existe**
+  (`SalesQuery#billed_shipping`, `shipping.cost_source = "extrato"`, `seller_cost_estimated` guarda o previsto).
 - Exportação do DRE em CSV. Rodapé com a cobertura dos dados (vendas desde 11/06/2026; extrato desde o início do
   período de faturamento guardado).
 

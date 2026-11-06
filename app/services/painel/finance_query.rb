@@ -132,6 +132,7 @@ module Painel
         fee: fee, shipping: shipping, tax: s[:tax].to_f, fixed: s[:fixed_expenses].to_f,
         returns: returns, full: ml[:full], other_ml: ml[:outro][:charge], credits: credits, installments: ml[:parcelamento],
         operating: operating, ads: ads, net: net, other_income: other_income, other_expenses: other_expenses, entries: entries, rows: active,
+        matched: matched(active, from, to),
         fee_lunna: s[:fee].to_f, shipping_lunna: s[:shipping_cost].to_f, ads_lunna: ads_lunna, ml: ml,
         orders_without_cost: s[:orders_without_cost].to_i, known_revenue: known.sum { |r| r[:economics][:revenue] },
         daily: period[:daily]
@@ -310,18 +311,76 @@ module Painel
       end.reject { |g| g[:count].zero? }
     end
 
-    # Conciliação Lunna (por venda, pela data da venda) x extrato do ML (pela data da cobrança), no período.
+    # Conciliação pelas MESMAS vendas e envios do período (06/11/2026): o que o Lunna calculou x o que o extrato cobrou
+    # para elas, quantas ainda não foram cobradas e quantas têm valor diferente. O total do extrato pela data da
+    # cobrança (calendário) vai à parte, porque mistura vendas de outros períodos e canceladas.
+    def matched(active, from, to)
+      order_ids = active.map { |r| r[:order_id] }
+      ship_ids = active.filter_map { |r| r.dig(:shipping, :id) }.uniq
+      rows = @account.ml_billing_charges.where(order_id: order_ids).or(@account.ml_billing_charges.where(shipment_id: ship_ids)).to_a
+      by_order = rows.group_by(&:order_id)
+      by_ship = rows.group_by(&:shipment_id)
+      venda = GROUPS[:venda]
+      envio = GROUPS[:envio]
+      fee = { lunna: 0.0, extrato: 0.0, pending: 0, pending_amount: 0.0, different: 0 }
+      active.each do |r|
+        l = r[:economics][:fee].to_f
+        billed = Array(by_order[r[:order_id]]).select { |x| venda.include?(x.detail_sub_type.to_s.sub(/\AB/, "C")) }
+        fee[:lunna] += l
+        if billed.empty?
+          fee[:pending] += 1
+          fee[:pending_amount] += l
+        else
+          b = billed.sum(&:signed_amount)
+          fee[:extrato] += b
+          fee[:different] += 1 if (b - l).abs >= 0.02
+        end
+      end
+      ship = { lunna: 0.0, extrato: 0.0, pending: 0, pending_amount: 0.0, different: 0, estimated: 0 }
+      active.group_by { |r| r.dig(:shipping, :id) }.each do |sid, rs|
+        next unless sid
+
+        l = rs.first.dig(:shipping, :seller_cost).to_f
+        billed = Array(by_ship[sid]).select { |x| envio.include?(x.detail_sub_type.to_s.sub(/\AB/, "C")) }
+        ship[:lunna] += l
+        ship[:estimated] += 1 if rs.first.dig(:shipping, :cost_source) != "extrato"
+        if billed.empty?
+          ship[:pending] += 1
+          ship[:pending_amount] += l
+        else
+          b = billed.sum(&:signed_amount)
+          ship[:extrato] += b
+          ship[:different] += 1 if (b - l).abs >= 0.02
+        end
+      end
+      # Ads: o ML lança a tarifa do dia no dia seguinte; compara o gasto por dia com a cobrança deslocada em um dia
+      ads_extrato = @account.ml_billing_charges.where(charged_at: (from + 1.day)..(to + 1.day)).to_a
+        .select { |x| %w[PADS BPAD].include?(x.detail_sub_type) }.sum(&:signed_amount)
+      { fee: fee, shipping: ship, ads_extrato: ads_extrato }
+    end
+
     def reconciliation(c)
-      item = ->(key, label, lunna, extrato, note) do
+      m = c[:matched]
+      item = ->(key, label, lunna, extrato, note, extra = {}) do
         diff = (extrato.to_f - lunna.to_f).round(2)
         { key: key, label: label, lunna: lunna.to_f.round(2), extrato: extrato.to_f.round(2), diff: diff,
-          diff_pct: lunna.to_f.abs > 0.005 ? (diff / lunna.to_f * 100).round(1) : nil, note: note }
+          diff_pct: lunna.to_f.abs > 0.005 ? (diff / lunna.to_f * 100).round(1) : nil, note: note, **extra }
       end
+      fee = m[:fee]
+      ship = m[:shipping]
       [
-        item.(:fee, "Tarifas de venda", c[:fee_lunna], c[:ml][:venda][:net], "Lunna: tarifa de cada venda do período. Extrato: custo por vender/cobrar, taxa de recebimento, menos cancelamentos."),
-        item.(:shipping, "Fretes", c[:shipping_lunna], c[:ml][:envio][:net], "Lunna: frete do vendedor de cada venda. Extrato: tarifas de envio menos cancelamentos."),
-        item.(:ads, "Product Ads", c[:ads_lunna], c[:ml][:ads][:net], "Lunna: gasto por dia da seção Ads. Extrato: tarifa de Product Ads (costuma ser cobrada no dia seguinte)."),
-        item.(:returns, "Fretes de devolução", c[:returns][:by_kind]["frete_devolucao"].to_f, c[:ml][:devolucao][:net], "Lunna: custo por devolução informado pelo ML. Extrato: tarifas de devolução cobradas.")
+        item.(:fee, "Tarifas de venda", fee[:lunna] - fee[:pending_amount], fee[:extrato],
+              "Mesmas vendas do período. #{fee[:pending]} venda(s) ainda sem cobrança no extrato (#{money(fee[:pending_amount])}) ficam fora; #{fee[:different]} com valor diferente (ajustes do ML, como reembolso parcial da tarifa).",
+              { pending: fee[:pending], different: fee[:different], calendar: c[:ml][:venda][:net] }),
+        item.(:shipping, "Fretes", ship[:lunna] - ship[:pending_amount], ship[:extrato],
+              "Mesmos envios do período. #{ship[:pending]} envio(s) ainda sem cobrança no extrato (#{money(ship[:pending_amount])}) ficam fora; quando o extrato já cobrou, o Lunna usa esse valor como frete da venda (#{ship[:estimated]} envio(s) ainda com o custo previsto).",
+              { pending: ship[:pending], different: ship[:different], calendar: c[:ml][:envio][:net] }),
+        item.(:ads, "Product Ads", c[:ads_lunna], m[:ads_extrato],
+              "Gasto por dia da seção Ads x tarifa de Product Ads do extrato, que o ML lança no dia seguinte (comparação deslocada em um dia).",
+              { calendar: c[:ml][:ads][:net] }),
+        item.(:returns, "Fretes de devolução", c[:returns][:by_kind]["frete_devolucao"].to_f, c[:ml][:devolucao][:net],
+              "Lunna: custo por devolução que o ML informa, pelas reclamações abertas no período. Extrato: tarifas de devolução cobradas no período (a cobrança vem dias depois da abertura).",
+              { calendar: c[:ml][:devolucao][:net] })
       ]
     end
 

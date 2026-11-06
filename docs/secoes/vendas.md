@@ -110,3 +110,9 @@ Implementado em `Painel::SalesQuery#economics`.
 - Custo Ads é um rateio pelo período: o Mercado Livre não informa qual venda veio de qual clique.
 - Formato (30/10): valores em R$; sob cada custo (tarifa, frete, imposto, despesas fixas, custo Ads) o % sobre a receita da
   venda (R$ em vermelho, % em preto); lucro líquido e lucro pós Ads com R$ em cima e % embaixo.
+
+## Frete do vendedor pelo extrato (06/11/2026)
+O frete de cada venda vem de `/shipments/{id}/costs` (custo previsto para o vendedor). Quando o extrato de faturamento
+do ML (`ml_billing_charges`, seção Financeiro) já tem a cobrança do envio (tarifas de envio menos cancelamentos), esse
+valor cobrado passa a ser o frete da venda (`shipping.seller_cost`, `cost_source: "extrato"`; o previsto fica em
+`seller_cost_estimated`). Motivo: em ~12% dos envios o ML cobra o valor cheio da etiqueta, maior que o previsto.

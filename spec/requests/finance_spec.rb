@@ -61,8 +61,9 @@ RSpec.describe "/api/finance (seção Financeiro)", type: :request do
     expect(json["charts"]["daily"].size).to eq(1)
     expect(json["charts"]["daily"].first).to include("revenue" => 200.0, "previous_revenue" => 100.0, "profit" => 200.0 - 80 - 30 - 20 - 20 - 4 - 12)
     expect(json["statement_ml"].find { |g| g["group"] == "parcelamento" }).to include("neutral" => true, "net" => 9.0)
-    expect(json["reconciliation"].find { |r| r["key"] == "fee" }).to include("lunna" => 30.0, "extrato" => 14.0, "diff" => -16.0)
-    expect(json["reconciliation"].find { |r| r["key"] == "ads" }).to include("lunna" => 12.0, "extrato" => 11.0)
+    # conciliação pelas mesmas vendas: a venda 2 ainda não foi cobrada (fica fora); a venda 1 foi cobrada 14 contra 15 do Lunna
+    expect(json["reconciliation"].find { |r| r["key"] == "fee" }).to include("lunna" => 15.0, "extrato" => 14.0, "diff" => -1.0, "pending" => 1, "different" => 1)
+    expect(json["reconciliation"].find { |r| r["key"] == "ads" }).to include("lunna" => 12.0, "extrato" => 0.0) # PADS de hoje só entra amanhã
 
     get "/api/finance", params: { account_id: account.id, period: "today", basis: "extrato" }, headers: auth_headers(member)
     lines = json["statement"].to_h { |l| [ l["key"], l ] }
