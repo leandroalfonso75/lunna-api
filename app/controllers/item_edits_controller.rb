@@ -64,7 +64,8 @@ class ItemEditsController < ApplicationController
   end
 
   def publish_price
-    result = Ml::ItemPrice.publish(client, Current.account, item_id, params[:price], user: Current.user)
+    result = Ml::ItemPrice.publish(client, Current.account, item_id, params[:price], user: Current.user,
+                                   free_shipping: ActiveModel::Type::Boolean.new.cast(params[:free_shipping]) == true)
     render json: { ok: result.ok, message: result.message, price: result.price, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e

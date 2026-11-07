@@ -436,7 +436,7 @@ module Abc
       today = { label: "Hoje (comprador paga o frete)", price: price, fee: @unit[:fee].to_f.round(2), shipping: @unit[:shipping].to_f.round(2),
                 tax: @unit[:tax].to_f.round(2), cost: @unit[:cost]&.round(2), today: true }
       with_free = today.merge(label: "Com frete grátis (você paga R$ #{format('%.2f', free.to_f).tr('.', ',')})", shipping: free.to_f.round(2),
-                              today: false, same_price: true)
+                              today: false, same_price: true, free_shipping: true)
       opts = [ today, with_free ].map do |o|
         profit = o[:price] - o[:fee] - o[:shipping] - o[:tax] - o[:cost].to_f
         o.merge(profit: profit.round(2), margin_pct: (profit / o[:price] * 100).round(1), low: o[:cost] ? profit / o[:price] * 100 < @params.min_margin_pct : false)
@@ -446,7 +446,7 @@ module Abc
         if p
           label = "Frete grátis mantendo a margem de hoje"
           label += p >= 79 ? " (a partir de R$ 79 o frete grátis é obrigatório; frete de R$ #{format('%.2f', cost).tr('.', ',')} nessa faixa)" : ""
-          opts << price_option(label, p, @unit[:fee].to_f / price).merge(shipping: cost.round(2), label: label).then { |o| recalc(o) }
+          opts << price_option(label, p, @unit[:fee].to_f / price).merge(shipping: cost.round(2), label: label, free_shipping: true).then { |o| recalc(o) }
         end
       end
       opts
