@@ -195,10 +195,7 @@ module Ml
       end
       private_class_method :missing_attrs
 
-      def self.excluded?(attribute)
-        tags = attribute["tags"] || {}
-        attribute["id"] == "SELLER_SKU" || tags["read_only"] || tags["hidden"] || tags["fixed"]
-      end
+      def self.excluded?(attribute) = Ml::SpecRules.excluded?(attribute)
       private_class_method :excluded?
 
       def self.required?(attribute)

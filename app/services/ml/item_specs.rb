@@ -34,6 +34,11 @@ module Ml
       attrs = values.to_h.filter_map do |id, v|
         v = v.to_h.stringify_keys
         next unless fields[id.to_s]
+        if ActiveModel::Type::Boolean.new.cast(v["not_applicable"])
+          next unless fields[id.to_s][:not_applicable]
+
+          next { id: id.to_s, value_id: Ml::SpecRules::NOT_APPLICABLE, value_name: nil }
+        end
         next if v["value_id"].blank? && v["value_name"].to_s.strip.blank?
 
         v["value_id"].present? ? { id: id.to_s, value_id: v["value_id"].to_s } : { id: id.to_s, value_name: v["value_name"].to_s.strip }
@@ -58,7 +63,7 @@ module Ml
         values: Array(a["values"]).first(MAX_VALUES).map { |v| { id: v["id"], name: v["name"] } },
         free_text: !tags["fixed_values"] && a["value_type"] != "boolean",
         units: Array(a["allowed_units"]).map { |u| { id: u["id"], name: u["name"] } }, default_unit: a["default_unit"],
-        max_length: a["value_max_length"] }
+        max_length: a["value_max_length"], not_applicable: Ml::SpecRules.allows_not_applicable?(a) }
     end
 
     def refresh_local(ids)
@@ -71,14 +76,7 @@ module Ml
                          attrs_missing_main: Array(row.attrs_missing_main) - names)
     end
 
-    def excluded?(a)
-      tags = a["tags"] || {}
-      a["id"] == "SELLER_SKU" || tags["read_only"] || tags["hidden"] || tags["fixed"]
-    end
-
-    def required?(a)
-      tags = a["tags"] || {}
-      !!(tags["required"] || tags["catalog_required"])
-    end
+    def excluded?(a) = Ml::SpecRules.excluded?(a)
+    def required?(a) = Ml::SpecRules.required?(a)
   end
 end

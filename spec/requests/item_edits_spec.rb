@@ -74,18 +74,22 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
         { id: "BRAND", name: "Marca", value_type: "string", tags: { required: true }, relevance: 1 },
         { id: "MAIN_COLOR", name: "Cor principal", value_type: "list", tags: { fixed_values: true }, relevance: 1, values: [ { id: "52049", name: "Rosa" } ] },
         { id: "SELLER_SKU", name: "SKU", value_type: "string", tags: {}, relevance: 1 },
-        { id: "OTHER", name: "Outro", value_type: "string", tags: {}, relevance: 2 }
+        { id: "OTHER", name: "Outro", value_type: "string", tags: {}, relevance: 2 },
+        { id: "ANVISA_PRIOR_NOTIFICATION_COMMUNICATION_DOCUMENT_NUMBER", name: "Número Anvisa", value_type: "string", tags: {}, relevance: 1 },
+        { id: "IS_PLUMPING", name: "É engrossador", value_type: "boolean", tags: {}, relevance: 1, values: [ { id: "242085", name: "Sim" }, { id: "242084", name: "Não" } ] }
       ].to_json)
     end
 
     it "lista só os campos que faltam e publica os preenchidos (admin, confirmação)" do
       get "/api/items/MLB1/specs", params: { account_id: account.id }, headers: auth_headers(member)
-      expect(json["fields"].map { |f| f["id"] }).to eq([ "MAIN_COLOR" ])
-      expect(json["fields"].first).to include("free_text" => false)
+      expect(json["fields"].map { |f| f["id"] }).to eq([ "MAIN_COLOR", "IS_PLUMPING" ]) # documento regulatório fica de fora
+      expect(json["fields"].first).to include("free_text" => false, "not_applicable" => true)
 
-      put = stub_request(:put, "#{ml}/items/MLB1").with(body: { attributes: [ { id: "MAIN_COLOR", value_id: "52049" } ] }.to_json)
+      put = stub_request(:put, "#{ml}/items/MLB1")
+        .with(body: { attributes: [ { id: "MAIN_COLOR", value_id: "52049" }, { id: "IS_PLUMPING", value_id: "-1", value_name: nil } ] }.to_json)
         .to_return(status: 200, body: "{}")
-      post "/api/items/MLB1/specs", params: { account_id: account.id, confirm: true, values: { MAIN_COLOR: { value_id: "52049" }, BRAND: { value_name: "X" } } },
+      post "/api/items/MLB1/specs", params: { account_id: account.id, confirm: true,
+                                              values: { MAIN_COLOR: { value_id: "52049" }, BRAND: { value_name: "X" }, IS_PLUMPING: { not_applicable: true } } },
                                     headers: auth_headers(admin), as: :json
 
       expect(response).to have_http_status(:ok)
