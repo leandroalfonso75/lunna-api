@@ -8,7 +8,8 @@ require "set"
 # params (Abc::Params). Serviço puro.
 module Abc
   class SuggestionEngine
-    Context = Struct.new(:item, :metric, :curve, :group, :price, :conversion_median, :params, :economics, :in_ads, keyword_init: true)
+    Context = Struct.new(:item, :metric, :curve, :group, :price, :conversion_median, :params, :economics, :in_ads, :title_rule,
+                         keyword_init: true)
 
     BANNED_TERMS = %w[
       frete\ gratis promocao oferta desconto barato imperdivel queima liquidacao
@@ -36,6 +37,7 @@ module Abc
       @params = ctx.params
       @unit = ctx.economics&.unit
       @in_ads = ctx.in_ads
+      @title_rule = ctx.title_rule || { editable: true }
     end
 
     def call
@@ -51,6 +53,11 @@ module Abc
     def stock = @metric&.stock.to_i
     def details_loaded? = @item&.details_checked_at.present?
     def normalize(text) = I18n.transliterate(text.to_s).downcase
+
+    # O ML só deixa trocar o título de anúncio sem venda (modelo User Products: nenhum anúncio do mesmo produto vendeu)
+    # e fora do catálogo. Sem poder trocar, as sugestões de título não aparecem (pedido do usuário em 07/11/2026).
+    def title_editable? = @title_rule[:editable] != false
+    def title_action = { kind: "alterar_titulo" }
 
     # 1 — Status: pausado que vendeu nos últimos 60 dias (30d atual + 30d
     # anterior) → reativar.
@@ -104,7 +111,8 @@ module Abc
       return [] unless @price[:kind] == "suggestion" && @price[:diff_pct].to_f > 0
 
       pct = @price[:diff_pct].to_f.round(1)
-      [ suggestion(2, "preço", "Avaliar aumento de preço", "Preço sugerido #{pct}% acima do atual — há espaço para subir.",
+      [ suggestion(2, "preço", "Avaliar aumento de preço",
+                   "Você está #{pct}% abaixo do preço de referência do Mercado Livre (o preço que ele considera competitivo frente "                    "a anúncios parecidos). Dá para subir até a referência e ganhar margem sem deixar de ser competitivo; "                    "não é para ganhar exposição — acima da referência a exposição pode cair.",
                    options: price_options) ]
     end
 
@@ -152,37 +160,44 @@ module Abc
 
     # 11 — Título com menos de 40 caracteres.
     def rule_title_short
-      return [] unless title.length < 40
+      return [] unless title_editable? && title.length < 40
 
-      [ suggestion(2, "título", "Ampliar título", "Título com menos de 40 caracteres — detalhe mais o produto.") ]
+      [ suggestion(2, "título", "Ampliar título", "Título com menos de 40 caracteres — detalhe mais o produto.", action: title_action) ]
     end
 
     # 12 — Marca (quando houver) ausente no título.
     def rule_title_brand
+      return [] unless title_editable?
+
       brand = @item&.brand.to_s.strip
       return [] if brand.blank?
       return [] if normalize(title).include?(normalize(brand))
 
-      [ suggestion(2, "título", "Incluir marca no título", "A marca \"#{brand}\" não aparece no título.") ]
+      [ suggestion(2, "título", "Incluir marca no título", "A marca \"#{brand}\" não aparece no título.", action: title_action) ]
     end
 
     # 13 — Modelo (> 2 caracteres) ausente no título curto (< 55).
     def rule_title_model
+      return [] unless title_editable?
+
       model = @item&.model.to_s.strip
       return [] if model.length <= 2
       return [] if title.length >= 55
       return [] if normalize(title).include?(normalize(model))
 
-      [ suggestion(3, "título", "Incluir modelo no título", "O modelo \"#{model}\" não aparece no título.") ]
+      [ suggestion(3, "título", "Incluir modelo no título", "O modelo \"#{model}\" não aparece no título.", action: title_action) ]
     end
 
     # 14 — Título com termos proibidos pela política do ML.
     def rule_policy_terms
+      return [] unless title_editable?
+
       normalized = normalize(title)
       matched = BANNED_TERMS.select { |term| normalized.include?(term) }
       return [] if matched.empty?
 
-      [ suggestion(1, "política", "Remover termos não permitidos do título", "Termos que violam a política do Mercado Livre: #{matched.join(', ')}.") ]
+      [ suggestion(1, "política", "Remover termos não permitidos do título", "Termos que violam a política do Mercado Livre: #{matched.join(', ')}.",
+                   action: title_action) ]
     end
 
     # 15 — Atributos obrigatórios faltando (detalhes precisam ter carregado).
@@ -192,7 +207,8 @@ module Abc
       missing = Array(@item&.attrs_missing_required)
       return [] if missing.empty?
 
-      [ suggestion(1, "ficha técnica", "Completar atributos obrigatórios", "Atributos obrigatórios faltando: #{missing.join(', ')}.") ]
+      [ suggestion(1, "ficha técnica", "Completar atributos obrigatórios", "Atributos obrigatórios faltando: #{missing.join(', ')}.",
+                   action: { kind: "alterar_ficha" }) ]
     end
 
     # 16 — Características principais faltando.
@@ -202,7 +218,8 @@ module Abc
       missing = Array(@item&.attrs_missing_main)
       return [] if missing.empty?
 
-      [ suggestion(2, "ficha técnica", "Completar características principais", "Características principais faltando: #{missing.join(', ')}.") ]
+      [ suggestion(2, "ficha técnica", "Completar características principais", "Características principais faltando: #{missing.join(', ')}.",
+                   action: { kind: "alterar_ficha" }) ]
     end
 
     # 17 — Menos de 3 fotos.
@@ -228,7 +245,7 @@ module Abc
       return [] if @item&.has_video
       return [] unless %w[A B].include?(@curve)
 
-      [ suggestion(3, "vídeo", "Adicionar vídeo", "Sem vídeo no anúncio — ajuda a converter mais nas curvas A e B.") ]
+      [ suggestion(3, "vídeo", "Adicionar vídeo", "Sem vídeo no anúncio — ajuda a converter mais nas curvas A e B.", action: ciente_action) ]
     end
 
     # 20 — Sem descrição (detalhes carregados).
@@ -258,7 +275,8 @@ module Abc
       return [] unless %w[A B].include?(@curve)
       return [] unless installment_recommended?
 
-      [ suggestion(3, "tipo de anúncio", "Testar anúncio Premium", "Preço alto e o Mercado Livre recomenda parcelamento — o tipo Premium pode ajudar.") ]
+      [ suggestion(3, "tipo de anúncio", "Testar anúncio Premium", "Preço alto e o Mercado Livre recomenda parcelamento — o tipo Premium pode ajudar.",
+                   action: ciente_action) ]
     end
 
     def installment_recommended?
@@ -296,7 +314,8 @@ module Abc
         next nil if key.present? && !seen.add?(key)
 
         priority = score < 70 ? 2 : 3
-        suggestion(priority, "qualidade", entry["title"].presence || "Ajustar qualidade do anúncio", entry["label"].presence || entry["title"].to_s)
+        suggestion(priority, "qualidade", entry["title"].presence || "Ajustar qualidade do anúncio", entry["label"].presence || entry["title"].to_s,
+                   action: ciente_action, key: "qualidade:#{key.presence || entry['title']}")
       end
     end
 
@@ -315,13 +334,19 @@ module Abc
       [ suggestion(3, "dados", "Aguardar carregamento dos detalhes", "Detalhes de cadastro ainda não foram carregados pelo Mercado Livre.") ]
     end
 
-    def suggestion(priority, area, title, why, **extra) = { priority: priority, area: area, title: title, why: why, **extra.compact }
+    # key: identifica a sugestão para o "Ciente" (área + título, ou a chave do ML nas de qualidade).
+    def suggestion(priority, area, title, why, key: nil, **extra)
+      { priority: priority, area: area, title: title, why: why, key: key || "#{area}:#{title}", **extra.compact }
+    end
+
+    # Vídeo, Tipo de anúncio e Qualidade: o Lunna não faz por você; "Ciente, aplicada" ou "Ciente, aguardar" (volta em 15 dias).
+    def ciente_action = { kind: "ciente" }
 
     # --- Exposição: medidas concretas, conforme o que o anúncio já tem (pedido do usuário em 04/11/2026) ---
     def exposure_steps
       steps = []
       steps << "Colocar o anúncio no Product Ads (campanha com ROAS objetivo pela margem): é a forma mais rápida de ganhar visitas." unless @in_ads
-      steps << "Revisar o título: as palavras que o comprador busca primeiro (produto, marca, modelo, característica principal), até 60 caracteres." if title.length < 55
+      steps << "Revisar o título: as palavras que o comprador busca primeiro (produto, marca, modelo, característica principal), até 60 caracteres." if title_editable? && title.length < 55
       steps << "Entrar nas promoções do Mercado Livre que cabem na margem (aba Promoções): o selo de desconto aumenta cliques e posição."
       steps << "Oferecer frete grátis: anúncios com frete grátis ganham destaque na busca." unless @item&.free_shipping || @metric.free_shipping
       steps << "Enviar para o Full: o selo Full e a entrega rápida melhoram a posição na busca." unless full?

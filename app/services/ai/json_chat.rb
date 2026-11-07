@@ -1,0 +1,40 @@
+# Chamada simples (sem streaming) à OpenRouter com o modelo de texto da empresa, pedindo um JSON de volta.
+# Usada pelas sugestões de título e de ficha técnica da Curva ABC.
+module Ai
+  class JsonChat
+    URL = "https://openrouter.ai/api/v1/chat/completions"
+    DEFAULT_MODEL = "google/gemini-2.5-flash" # quando a empresa só cadastrou a chave (sem modelo de texto)
+
+    class Error < StandardError; end
+
+    def self.call(company, system:, user:, http: nil, max_tokens: 2000) = new(company, system, user, http, max_tokens).call
+
+    def initialize(company, system, user, http, max_tokens)
+      @company = company
+      @system = system
+      @user = user
+      @http = http || Faraday.new { |f| f.options.timeout = 90; f.options.open_timeout = 10 }
+      @max_tokens = max_tokens
+    end
+
+    def call
+      raise Error, "Cadastre a chave da OpenRouter (Chave da API) em Configurações › Empresa." if @company.openrouter_api_key.blank?
+
+      response = @http.post(URL) do |req|
+        req.headers["Authorization"] = "Bearer #{@company.openrouter_api_key}"
+        req.headers["Content-Type"] = "application/json"
+        req.headers["X-Title"] = "Lunna"
+        req.body = { model: @company.ai_model.presence || DEFAULT_MODEL, max_tokens: @max_tokens, reasoning: { enabled: false }, response_format: { type: "json_object" },
+                     messages: [ { role: "system", content: @system }, { role: "user", content: @user } ] }.to_json
+      end
+      raise Error, "A IA não respondeu agora (status #{response.status}). Tente de novo." unless (200...300).cover?(response.status)
+
+      text = JSON.parse(response.body).dig("choices", 0, "message", "content").to_s
+      JSON.parse(text[/\{.*\}/m] || "{}")
+    rescue JSON::ParserError
+      raise Error, "A IA devolveu uma resposta que o Lunna não entendeu. Tente de novo."
+    rescue Faraday::ConnectionFailed, Faraday::TimeoutError
+      raise Error, "A IA demorou demais para responder. Tente de novo."
+    end
+  end
+end

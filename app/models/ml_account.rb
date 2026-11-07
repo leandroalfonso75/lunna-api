@@ -12,6 +12,8 @@ class MlAccount < ApplicationRecord
   has_many :ml_claim_contests, dependent: :delete_all
   has_many :ml_claim_actions, dependent: :delete_all
   has_many :finance_entries, dependent: :delete_all
+  has_many :ml_item_edits, dependent: :delete_all
+  has_many :abc_suggestion_acks, dependent: :delete_all
   has_many :mp_payments, dependent: :delete_all
   has_many :mp_release_lines, dependent: :delete_all
   has_many :ml_billing_charges, dependent: :delete_all

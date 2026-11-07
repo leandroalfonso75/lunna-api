@@ -44,7 +44,8 @@ module Abc
 
     def cached
       last_run_id = @account.ml_sync_runs.order(started_at: :desc).limit(1).pick(:id)
-      cache_key = [ "abc", @account.id, last_run_id, @account.company.updated_at.to_i, Date.current ]
+      acks = @account.abc_suggestion_acks.pick(Arel.sql("MAX(updated_at)"), Arel.sql("COUNT(*) FILTER (WHERE until_at > now())"))
+      cache_key = [ "abc", @account.id, last_run_id, @account.company.updated_at.to_i, Date.current, acks&.first&.to_f, acks&.last ]
       Rails.cache.fetch(cache_key) { compute }
     end
 
@@ -63,6 +64,8 @@ module Abc
       @olist_costs = Olist::UnitCost.for_skus(@account.company, metrics.filter_map(&:sku).uniq - costs_by_sku.keys)
       missing = metrics.reject { |m| m.sku.present? && (costs_by_sku[m.sku] || @olist_costs[m.sku]) }.map(&:item_id)
       @variation_costs = Painel::VariationCost.for_items(@account, missing)
+      @up_sold = Ml::TitleRule.up_sold(@account)
+      @acks = @account.abc_suggestion_acks.active.pluck(:item_id, :key).group_by(&:first).transform_values { |l| l.map(&:last).to_set }
       entries = build_entries(metrics, items_by_id, costs_by_sku, classification, classified_by_id)
       universe_rows = classification.rows.map { |row| row_payload(entries[row.metric.item_id]) }
       details = details_payload(classification, entries)
@@ -91,8 +94,9 @@ module Abc
         ctx = Abc::SuggestionEngine::Context.new(
           item: item, metric: metric, curve: classified&.curve, group: classified&.group,
           price: price, conversion_median: classification.conversion_median, params: @params,
-          economics: economics, in_ads: ads_item_ids.include?(metric.item_id)
+          economics: economics, in_ads: ads_item_ids.include?(metric.item_id), title_rule: Ml::TitleRule.call(item, @up_sold)
         )
+        hidden = @acks[metric.item_id] || Set.new
 
         memo[metric.item_id] = {
           metric: metric, item: item,
@@ -100,7 +104,8 @@ module Abc
           share_pct: classified&.share_pct, cum_pct: classified&.cum_pct,
           units_change_pct: classified&.units_change_pct, units_change_state: classified&.units_change_state,
           is_new: classified&.is_new, economics: economics, price: price,
-          suggestions: Abc::SuggestionEngine.call(ctx),
+          suggestions: Abc::SuggestionEngine.call(ctx).reject { |sg| hidden.include?(sg[:key]) },
+          title_rule: ctx.title_rule,
           conversion_median: classification.conversion_median
         }
       end
@@ -171,7 +176,8 @@ module Abc
           description_len: item&.description_len, title_len: metric.title.to_s.length,
           quality_score: item&.quality_score, listing_type_label: Painel::Labels.listing_type(metric.listing_type)
         },
-        price: entry[:price], suggestions: entry[:suggestions], links: Painel::Labels.links(metric.item_id)
+        price: entry[:price], suggestions: entry[:suggestions], links: Painel::Labels.links(metric.item_id),
+        title_rule: entry[:title_rule]
       }
     end
 

@@ -81,7 +81,7 @@ RSpec.describe "Curva ABC (/api/abc)", type: :request do
       expect(response).to have_http_status(:ok)
 
       expect(numeric_strings(json)).to be_empty
-      expect(json.keys).to contain_exactly("indicators", "month", "unit", "listing", "price", "suggestions", "links")
+      expect(json.keys).to contain_exactly("indicators", "month", "unit", "listing", "price", "suggestions", "links", "title_rule")
       expect(json["links"]["public"]).to eq("https://produto.mercadolivre.com.br/MLB-1")
     end
 

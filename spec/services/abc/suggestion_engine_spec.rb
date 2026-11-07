@@ -2,10 +2,10 @@ require "rails_helper"
 
 RSpec.describe Abc::SuggestionEngine do
   def call(item: build_item, metric: build_metric, curve: nil, group: nil, price: { kind: "none" }, median: nil, params: abc_params,
-           cost: nil, in_ads: nil)
+           cost: nil, in_ads: nil, title_rule: nil)
     economics = cost && Abc::Economics.call(metric: metric, item: item, cost: cost, params: params)
     ctx = described_class::Context.new(item: item, metric: metric, curve: curve, group: group, price: price, conversion_median: median,
-                                       params: params, economics: economics, in_ads: in_ads)
+                                       params: params, economics: economics, in_ads: in_ads, title_rule: title_rule)
     described_class.call(ctx)
   end
 
@@ -155,6 +155,14 @@ RSpec.describe Abc::SuggestionEngine do
   it "título com 39 caracteres -> prioridade 2" do
     result = call(metric: build_metric(title: "a" * 39))
     expect(find(result, "Ampliar título")[:priority]).to eq(2)
+  end
+
+  it "título que o ML não deixa trocar (anúncio com venda) -> nenhuma sugestão de título; os editáveis trazem o botão" do
+    blocked = call(metric: build_metric(title: "a" * 39), title_rule: { editable: false, reason: "já tem venda" })
+    expect(blocked.select { |s| %w[título política].include?(s[:area]) }).to be_empty
+
+    open = call(metric: build_metric(title: "a" * 39))
+    expect(find(open, "Ampliar título")).to include(action: { kind: "alterar_titulo" }, key: "título:Ampliar título")
   end
 
   it "título com 40 caracteres -> não sugere" do

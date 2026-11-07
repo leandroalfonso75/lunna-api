@@ -58,3 +58,21 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 ## Pendências
 - Usar as despesas fixas, para ficar coerente com Anúncios.
 - Fotos: o primeiro envio real confirma se o app do Lunna pode alterar fotos do anúncio (anúncio de catálogo pode recusar).
+
+## Título, ficha técnica e "Ciente" (07/11/2026)
+
+- **Regra do título (documentação do ML, conferida em 07/11/2026):** anúncio de catálogo não troca título; no modelo
+  User Products o título é montado pelo ML a partir do `family_name`, que só pode ser alterado se nenhum anúncio do mesmo
+  user product tiver venda; no modelo antigo, só com `sold_quantity = 0`. `Ml::TitleRule` decide; sem poder trocar, as
+  sugestões de título (e a de termos proibidos) não aparecem.
+- **Alterar título AGORA** (`AbcTitleEditor.vue`): título atual, campo de até 60 caracteres (ou o `max_title_length` da
+  categoria), "Sugerir títulos" (5 pela IA, `Ai::TitleSuggestions`, sem variação no nome da família) e "Publicar título"
+  (`Ml::ItemTitle`: PUT /items/{id} com `family_name` ou `title`; admin, confirmação, `ml_item_edits`).
+- **Alterar ficha técnica AGORA** (`AbcSpecsEditor.vue`): campos obrigatórios e principais que faltam (`Ml::ItemSpecs`),
+  "Sugerir características" (`Ai::SpecSuggestions`: só valores da lista permitida, só o que dá para afirmar) e
+  "Publicar alterações" (PUT /items/{id} com `attributes`; admin, confirmação, `ml_item_edits`).
+- **Ciente** em Vídeo, Tipo de anúncio e Qualidade (`abc_suggestion_acks`): "aplicada no ML" esconde por 30 dias,
+  "aguardar" por 15; depois, se ainda valer, a sugestão volta.
+- IA de texto: `Ai::JsonChat` com o modelo da empresa ou, sem ele, `google/gemini-2.5-flash` (só precisa da chave).
+- Rotas: GET/POST `/api/items/:id/title`, POST `/title/suggest`, GET/POST `/api/items/:id/specs`, POST `/specs/suggest`,
+  POST `/api/items/:id/suggestion_acks`.

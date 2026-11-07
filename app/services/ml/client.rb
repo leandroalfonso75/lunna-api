@@ -28,7 +28,7 @@ module Ml
       id title status sub_status price original_price available_quantity sold_quantity
       listing_type_id category_id shipping catalog_listing permalink thumbnail
       seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
-      catalog_product_id item_relations
+      catalog_product_id item_relations user_product_id family_name
     ].join(",")
 
     def initialize(access_token:, sleeper: ->(seconds) { sleep(seconds) })
@@ -118,6 +118,22 @@ module Ml
     # Troca a lista de fotos do anúncio (as que ficam + as novas), por id, na ordem dada.
     def update_item_pictures(item_id, picture_ids)
       write(:put, "/items/#{item_id}", {}, { pictures: picture_ids.map { |id| { id: id } } })
+    end
+
+    # Anúncio completo (título, family_name, user_product_id, vendas, atributos) para editar título e ficha técnica.
+    def item_full(item_id)
+      get("/items/#{item_id}")
+    end
+
+    # Dados da categoria (settings.max_title_length).
+    def category(category_id)
+      get("/categories/#{category_id}")
+    end
+
+    # Curva ABC > Alterar título / ficha técnica (admin, com confirmação, registrado em ml_item_edits).
+    # Modelo User Products: o título vem do family_name; modelo antigo: title. Ficha: attributes.
+    def update_item(item_id, body)
+      write(:put, "/items/#{item_id}", {}, body)
     end
 
     # Sai de uma promoção do anúncio.

@@ -10,9 +10,21 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_030001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_07_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "abc_suggestion_acks", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.string "key", null: false
+    t.string "kind", null: false
+    t.datetime "until_at", null: false
+    t.uuid "user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id", "key"], name: "index_abc_suggestion_acks_on_ml_account_id_and_item_id_and_key", unique: true
+  end
 
   create_table "ai_plans", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "ml_account_id", null: false
@@ -434,6 +446,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_030001) do
     t.index ["ml_photo_job_id"], name: "index_ml_generated_photos_on_ml_photo_job_id"
   end
 
+  create_table "ml_item_edits", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.uuid "user_id"
+    t.string "kind", null: false
+    t.jsonb "before", default: {}, null: false
+    t.jsonb "after", default: {}, null: false
+    t.boolean "ok", default: false, null: false
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ml_item_edits_on_ml_account_id_and_item_id"
+  end
+
   create_table "ml_item_visits", primary_key: ["item_id", "day"], force: :cascade do |t|
     t.string "item_id", null: false
     t.uuid "ml_account_id", null: false
@@ -496,8 +522,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_030001) do
     t.jsonb "catalog_reasons", default: [], null: false
     t.datetime "catalog_checked_at"
     t.decimal "ship_cost_free", precision: 12, scale: 2
+    t.string "user_product_id"
+    t.string "family_name"
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
+    t.index ["user_product_id"], name: "index_ml_items_on_user_product_id"
   end
 
   create_table "ml_oauth_states", primary_key: "state", id: :string, force: :cascade do |t|
