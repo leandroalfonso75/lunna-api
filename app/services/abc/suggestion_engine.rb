@@ -406,10 +406,38 @@ module Abc
         o.merge(profit: profit.round(2), margin_pct: (profit / o[:price] * 100).round(1), low: o[:cost] ? profit / o[:price] * 100 < @params.min_margin_pct : false)
       end
       if @unit[:cost]
-        p = keep_margin_price(free.to_f)
-        opts << price_option("Frete grátis mantendo a margem de hoje", p, @unit[:fee].to_f / price).merge(shipping: free.to_f.round(2)).then { |o| recalc(o) } if p
+        p, cost = keep_margin_with_tiers(free.to_f)
+        if p
+          label = "Frete grátis mantendo a margem de hoje"
+          label += p >= 79 ? " (a partir de R$ 79 o frete grátis é obrigatório; frete de R$ #{format('%.2f', cost).tr('.', ',')} nessa faixa)" : ""
+          opts << price_option(label, p, @unit[:fee].to_f / price).merge(shipping: cost.round(2)).then { |o| recalc(o) }
+        end
       end
       opts
+    end
+
+    # O frete grátis custa conforme a faixa de preço (o ML cobra mais a partir de R$ 100, 120...): o preço que mantém a
+    # margem é recalculado com o frete da faixa em que ele cai (ml_items.ship_cost_tiers, lidos do ML).
+    def ship_cost_at(price, below)
+      tiers = @item&.ship_cost_tiers || {}
+      return below if price < 79 || tiers.empty?
+
+      (price >= 100 && tiers["100"]) ? tiers["100"].to_f : (tiers["79"] || below).to_f
+    end
+
+    def keep_margin_with_tiers(free)
+      cost = free
+      p = nil
+      3.times do
+        p = keep_margin_price(cost)
+        return [ nil, cost ] unless p
+
+        next_cost = ship_cost_at(p, free)
+        break if (next_cost - cost).abs < 0.005
+
+        cost = next_cost
+      end
+      [ p, cost ]
     end
 
     def keep_margin_price(free)

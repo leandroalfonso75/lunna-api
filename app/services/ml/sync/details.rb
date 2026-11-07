@@ -53,6 +53,9 @@ module Ml
       end
       private_class_method :fetch_category_attrs
 
+      FREE_SHIPPING_MIN = 79.0       # a partir daqui o ML obriga o frete grátis
+      SHIP_TIERS = [ 79.0, 100.0 ].freeze # faixas de custo do frete grátis (R$ 79–99,99; R$ 100–119,99)
+
       def self.process(client, account, item, category_attributes)
         notes = []
         attrs = { details_checked_at: Time.current }
@@ -77,6 +80,11 @@ module Ml
         unless item.free_shipping
           free = safe(notes, item.item_id, "frete_gratis") { fetch_ship_cost(client, account, item, effective_price, true) }
           attrs[:ship_cost_free] = free unless free == FAILED
+          # abaixo de R$ 79: o custo nas faixas a partir de R$ 79 (frete grátis obrigatório; sobe por faixa de preço)
+          if effective_price.to_f < FREE_SHIPPING_MIN
+            tiers = SHIP_TIERS.to_h { |p| [ p.to_i.to_s, safe(notes, item.item_id, "frete_faixa") { fetch_ship_cost(client, account, item, p, true) } ] }
+            attrs[:ship_cost_tiers] = tiers.reject { |_, v| v == FAILED || v.nil? }
+          end
         end
 
         missing_required, missing_main = missing_attrs(category_attributes, item.attrs_filled)

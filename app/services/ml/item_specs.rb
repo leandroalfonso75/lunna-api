@@ -63,7 +63,7 @@ module Ml
         values: Array(a["values"]).first(MAX_VALUES).map { |v| { id: v["id"], name: v["name"] } },
         free_text: !tags["fixed_values"] && a["value_type"] != "boolean",
         units: Array(a["allowed_units"]).map { |u| { id: u["id"], name: u["name"] } }, default_unit: a["default_unit"],
-        max_length: a["value_max_length"], not_applicable: Ml::SpecRules.allows_not_applicable?(a) }
+        max_length: a["value_max_length"], not_applicable: Ml::SpecRules.allows_not_applicable?(a), multivalued: !!tags["multivalued"] }
     end
 
     def refresh_local(ids)

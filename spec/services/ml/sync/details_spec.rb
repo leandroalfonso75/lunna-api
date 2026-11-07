@@ -154,11 +154,13 @@ RSpec.describe Ml::Sync::Details do
     stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 79.00)
     stub_ship(item_price: 79.00, free_shipping: true)
+    stub_ship(item_price: 79.0, free_shipping: true)
+    stub_ship(item_price: 100.0, free_shipping: true) # faixas do frete grátis (a partir de R$ 79)
 
     described_class.call(client, account, [ item ])
 
     expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/users/430014725/shipping_options/free")
-      .with(query: hash_including(item_price: "79.0", free_shipping: "true"))
+      .with(query: hash_including(item_price: "79.0", free_shipping: "true")).twice # sugerido e faixa do frete grátis
   end
 
   it "sugerido < 79 (78,99) mantém o free_shipping atual do anúncio" do
@@ -172,6 +174,8 @@ RSpec.describe Ml::Sync::Details do
     stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 78.99)
     stub_ship(item_price: 78.99, free_shipping: false)
+    stub_ship(item_price: 79.0, free_shipping: true)
+    stub_ship(item_price: 100.0, free_shipping: true) # faixas do frete grátis (a partir de R$ 79)
 
     described_class.call(client, account, [ item ])
 

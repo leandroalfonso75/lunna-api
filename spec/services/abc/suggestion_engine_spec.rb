@@ -436,8 +436,18 @@ RSpec.describe Abc::SuggestionEngine do
       today, free, keep = options
       expect(free[:shipping]).to eq(20.0)
       expect(free[:profit]).to be_within(0.01).of(today[:profit] - 20.0)
-      expect(keep[:label]).to eq("Frete grátis mantendo a margem de hoje")
+      expect(keep[:label]).to start_with("Frete grátis mantendo a margem de hoje")
       expect(keep[:margin_pct]).to be_within(0.1).of(today[:margin_pct])
+    end
+
+    it "preço que mantém a margem a partir de R$ 79 usa o frete da faixa (sobe a partir de R$ 100)" do
+      item = build_item(free_shipping: false, ship_cost: 0.0, ship_cost_free: 20.0, ship_cost_tiers: { "79" => 22.0, "100" => 30.0 })
+      result = call(metric: build_metric(price: 75, free_shipping: false), item: item, cost: 30.0)
+      keep = find(result, "Testar frete grátis")[:options].last
+      expect(keep[:price]).to be >= 79
+      expect(keep[:label]).to include("obrigatório")
+      expected = keep[:price] >= 100 ? 30.0 : 22.0
+      expect(keep[:shipping]).to eq(expected)
     end
 
     it "fotos trazem a ação de gerar imagens com a quantidade sugerida" do
