@@ -103,7 +103,7 @@ module Abc
       priority = (highest || low_conversion) ? 1 : 2
       pct = @price[:diff_pct].to_f.abs.round(1)
       [ suggestion(priority, "preço", "Reduzir preço", "Preço #{pct}% acima da referência do Mercado Livre — considere reduzir.",
-                   options: price_options) ]
+                   options: price_options, calculator: price_calculator) ]
     end
 
     # 6 — Preço sugerido acima do atual.
@@ -113,7 +113,7 @@ module Abc
       pct = @price[:diff_pct].to_f.round(1)
       [ suggestion(2, "preço", "Avaliar aumento de preço",
                    "Você está #{pct}% abaixo do preço de referência do Mercado Livre (o preço que ele considera competitivo frente "                    "a anúncios parecidos). Dá para subir até a referência e ganhar margem sem deixar de ser competitivo; "                    "não é para ganhar exposição — acima da referência a exposição pode cair.",
-                   options: price_options) ]
+                   options: price_options, calculator: price_calculator) ]
     end
 
     # 7 — Exposição: curva A em queda e visitas 30d caíram > 15%.
@@ -293,7 +293,7 @@ module Abc
       return [] unless price >= 60 && price < 79
 
       [ suggestion(3, "frete", "Testar frete grátis", "Preço entre R$ 60 e R$ 79 sem frete grátis — o frete grátis pode aumentar as vendas.",
-                   options: free_shipping_options) ]
+                   options: free_shipping_options, calculator: price_calculator) ]
     end
 
     # 24 — Fora do Full, curva A, ≥ 30 vendas em 30d.
@@ -365,7 +365,7 @@ module Abc
       fee_pct = @unit[:fee].to_f / @metric.price.to_f
       options = []
       options << price_option("Referência do Mercado Livre", @price[:suggested].to_f, fee_pct) if @price[:suggested].to_f.positive?
-      options << price_option("Preço de hoje", @metric.price.to_f, fee_pct) if options.any?
+      options << price_option("Preço de hoje", @metric.price.to_f, fee_pct, today: true) if options.any?
       return options unless @unit[:cost]
 
       [ @params.min_margin_pct, @params.min_margin_pct + 5 ].each do |target|
@@ -375,21 +375,56 @@ module Abc
       options.uniq { |o| o[:price] }.sort_by { |o| o[:price] }
     end
 
+    # O frete muda com o preço: a partir de R$ 79 o frete grátis é obrigatório e o custo do vendedor segue a tabela do ML
+    # por faixa (ml_items.ship_cost_tiers; pedido do usuário em 07/11/2026). Abaixo de R$ 79, o frete de hoje.
+    FREE_SHIPPING_MIN = 79.0
+    SHIP_BANDS = %w[200 150 120 100 79].freeze
+
+    def ship_tiers = @item.respond_to?(:ship_cost_tiers) ? (@item&.ship_cost_tiers || {}) : {}
+
+    def shipping_at(price)
+      below = @unit[:shipping].to_f
+      return below if price < FREE_SHIPPING_MIN
+
+      band = SHIP_BANDS.find { |b| price >= b.to_f && ship_tiers[b] }
+      band ? ship_tiers[band].to_f : (@item&.ship_cost_free.presence || below).to_f
+    end
+
     def price_for_margin(margin_pct, fee_pct)
       divisor = 1 - fee_pct - @params.tax_pct / 100.0 - margin_pct / 100.0
       return nil unless divisor.positive?
 
-      ((@unit[:shipping].to_f + @unit[:cost].to_f) / divisor).ceil(2)
+      shipping = @unit[:shipping].to_f
+      price = nil
+      4.times do # o frete depende da faixa do preço: refaz até estabilizar
+        price = ((shipping + @unit[:cost].to_f) / divisor).ceil(2)
+        next_shipping = shipping_at(price)
+        break if (next_shipping - shipping).abs < 0.005
+
+        shipping = next_shipping
+      end
+      price
     end
 
-    def price_option(label, price, fee_pct)
+    def price_option(label, price, fee_pct, today: false)
       fee = price * fee_pct
       tax = price * @params.tax_pct / 100.0
-      shipping = @unit[:shipping].to_f
+      shipping = today ? @unit[:shipping].to_f : shipping_at(price)
       cost = @unit[:cost]
       profit = price - fee - shipping - tax - cost.to_f
+      label = "#{label} (frete grátis obrigatório a partir de R$ 79)" if !today && price >= FREE_SHIPPING_MIN && @metric.price.to_f < FREE_SHIPPING_MIN
       { label: label, price: price.round(2), fee: fee.round(2), shipping: shipping.round(2), tax: tax.round(2), cost: cost&.round(2),
-        profit: profit.round(2), margin_pct: (profit / price * 100).round(1), low: cost ? profit / price * 100 < @params.min_margin_pct : false }
+        profit: profit.round(2), margin_pct: (profit / price * 100).round(1), low: cost ? profit / price * 100 < @params.min_margin_pct : false,
+        today: today }
+    end
+
+    # Para o campo de preço livre na tela: a mesma conta das opções (tarifa na % de hoje, imposto, custo, frete por faixa).
+    def price_calculator
+      return nil unless @unit && @metric.price.to_f.positive?
+
+      { current_price: @metric.price.to_f, fee_pct: (@unit[:fee].to_f / @metric.price.to_f).round(6), tax_pct: @params.tax_pct,
+        cost: @unit[:cost]&.round(2), ship_below: @unit[:shipping].to_f.round(2), ship_free_below: @item&.ship_cost_free&.to_f,
+        ship_tiers: ship_tiers.transform_values(&:to_f), free_shipping_min: FREE_SHIPPING_MIN, min_margin_pct: @params.min_margin_pct }
     end
 
     # --- Frete grátis: como ficam custos e margem pagando o frete (ml_items.ship_cost_free) ---
@@ -399,8 +434,9 @@ module Abc
 
       price = @metric.price.to_f
       today = { label: "Hoje (comprador paga o frete)", price: price, fee: @unit[:fee].to_f.round(2), shipping: @unit[:shipping].to_f.round(2),
-                tax: @unit[:tax].to_f.round(2), cost: @unit[:cost]&.round(2) }
-      with_free = today.merge(label: "Com frete grátis (você paga R$ #{format('%.2f', free.to_f).tr('.', ',')})", shipping: free.to_f.round(2))
+                tax: @unit[:tax].to_f.round(2), cost: @unit[:cost]&.round(2), today: true }
+      with_free = today.merge(label: "Com frete grátis (você paga R$ #{format('%.2f', free.to_f).tr('.', ',')})", shipping: free.to_f.round(2),
+                              today: false, same_price: true)
       opts = [ today, with_free ].map do |o|
         profit = o[:price] - o[:fee] - o[:shipping] - o[:tax] - o[:cost].to_f
         o.merge(profit: profit.round(2), margin_pct: (profit / o[:price] * 100).round(1), low: o[:cost] ? profit / o[:price] * 100 < @params.min_margin_pct : false)
@@ -410,7 +446,7 @@ module Abc
         if p
           label = "Frete grátis mantendo a margem de hoje"
           label += p >= 79 ? " (a partir de R$ 79 o frete grátis é obrigatório; frete de R$ #{format('%.2f', cost).tr('.', ',')} nessa faixa)" : ""
-          opts << price_option(label, p, @unit[:fee].to_f / price).merge(shipping: cost.round(2)).then { |o| recalc(o) }
+          opts << price_option(label, p, @unit[:fee].to_f / price).merge(shipping: cost.round(2), label: label).then { |o| recalc(o) }
         end
       end
       opts
@@ -419,10 +455,10 @@ module Abc
     # O frete grátis custa conforme a faixa de preço (o ML cobra mais a partir de R$ 100, 120...): o preço que mantém a
     # margem é recalculado com o frete da faixa em que ele cai (ml_items.ship_cost_tiers, lidos do ML).
     def ship_cost_at(price, below)
-      tiers = @item&.ship_cost_tiers || {}
-      return below if price < 79 || tiers.empty?
+      return below if price < FREE_SHIPPING_MIN
 
-      (price >= 100 && tiers["100"]) ? tiers["100"].to_f : (tiers["79"] || below).to_f
+      band = SHIP_BANDS.find { |b| price >= b.to_f && ship_tiers[b] }
+      band ? ship_tiers[band].to_f : below
     end
 
     def keep_margin_with_tiers(free)

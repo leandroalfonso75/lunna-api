@@ -3,6 +3,15 @@ require "rails_helper"
 RSpec.describe Ml::Sync::Details do
   let(:account) { create(:ml_account, seller_id: 430_014_725) }
   let(:client) { Ml::Client.new(access_token: "tok", sleeper: ->(_) { }) }
+
+  # faixas do frete grátis (R$ 79, 100, 120, 150, 200), lidas em todo anúncio
+  before do
+    [ 79.0, 100.0, 120.0, 150.0, 200.0 ].each do |price|
+      stub_request(:get, "https://api.mercadolibre.com/users/430014725/shipping_options/free")
+        .with(query: hash_including(item_price: price.to_s, free_shipping: "true"))
+        .to_return(status: 200, body: ml_fixture("shipping_options_free"))
+    end
+  end
   let(:item) do
     create(:ml_item,
       ml_account: account, item_id: "MLB1000000001", category_id: "MLB1234",
@@ -154,8 +163,6 @@ RSpec.describe Ml::Sync::Details do
     stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 79.00)
     stub_ship(item_price: 79.00, free_shipping: true)
-    stub_ship(item_price: 79.0, free_shipping: true)
-    stub_ship(item_price: 100.0, free_shipping: true) # faixas do frete grátis (a partir de R$ 79)
 
     described_class.call(client, account, [ item ])
 
@@ -174,8 +181,6 @@ RSpec.describe Ml::Sync::Details do
     stub_ship(item_price: 50.0, free_shipping: true)
     stub_fee(price: 78.99)
     stub_ship(item_price: 78.99, free_shipping: false)
-    stub_ship(item_price: 79.0, free_shipping: true)
-    stub_ship(item_price: 100.0, free_shipping: true) # faixas do frete grátis (a partir de R$ 79)
 
     described_class.call(client, account, [ item ])
 

@@ -52,6 +52,7 @@ Rails.application.routes.draw do
     post "items/:item_id/specs/suggest", to: "item_edits#suggest_specs"
     post "items/:item_id/specs", to: "item_edits#publish_specs"
     post "items/:item_id/suggestion_acks", to: "item_edits#ack"
+    post "items/:item_id/price", to: "item_edits#publish_price"
     get "items/:item_id/photos", to: "photo_jobs#index"
     post "items/:item_id/photos", to: "photo_jobs#create"
     get "photo_images/:id", to: "photo_jobs#image"

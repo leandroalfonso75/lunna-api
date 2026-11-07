@@ -6,6 +6,7 @@
 # POST /api/items/:item_id/specs/suggest?account_id=    → valores sugeridos pela IA (não publica)
 # POST /api/items/:item_id/specs?account_id=            → publica no ML (admin; values: {ID: {value_id, value_name}}, confirm: true)
 # POST /api/items/:item_id/suggestion_acks?account_id=  → "Ciente" (key, kind: aplicada|aguardar)
+# POST /api/items/:item_id/price?account_id=            → muda o preço no ML (admin; price, confirm: true)
 class ItemEditsController < ApplicationController
   include CurrentAccount
 
@@ -14,8 +15,8 @@ class ItemEditsController < ApplicationController
   end
 
   before_action :own_item!
-  before_action :require_admin!, only: [ :publish_title, :publish_specs ]
-  before_action :require_confirm!, only: [ :publish_title, :publish_specs ]
+  before_action :require_admin!, only: [ :publish_title, :publish_specs, :publish_price ]
+  before_action :require_confirm!, only: [ :publish_title, :publish_specs, :publish_price ]
 
   def title
     render json: Ml::ItemTitle.info(client, Current.account, item_id)
@@ -57,6 +58,14 @@ class ItemEditsController < ApplicationController
     values = params[:values].respond_to?(:to_unsafe_h) ? params[:values].to_unsafe_h : params[:values].to_h
     result = Ml::ItemSpecs.publish(client, Current.account, item_id, values, user: Current.user)
     render json: { ok: result.ok, message: result.message, published: result.published, errors: result.ok ? nil : [ result.message ] },
+           status: result.ok ? :ok : :unprocessable_content
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def publish_price
+    result = Ml::ItemPrice.publish(client, Current.account, item_id, params[:price], user: Current.user)
+    render json: { ok: result.ok, message: result.message, price: result.price, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e
     ml_error(e)

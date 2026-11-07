@@ -121,6 +121,30 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
     expect(response).to have_http_status(:unprocessable_content)
   end
 
+  describe "preço" do
+    before { stub_request(:get, "#{ml}/items/MLB1").to_return(status: 200, body: item.merge("price" => 74.9).to_json) }
+
+    it "aplica o novo preço no ML só com admin e confirmação, registra e trava mudanças grandes" do
+      put = stub_request(:put, "#{ml}/items/MLB1").with(body: { price: 83.58 }.to_json).to_return(status: 200, body: "{}")
+
+      post "/api/items/MLB1/price", params: { account_id: account.id, price: 83.58, confirm: true }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+      post "/api/items/MLB1/price", params: { account_id: account.id, price: 83.58 }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+      post "/api/items/MLB1/price", params: { account_id: account.id, price: 200, confirm: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(json["errors"].first).to include("grande demais")
+
+      post "/api/items/MLB1/price", params: { account_id: account.id, price: "83,58", confirm: true }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+      expect(json["message"]).to include("frete grátis")
+      expect(put).to have_been_requested.once
+      expect(account.ml_item_edits.sole).to have_attributes(kind: "preco", ok: true)
+      expect(account.ml_items.find_by(item_id: "MLB1").price.to_f).to eq(83.58)
+    end
+  end
+
   it "anúncio de outra conta é 404" do
     get "/api/items/MLB999/title", params: { account_id: account.id }, headers: auth_headers(member)
     expect(response).to have_http_status(:not_found)

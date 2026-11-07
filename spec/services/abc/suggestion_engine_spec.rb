@@ -450,6 +450,21 @@ RSpec.describe Abc::SuggestionEngine do
       expect(keep[:shipping]).to eq(expected)
     end
 
+    it "cenários de preço a partir de R$ 79 usam o frete grátis da faixa e trazem a calculadora" do
+      item = build_item(price_ref: { "status" => "with_benchmark_high" }, ship_cost_free: 12.95,
+                        ship_cost_tiers: { "79" => 12.95, "100" => 14.95, "120" => 16.95 })
+      metric = build_metric(price: 70, free_shipping: false)
+      price = { kind: "suggestion", diff_pct: 50.0, suggested: 105.0 }
+      sg = find(call(metric: metric, item: item, cost: 30.0, price: price), "Avaliar aumento de preço")
+      ref = sg[:options].find { |o| o[:label].start_with?("Referência") }
+      today = sg[:options].find { |o| o[:today] }
+      expect(ref[:shipping]).to eq(14.95)
+      expect(ref[:label]).to include("frete grátis obrigatório")
+      expect(today[:shipping]).to eq(5.0)
+      expect(sg[:calculator]).to include(current_price: 70.0, cost: 30.0, ship_below: 5.0, free_shipping_min: 79.0)
+      expect(sg[:calculator][:ship_tiers]).to include("100" => 14.95)
+    end
+
     it "fotos trazem a ação de gerar imagens com a quantidade sugerida" do
       result = call(item: build_item(pictures_count: 4))
       expect(find(result, "Adicionar mais fotos")[:action]).to eq(kind: "gerar_fotos", suggested_count: 2)
