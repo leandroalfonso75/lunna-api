@@ -72,7 +72,9 @@ module Ml
             "attachments" => Array(m["message_attachments"]).map { |a| a.slice("filename", "original_filename", "type", "size") } }
         end.sort_by { |m| m["date"].to_s }
         last = list.last
-        buyer = list.map { |m| m["from"] == seller ? m["to"] : m["from"] }.compact.first
+        # comprador = o da venda (mensagens do assistente do ML vêm de outro usuário); sem venda, a outra ponta da conversa
+        order_buyer = account.ml_orders.where(pack_id: pack).or(account.ml_orders.where(order_id: pack)).where.not(buyer_id: nil).pick(:buyer_id)
+        buyer = order_buyer || list.map { |m| m["from"] == seller ? m["to"] : m["from"] }.compact.first
         row = account.ml_conversations.find_or_initialize_by(pack_id: pack)
         row.update!(
           buyer_id: buyer, status: conv["status"], substatus: conv["substatus"], claim_ids: Array(conv["claim_ids"]),

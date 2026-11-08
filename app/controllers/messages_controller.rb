@@ -87,6 +87,7 @@ class MessagesController < ApplicationController
       order: first && { order_id: first.order_id, date: first.date_created, status: first.status, total: orders.sum { |o| o.total_amount.to_f }.round(2),
                         items: orders.flat_map(&:ml_order_items).map { |i| { item_id: i.item_id, title: i.title, quantity: i.quantity } }.first(5) },
       messages: Array(r.messages).map { |m| { id: m["id"], mine: m["from"].to_i == seller, text: m["text"], date: m["date"], read: m["read"],
+                                              from: m["from"].to_i == seller ? "voce" : (m["from"].to_i == r.buyer_id.to_i ? "comprador" : "mercado_livre"),
                                               moderation: m["moderation"], attachments: m["attachments"] } } }
   end
 
