@@ -117,6 +117,8 @@ module Painel
       structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows, decisions: decisions })
       structure[:suggestions].each { |s| s[:signal] = "estrutura_#{s[:type]}" }
       mark_decided!(structure[:suggestions], decisions)
+      # SKUs completos de cada anúncio citado nas sugestões (pedido do usuário em 08/11/2026)
+      ItemSkus.attach!(@account, queue + next_round + watch + structure[:suggestions])
 
       {
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
