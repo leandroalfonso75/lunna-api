@@ -62,6 +62,7 @@ module Ml
         sync_claims(client)
         sync_claims_center(client)
         sync_questions(client)
+        sync_messages(client)
         sync_billing_charges(client)
         sync_mercado_pago
         sync_ads(client)
@@ -197,6 +198,11 @@ module Ml
       # Seção Perguntas: as sem resposta e as mais recentes (todas 1x por dia).
       def sync_questions(client)
         @notes.concat(Ml::Sync::Questions.call(client, @account).notes)
+      end
+
+      # Seção Mensagens: conversas de pós-venda (não lidas, abertas recentes e vendas ainda não conferidas).
+      def sync_messages(client)
+        @notes.concat(Ml::Sync::Messages.call(client, @account).notes)
       end
 
       # Reclamações, cancelamentos por mediação e devoluções das vendas (motivo, resultado, devolução).

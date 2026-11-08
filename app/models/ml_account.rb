@@ -14,6 +14,8 @@ class MlAccount < ApplicationRecord
   has_many :finance_entries, dependent: :delete_all
   has_many :ml_item_edits, dependent: :delete_all
   has_many :ml_questions, dependent: :delete_all
+  has_many :ml_conversations, dependent: :delete_all
+  has_many :ml_message_sends, dependent: :delete_all
   has_many :ml_question_answers, dependent: :delete_all
   has_many :abc_suggestion_acks, dependent: :delete_all
   has_many :mp_payments, dependent: :delete_all

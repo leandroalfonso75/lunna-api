@@ -72,12 +72,12 @@ class QuestionsController < ApplicationController
   end
 
   def templates
-    render json: { templates: Current.account.company.question_templates.map { |t| template_json(t) } }
+    render json: { templates: templates_scope.map { |t| template_json(t) } }
   end
 
   def create_template
-    position = Current.account.company.question_templates.maximum(:position).to_i + 1
-    t = Current.account.company.question_templates.create!(title: params[:title].to_s.strip, body: params[:body].to_s.strip, position: position)
+    position = templates_scope.maximum(:position).to_i + 1
+    t = templates_scope.create!(title: params[:title].to_s.strip, body: params[:body].to_s.strip, position: position)
     render json: template_json(t), status: :created
   rescue ActiveRecord::RecordInvalid => e
     render_errors(e.record.errors.full_messages, status: :unprocessable_content)
@@ -104,6 +104,12 @@ class QuestionsController < ApplicationController
 
   def label(status) = MlQuestion::STATUS_LABELS.dig(status, 0) || status
 
+  # Respostas padrão por tipo: "pergunta" (padrão) ou "mensagem" (seção Mensagens).
+  def templates_scope
+    kind = QuestionTemplate::KINDS.key?(params[:kind].to_s) ? params[:kind].to_s : "pergunta"
+    Current.account.company.question_templates.where(kind: kind)
+  end
+
   def question_json(r, item)
     lbl, tone = MlQuestion::STATUS_LABELS.fetch(r.status, [ r.status, "neutral" ])
     { id: r.question_id, item_id: r.item_id, text: r.text, date_created: r.date_created, from_id: r.from_id,
@@ -113,7 +119,7 @@ class QuestionsController < ApplicationController
                       stock: item.available_quantity, status: item.status } }
   end
 
-  def template_json(t) = { id: t.id, title: t.title, body: t.body, position: t.position }
+  def template_json(t) = { id: t.id, title: t.title, body: t.body, position: t.position, kind: t.kind }
 
   def client
     @client ||= begin

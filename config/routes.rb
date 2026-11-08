@@ -69,6 +69,8 @@ Rails.application.routes.draw do
     post "ads/decisions", to: "ads#decide"
     delete "ads/decisions/:id", to: "ads#undecide"
     post "ads/sync", to: "ads#sync"
+    get "messages", to: "messages#index"
+    post "messages/:pack_id/send", to: "messages#send_message"
     get "questions", to: "questions#index"
     post "questions/:id/answer", to: "questions#answer"
     get "question_templates", to: "questions#templates"

@@ -151,6 +151,22 @@ module Ml
       write(:post, "/answers", {}, { question_id: question_id, text: text })
     end
 
+    # Seção Mensagens (pós-venda): conversas com mensagem não lida.
+    def messages_unread
+      get("/messages/unread", { role: "seller", tag: "post_sale" })
+    end
+
+    # Mensagens de uma conversa (pack ou pedido), SEM marcar como lidas.
+    def pack_messages(seller_id, pack_id, offset: 0, limit: 50)
+      get("/messages/packs/#{pack_id}/sellers/#{seller_id}", { tag: "post_sale", mark_as_read: false, offset: offset, limit: limit })
+    end
+
+    # Envia mensagem ao comprador (até 350 caracteres). Escrita: admin, com confirmação, registrada em ml_message_sends.
+    def send_pack_message(seller_id, pack_id, buyer_id, text)
+      write(:post, "/messages/packs/#{pack_id}/sellers/#{seller_id}", { tag: "post_sale" },
+            { from: { user_id: seller_id.to_i }, to: { user_id: buyer_id.to_i }, text: text })
+    end
+
     # Sai de uma promoção do anúncio.
     def leave_promotion(item_id, promotion_type:, promotion_id: nil, offer_id: nil)
       params = { app_version: "v2", promotion_type: promotion_type, promotion_id: promotion_id, offer_id: offer_id }.compact

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_020001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -407,6 +407,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
     t.index ["order_id"], name: "index_ml_claims_on_order_id"
   end
 
+  create_table "ml_conversations", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "pack_id", null: false
+    t.bigint "buyer_id"
+    t.string "status"
+    t.string "substatus"
+    t.jsonb "claim_ids", default: [], null: false
+    t.jsonb "messages", default: [], null: false
+    t.integer "messages_count", default: 0, null: false
+    t.integer "unread_count", default: 0, null: false
+    t.datetime "last_message_at"
+    t.string "last_from"
+    t.integer "seller_max_length"
+    t.datetime "checked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "last_message_at"], name: "index_ml_conversations_on_ml_account_id_and_last_message_at"
+    t.index ["ml_account_id", "pack_id"], name: "index_ml_conversations_on_ml_account_id_and_pack_id", unique: true
+  end
+
   create_table "ml_costs", force: :cascade do |t|
     t.uuid "company_id", null: false
     t.string "sku", null: false
@@ -531,6 +551,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
     t.index ["user_product_id"], name: "index_ml_items_on_user_product_id"
   end
 
+  create_table "ml_message_sends", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "pack_id", null: false
+    t.uuid "user_id"
+    t.text "text", null: false
+    t.boolean "ok", default: false, null: false
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "ml_oauth_states", primary_key: "state", id: :string, force: :cascade do |t|
     t.uuid "company_id", null: false
     t.uuid "user_id", null: false
@@ -575,6 +606,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
     t.string "buyer_city"
     t.string "buyer_state"
     t.datetime "billing_synced_at"
+    t.datetime "messages_checked_at"
     t.index ["ml_account_id", "date_created"], name: "index_ml_orders_on_ml_account_id_and_date_created"
     t.index ["ml_account_id"], name: "index_ml_orders_on_ml_account_id"
     t.index ["shipping_id"], name: "index_ml_orders_on_shipping_id"
@@ -948,6 +980,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
     t.integer "position", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "kind", default: "pergunta", null: false
+    t.index ["company_id", "kind"], name: "index_question_templates_on_company_id_and_kind"
     t.index ["company_id", "position"], name: "index_question_templates_on_company_id_and_position"
   end
 
