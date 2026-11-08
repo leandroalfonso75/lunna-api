@@ -6,4 +6,9 @@ class ItemsController < ApplicationController
   def index
     render json: Painel::ItemQuery.call(Current.account, params)
   end
+
+  # GET /api/items/catalog → aba Catálogo: anúncios de catálogo, sincronização com tradicional e ganhando/perdendo
+  def catalog
+    render json: Painel::CatalogQuery.call(Current.account, params)
+  end
 end

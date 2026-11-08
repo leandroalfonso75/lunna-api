@@ -45,6 +45,7 @@ Rails.application.routes.draw do
     # Leituras do painel (SPEC 10), sempre com ?account_id= (concern CurrentAccount).
     get "painel", to: "painel#show"
     get "items", to: "items#index"
+    get "items/catalog", to: "items#catalog"
     get "items/:item_id/title", to: "item_edits#title"
     post "items/:item_id/title/suggest", to: "item_edits#suggest_title"
     post "items/:item_id/title", to: "item_edits#publish_title"
