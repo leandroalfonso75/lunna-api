@@ -106,9 +106,11 @@ class QuestionsController < ApplicationController
     description = (client.item_description(question.item_id)["plain_text"] rescue nil)
 
     tone = answered.order(date_created: :desc).limit(6).to_a
+    pictures = Array(full["pictures"]).filter_map { |p| p["secure_url"] || p["url"] }.first(10)
     result = Ai::QuestionAnswerSuggestion.call(Current.account.company, question: question, item: item, description: description,
-                                               same_item: same_item, same_sku: same_sku, attributes: attributes, tone: tone)
-    render json: result.merge(used: { same_item: same_item.size, same_sku: same_sku.size, sku_items: sibling_ids.size, skus: skus })
+                                               same_item: same_item, same_sku: same_sku, attributes: attributes, tone: tone,
+                                               pictures: pictures)
+    render json: result.merge(used: { same_item: same_item.size, same_sku: same_sku.size, sku_items: sibling_ids.size, skus: skus, pictures: pictures.size })
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Pergunta não encontrada." ], status: :not_found)
   rescue Ai::JsonChat::Error => e

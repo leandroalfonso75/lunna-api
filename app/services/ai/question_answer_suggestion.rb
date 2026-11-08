@@ -6,15 +6,19 @@ module Ai
     MAX = 2000
     SYSTEM = <<~TXT.freeze
       Você responde perguntas de compradores no Mercado Livre Brasil em nome da loja. Regras:
-      - Responda só com o que os dados do anúncio ou as respostas anteriores da loja confirmam. Se a informação não
-        estiver nos dados, não invente: diga que vai confirmar ou oriente a consultar a ficha técnica/descrição.
+      - Responda só com o que os dados do anúncio, as FOTOS do anúncio (anexadas) ou as respostas anteriores da loja
+        confirmam. Use as fotos para cor, tom, tamanho, formato, conteúdo da embalagem e comparações (ex.: dois tons lado a
+        lado: diga qual é mais claro/escuro). Se não der para afirmar, não invente: diga que vai confirmar.
+      - Tons de maquiagem: compare as cores das amostras na foto (claridade e subtom: rosado, neutro, amarelado). Em linhas
+        de base, o número do tom costuma subir do mais claro para o mais escuro: use isso para conferir o que vê na foto.
+        Se a diferença for sutil, diga que é sutil e explique o subtom. Lembre que as cores podem variar conforme a tela.
       - Use o mesmo tom, cumprimento e assinatura das respostas anteriores da loja (se houver).
       - Proibido pelo ML: telefone, e-mail, links externos, redes sociais, pedir para comprar fora do ML.
       - Seja direto e cordial, em português do Brasil, no máximo 600 caracteres.
       Responda só com JSON: {"answer": "texto", "sources": ["de onde veio cada informação, curto"], "confidence": "alta|media|baixa"}
     TXT
 
-    def self.call(company, question:, item:, description:, same_item:, same_sku:, attributes:, tone: [], http: nil)
+    def self.call(company, question:, item:, description:, same_item:, same_sku:, attributes:, tone: [], pictures: [], http: nil)
       history = ->(list) { list.map { |q| "P: #{q.text.to_s.squish}\nR: #{q.answer_text.to_s.squish}" }.join("\n\n").presence || "—" }
       user = <<~TXT
         Pergunta do comprador: #{question.text}
@@ -33,7 +37,7 @@ module Ai
         Exemplos recentes de respostas da loja (só para copiar o tom, cumprimento e assinatura):
         #{tone.map { |q| q.answer_text.to_s.squish }.join("\n").presence || '—'}
       TXT
-      data = Ai::JsonChat.call(company, system: SYSTEM, user: user, http: http, max_tokens: 1200)
+      data = Ai::JsonChat.call(company, system: SYSTEM, user: user, http: http, max_tokens: 1200, images: pictures)
       answer = data["answer"].to_s.strip
       raise Ai::JsonChat::Error, "A IA não devolveu uma resposta. Tente de novo." if answer.blank?
 
