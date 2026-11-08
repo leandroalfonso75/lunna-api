@@ -142,6 +142,11 @@ module Ml
                                  sort_fields: "date_created", sort_types: "DESC", status: status }.compact)
     end
 
+    # Apaga a pergunta do anúncio (some para todos no ML). Escrita: admin, com confirmação.
+    def delete_question(question_id)
+      write(:delete, "/questions/#{question_id}", {})
+    end
+
     def question(question_id)
       get("/questions/#{question_id}", api_version: 4)
     end
@@ -366,7 +371,12 @@ module Ml
       response = connection.run_request(method, path, body&.to_json, body ? { "Content-Type" => "application/json" } : {}) do |req|
         req.params.update(params.transform_keys(&:to_s))
       end
-      return (response.body.present? ? JSON.parse(response.body) : {}) if success?(response)
+      if success?(response)
+        return {} if response.body.blank?
+
+        # algumas escritas respondem texto puro (ex.: DELETE /questions → "Question deleted.")
+        return (JSON.parse(response.body) rescue { "message" => response.body.to_s })
+      end
 
       raise_for(response, path)
     rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e

@@ -2,6 +2,8 @@
 # reclamações ficam na seção Reclamações) e resposta pelo Lunna. Respostas padrão: /api/question_templates?kind=mensagem.
 # GET  /api/messages?account_id=&view=aguardando|todas&q=&page=  → conversas + contadores
 # POST /api/messages/:pack_id/send?account_id=                    → envia ao comprador (admin; text, confirm: true)
+# DELETE /api/messages/:pack_id?account_id=                        → exclui do Lunna (o ML não apaga mensagens; volta se
+#                                                                     o comprador escrever de novo)
 class MessagesController < ApplicationController
   include CurrentAccount
 
@@ -16,7 +18,7 @@ class MessagesController < ApplicationController
 
   def index
     view = VIEWS.include?(params[:view].to_s) ? params[:view].to_s : "aguardando"
-    base = Current.account.ml_conversations.where("messages_count > 0")
+    base = Current.account.ml_conversations.visible.where("messages_count > 0")
     scope = view == "aguardando" ? base.where(last_from: "buyer", status: "active") : base
     if (q = params[:q].to_s.strip).present?
       like = "%#{ActiveRecord::Base.sanitize_sql_like(q)}%"
@@ -64,6 +66,14 @@ class MessagesController < ApplicationController
   rescue Ml::Client::Error => e
     log&.update!(ok: false, error: e.message.to_s.first(500))
     render_errors([ "O Mercado Livre recusou a mensagem: #{e.message.to_s.first(220)}" ], status: :unprocessable_content)
+  end
+
+  def destroy
+    conv = Current.account.ml_conversations.find_by!(pack_id: params[:pack_id])
+    conv.update!(hidden_at: Time.current)
+    render json: { ok: true, message: "Conversa excluída do Lunna. Se o comprador escrever de novo, ela volta para a lista." }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Conversa não encontrada." ], status: :not_found)
   end
 
   private

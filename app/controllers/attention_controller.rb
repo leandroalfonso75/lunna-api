@@ -12,7 +12,7 @@ class AttentionController < ApplicationController
       claims: claims,
       questions: account.ml_questions.unanswered.count,
       # só as conversas em que dá para responder (as bloqueadas pelo ML não pedem ação)
-      messages: account.ml_conversations.where(last_from: "buyer", status: "active").count
+      messages: account.ml_conversations.visible.where(last_from: "buyer", status: "active").count
     }
   end
 end

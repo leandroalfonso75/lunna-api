@@ -10,6 +10,9 @@ class MlConversation < ApplicationRecord
 
   belongs_to :ml_account
 
+  # Escondida no Lunna e sem mensagem nova do comprador depois disso.
+  scope :visible, -> { where("hidden_at IS NULL OR last_message_at > hidden_at") }
+
   def can_send? = status == "active"
   def awaiting_seller? = last_from == "buyer"
 end

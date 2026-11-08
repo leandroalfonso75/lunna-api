@@ -55,6 +55,23 @@ RSpec.describe "Perguntas (/api/questions)", type: :request do
     expect(response).to have_http_status(:unprocessable_content)
   end
 
+  it "apaga a pergunta no ML (admin, confirmação) e ela sai da lista" do
+    question(1)
+    del = stub_request(:delete, "#{ml}/questions/1").to_return(status: 200, body: "Question deleted.")
+
+    delete "/api/questions/1", params: { account_id: account.id, confirm: true }, headers: auth_headers(member)
+    expect(response).to have_http_status(:forbidden)
+    delete "/api/questions/1", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:unprocessable_content)
+
+    delete "/api/questions/1", params: { account_id: account.id, confirm: true }, headers: auth_headers(admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(del).to have_been_requested.once
+    get "/api/questions", params: { account_id: account.id, view: "todas" }, headers: auth_headers(member)
+    expect(json["questions"]).to eq([])
+  end
+
   it "erro do ML vira mensagem e fica registrado" do
     question(1)
     stub_request(:post, "#{ml}/answers").to_return(status: 400, body: { message: "contact info not allowed" }.to_json)

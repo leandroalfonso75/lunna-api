@@ -2,6 +2,7 @@
 # respostas padrão da empresa.
 # GET    /api/questions?account_id=&view=sem_resposta|respondidas|todas&q=&page=  → lista + contadores
 # POST   /api/questions/:id/answer?account_id=                                   → responde no ML (admin; text, confirm: true)
+# DELETE /api/questions/:id?account_id=                                          → apaga a pergunta no ML (admin; confirm: true)
 # GET    /api/question_templates?account_id=                                     → respostas padrão
 # POST   /api/question_templates?account_id=                                     → inclui (admin; title, body)
 # PATCH  /api/question_templates/:id?account_id=                                 → edita (admin)
@@ -13,7 +14,7 @@ class QuestionsController < ApplicationController
   MAX_TEXT = QuestionTemplate::MAX_BODY
   VIEWS = { "sem_resposta" => %w[UNANSWERED], "respondidas" => %w[ANSWERED], "todas" => nil }.freeze
 
-  before_action :require_admin!, only: [ :answer, :create_template, :update_template, :destroy_template ]
+  before_action :require_admin!, only: [ :answer, :destroy, :create_template, :update_template, :destroy_template ]
 
   rescue_from Ml::OAuth::Error do
     render_errors([ "A conta do Mercado Livre precisa ser autorizada de novo." ], status: :unprocessable_content)
@@ -21,7 +22,7 @@ class QuestionsController < ApplicationController
 
   def index
     view = VIEWS.key?(params[:view].to_s) ? params[:view].to_s : "sem_resposta"
-    base = Current.account.ml_questions
+    base = Current.account.ml_questions.where.not(status: "DELETED")
     scope = VIEWS[view] ? base.where(status: VIEWS[view]) : base
     if (q = params[:q].to_s.strip).present?
       ids = Current.account.ml_items.where("title ILIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(q)}%").pluck(:item_id)
@@ -69,6 +70,25 @@ class QuestionsController < ApplicationController
   rescue Ml::Client::Error => e
     log&.update!(ok: false, error: e.message.to_s.first(500))
     render_errors([ "O Mercado Livre recusou a resposta: #{e.message.to_s.first(220)}" ], status: :unprocessable_content)
+  end
+
+  # Apaga a pergunta do anúncio no Mercado Livre (some para todos, inclusive com a resposta). Não dá para desfazer.
+  def destroy
+    unless ActiveModel::Type::Boolean.new.cast(params[:confirm]) == true
+      return render_errors([ "Confirmação obrigatória: envie confirm=true para apagar a pergunta no Mercado Livre." ], status: :unprocessable_content)
+    end
+
+    question = Current.account.ml_questions.find_by!(question_id: params[:id])
+    client.delete_question(question.question_id)
+    question.update!(status: "DELETED")
+    render json: { ok: true, message: "Pergunta apagada no Mercado Livre." }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Pergunta não encontrada." ], status: :not_found)
+  rescue Ml::Client::NotFound
+    question.update!(status: "DELETED")
+    render json: { ok: true, message: "A pergunta já não existia no Mercado Livre; tirada da lista." }
+  rescue Ml::Client::Error => e
+    render_errors([ "O Mercado Livre recusou apagar a pergunta: #{e.message.to_s.first(220)}" ], status: :unprocessable_content)
   end
 
   def templates

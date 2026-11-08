@@ -79,6 +79,19 @@ RSpec.describe "Mensagens (/api/messages)", type: :request do
     expect(json).to eq("claims" => 0, "questions" => 1, "messages" => 1)
   end
 
+  it "excluir conversa tira do Lunna e ela volta se o comprador escrever de novo" do
+    conv = account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "active", messages_count: 1, last_from: "buyer", last_message_at: 1.hour.ago)
+
+    delete "/api/messages/10", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(response).to have_http_status(:ok)
+    get "/api/messages", params: { account_id: account.id, view: "todas" }, headers: auth_headers(member)
+    expect(json["conversations"]).to eq([])
+
+    conv.update!(last_message_at: Time.current + 1.minute)
+    get "/api/messages", params: { account_id: account.id, view: "todas" }, headers: auth_headers(member)
+    expect(json["conversations"].size).to eq(1)
+  end
+
   it "conversa bloqueada pelo ML não envia" do
     account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "blocked", substatus: "blocked_by_cancelled_order", messages_count: 1, last_from: "buyer")
 
