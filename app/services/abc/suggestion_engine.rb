@@ -59,6 +59,10 @@ module Abc
     def title_editable? = @title_rule[:editable] != false
     def title_action = { kind: "alterar_titulo" }
 
+    # Anúncio de catálogo: título, fotos, descrição e ficha técnica vêm do produto do catálogo e o vendedor não muda;
+    # essas sugestões não aparecem (pedido do usuário em 08/11/2026).
+    def catalog? = !!@item&.catalog_listing
+
     # 1 — Status: pausado que vendeu nos últimos 60 dias (30d atual + 30d
     # anterior) → reativar.
     def rule_status_paused
@@ -202,6 +206,7 @@ module Abc
 
     # 15 — Atributos obrigatórios faltando (detalhes precisam ter carregado).
     def rule_attrs_required
+      return [] if catalog?
       return [] unless details_loaded?
 
       missing = Array(@item&.attrs_missing_required)
@@ -213,6 +218,7 @@ module Abc
 
     # 16 — Características principais faltando.
     def rule_attrs_main
+      return [] if catalog?
       return [] unless details_loaded?
 
       missing = Array(@item&.attrs_missing_main)
@@ -224,6 +230,8 @@ module Abc
 
     # 17 — Menos de 3 fotos.
     def rule_photos_few
+      return [] if catalog?
+
       pictures = @item&.pictures_count.to_i
       return [] unless pictures < 3
 
@@ -233,6 +241,8 @@ module Abc
 
     # 18 — 3 a 5 fotos (meta 6-10).
     def rule_photos_low
+      return [] if catalog?
+
       pictures = @item&.pictures_count.to_i
       return [] unless pictures.between?(3, 5)
 
@@ -250,6 +260,8 @@ module Abc
 
     # 20 — Sem descrição (detalhes carregados).
     def rule_description_missing
+      return [] if catalog?
+
       return [] unless details_loaded?
 
       len = @item&.description_len.to_i
@@ -260,6 +272,8 @@ module Abc
 
     # 21 — Descrição < 400 caracteres (e não vazia — coberta pela regra 20).
     def rule_description_short
+      return [] if catalog?
+
       return [] unless details_loaded?
 
       len = @item&.description_len.to_i
@@ -350,7 +364,7 @@ module Abc
       steps << "Entrar nas promoções do Mercado Livre que cabem na margem (aba Promoções): o selo de desconto aumenta cliques e posição."
       steps << "Oferecer frete grátis: anúncios com frete grátis ganham destaque na busca." unless @item&.free_shipping || @metric.free_shipping
       steps << "Enviar para o Full: o selo Full e a entrega rápida melhoram a posição na busca." unless full?
-      steps << "Completar a ficha técnica: atributos preenchidos fazem o anúncio aparecer nos filtros da busca." if Array(@item&.attrs_missing_main).any? || Array(@item&.attrs_missing_required).any?
+      steps << "Completar a ficha técnica: atributos preenchidos fazem o anúncio aparecer nos filtros da busca." if !catalog? && (Array(@item&.attrs_missing_main).any? || Array(@item&.attrs_missing_required).any?)
       steps << "Melhorar a qualidade do anúncio (#{@item.quality_score}/100): fotos, ficha e descrição completas sobem a posição." if @item&.quality_score.present? && @item.quality_score.to_i < 80
       steps << "Revisar o preço frente aos concorrentes (veja a referência de preço do Mercado Livre)." if @price[:kind] == "suggestion" && @price[:diff_pct].to_f.negative?
       steps

@@ -65,6 +65,9 @@ module Abc
       missing = metrics.reject { |m| m.sku.present? && (costs_by_sku[m.sku] || @olist_costs[m.sku]) }.map(&:item_id)
       @variation_costs = Painel::VariationCost.for_items(@account, missing)
       @up_sold = Ml::TitleRule.up_sold(@account)
+      # busca da tela (produto, SKU, anúncio, palavra-chave): todos os SKUs do anúncio e o nome do produto no Olist
+      @skus = Painel::ItemSkus.for(@account, metrics.map(&:item_id))
+      @products = OlistProduct.where(company_id: @account.company_id, sku: @skus.values.flatten.uniq).pluck(:sku, :description).to_h
       @acks = @account.abc_suggestion_acks.active.pluck(:item_id, :key).group_by(&:first).transform_values { |l| l.map(&:last).to_set }
       entries = build_entries(metrics, items_by_id, costs_by_sku, classification, classified_by_id)
       universe_rows = classification.rows.map { |row| row_payload(entries[row.metric.item_id]) }
@@ -152,6 +155,9 @@ module Abc
         is_new: entry[:is_new], conversion_30d: metric.conversion_30d&.to_f, revenue_30d: metric.revenue_30d.to_f,
         profit_month: month[:profit], profit_is_before_cost: month[:profit_is_before_cost],
         margin_pct: month[:margin_pct], margin_state: month[:margin_state],
+        skus: (@skus || {})[metric.item_id] || [ metric.sku ].compact,
+        products: ((@skus || {})[metric.item_id] || []).filter_map { |s| (@products || {})[s] }.uniq,
+        catalog: !!entry[:item]&.catalog_listing,
         suggestions_count: entry[:suggestions].size,
         urgent_count: entry[:suggestions].count { |s| s[:priority] == 1 },
         profit_state: month[:profit_state]

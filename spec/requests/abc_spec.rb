@@ -39,7 +39,7 @@ RSpec.describe "Curva ABC (/api/abc)", type: :request do
         "id", "title", "status_label", "sku", "full", "curve", "group", "rank", "share_pct", "cum_pct",
         "visits_30d", "units_30d", "units_change_pct", "units_change_state", "is_new", "conversion_30d",
         "revenue_30d", "profit_month", "profit_is_before_cost", "margin_pct", "margin_state",
-        "suggestions_count", "urgent_count", "profit_state"
+        "suggestions_count", "urgent_count", "profit_state", "skus", "products", "catalog"
       )
     end
 

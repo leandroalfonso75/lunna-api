@@ -465,6 +465,13 @@ RSpec.describe Abc::SuggestionEngine do
       expect(sg[:calculator][:ship_tiers]).to include("100" => 14.95)
     end
 
+    it "anúncio de catálogo: sem sugestões de título, fotos, descrição e ficha técnica" do
+      item = build_item(catalog_listing: true, pictures_count: 2, description_len: 0, attrs_missing_required: [ "Marca" ],
+                        attrs_missing_main: [ "Cor" ])
+      result = call(item: item, metric: build_metric(title: "a" * 30), title_rule: { editable: false })
+      expect(result.map { |s| s[:area] } & [ "título", "fotos", "descrição", "ficha técnica" ]).to be_empty
+    end
+
     it "fotos trazem a ação de gerar imagens com a quantidade sugerida" do
       result = call(item: build_item(pictures_count: 4))
       expect(find(result, "Adicionar mais fotos")[:action]).to eq(kind: "gerar_fotos", suggested_count: 2)
