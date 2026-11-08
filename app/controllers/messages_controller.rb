@@ -17,7 +17,7 @@ class MessagesController < ApplicationController
   def index
     view = VIEWS.include?(params[:view].to_s) ? params[:view].to_s : "aguardando"
     base = Current.account.ml_conversations.where("messages_count > 0")
-    scope = view == "aguardando" ? base.where(last_from: "buyer") : base
+    scope = view == "aguardando" ? base.where(last_from: "buyer", status: "active") : base
     if (q = params[:q].to_s.strip).present?
       like = "%#{ActiveRecord::Base.sanitize_sql_like(q)}%"
       packs = Current.account.ml_orders.where("buyer_nickname ILIKE :l OR buyer_name ILIKE :l OR order_id::text = :q OR pack_id::text = :q", l: like, q: q)
@@ -32,7 +32,7 @@ class MessagesController < ApplicationController
 
     render json: {
       view: view, total: total, page: page, per_page: PER_PAGE,
-      counts: { aguardando: base.where(last_from: "buyer").count, todas: base.count },
+      counts: { aguardando: base.where(last_from: "buyer", status: "active").count, todas: base.count },
       conversations: rows.map { |r| conversation_json(r, orders[r.pack_id] || []) }
     }
   end

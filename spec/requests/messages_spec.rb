@@ -69,6 +69,16 @@ RSpec.describe "Mensagens (/api/messages)", type: :request do
     expect(account.ml_message_sends.sole).to have_attributes(ok: true)
   end
 
+  it "pontos do menu: reclamações, perguntas e mensagens a atender" do
+    account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "active", messages_count: 1, last_from: "buyer")
+    account.ml_conversations.create!(pack_id: 11, buyer_id: 98, status: "blocked", messages_count: 1, last_from: "buyer")
+    account.ml_questions.create!(question_id: 1, status: "UNANSWERED", text: "Tem?")
+
+    get "/api/attention", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(json).to eq("claims" => 0, "questions" => 1, "messages" => 1)
+  end
+
   it "conversa bloqueada pelo ML não envia" do
     account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "blocked", substatus: "blocked_by_cancelled_order", messages_count: 1, last_from: "buyer")
 
