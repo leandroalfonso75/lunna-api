@@ -136,6 +136,21 @@ module Ml
       write(:put, "/items/#{item_id}", {}, body)
     end
 
+    # Seção Perguntas: perguntas dos anúncios do vendedor, as mais novas primeiro (status opcional, ex.: UNANSWERED).
+    def questions_search(seller_id, offset: 0, limit: 50, status: nil)
+      get("/questions/search", { seller_id: seller_id, api_version: 4, offset: offset, limit: limit,
+                                 sort_fields: "date_created", sort_types: "DESC", status: status }.compact)
+    end
+
+    def question(question_id)
+      get("/questions/#{question_id}", api_version: 4)
+    end
+
+    # Responde a pergunta (o ML entrega ao comprador). Escrita: admin, com confirmação, registrada em ml_question_answers.
+    def answer_question(question_id, text)
+      write(:post, "/answers", {}, { question_id: question_id, text: text })
+    end
+
     # Sai de uma promoção do anúncio.
     def leave_promotion(item_id, promotion_type:, promotion_id: nil, offer_id: nil)
       params = { app_version: "v2", promotion_type: promotion_type, promotion_id: promotion_id, offer_id: offer_id }.compact

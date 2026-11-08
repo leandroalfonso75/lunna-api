@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_07_020001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -150,6 +150,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_020001) do
     t.datetime "billing_synced_at"
     t.datetime "mp_payments_synced_at"
     t.datetime "mp_releases_synced_at"
+    t.datetime "questions_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -715,6 +716,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_020001) do
     t.index ["ml_account_id", "promotion_id"], name: "index_ml_promotions_unique", unique: true
   end
 
+  create_table "ml_question_answers", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "question_id", null: false
+    t.uuid "user_id"
+    t.text "text", null: false
+    t.boolean "ok", default: false, null: false
+    t.string "error"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "question_id"], name: "index_ml_question_answers_on_ml_account_id_and_question_id"
+  end
+
+  create_table "ml_questions", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.bigint "question_id", null: false
+    t.string "item_id"
+    t.string "status"
+    t.text "text"
+    t.datetime "date_created"
+    t.bigint "from_id"
+    t.text "answer_text"
+    t.string "answer_status"
+    t.datetime "answer_date"
+    t.boolean "hold", default: false, null: false
+    t.jsonb "payload", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "question_id"], name: "index_ml_questions_on_ml_account_id_and_question_id", unique: true
+    t.index ["ml_account_id", "status", "date_created"], name: "idx_on_ml_account_id_status_date_created_822772d100"
+  end
+
   create_table "ml_sync_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "ml_account_id", null: false
     t.datetime "started_at", null: false
@@ -907,6 +939,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_020001) do
     t.datetime "updated_at", null: false
     t.index ["company_id", "started_at"], name: "index_olist_sync_runs_on_company_id_and_started_at"
     t.index ["requested_by_user_id"], name: "index_olist_sync_runs_on_requested_by_user_id"
+  end
+
+  create_table "question_templates", force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.string "title", null: false
+    t.text "body", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "position"], name: "index_question_templates_on_company_id_and_position"
   end
 
   create_table "radar_collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

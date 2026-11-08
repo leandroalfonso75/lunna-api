@@ -61,6 +61,7 @@ module Ml
         sync_billing(client)
         sync_claims(client)
         sync_claims_center(client)
+        sync_questions(client)
         sync_billing_charges(client)
         sync_mercado_pago
         sync_ads(client)
@@ -191,6 +192,11 @@ module Ml
       # Seção Reclamações: lista de todas as reclamações e os detalhes de 30 por rodada (Ml::Sync::ClaimsCenter).
       def sync_claims_center(client)
         @notes.concat(Ml::Sync::ClaimsCenter.call(client, @account).notes)
+      end
+
+      # Seção Perguntas: as sem resposta e as mais recentes (todas 1x por dia).
+      def sync_questions(client)
+        @notes.concat(Ml::Sync::Questions.call(client, @account).notes)
       end
 
       # Reclamações, cancelamentos por mediação e devoluções das vendas (motivo, resultado, devolução).
