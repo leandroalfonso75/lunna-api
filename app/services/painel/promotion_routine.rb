@@ -100,8 +100,46 @@ module Painel
       return skip(run, ev, "sem_mudanca", why) unless target
 
       ev = ev.merge(best: target)
+      if (block = credibility_block(ev))
+        return skip(run, ev, "revisar", block, kind: "revisar", to: true)
+      end
       @mode == "apply" ? apply(run, ev) : simulate(run, ev)
     end
+
+    # Recusa "discounted price is not credible" (ERROR_CREDIBILITY_DISCOUNTED_PRICE, conferido em 08/11/2026): o ML não
+    # aceita desconto com preço acima do menor preço que o anúncio praticou nos últimos 30 dias (regra do preço de
+    # referência). Depois de uma recusa assim, a rotina não insiste todo dia: manda para revisar com o preço que o ML
+    # aceitaria e a data em que a trava sai, enquanto o preço proposto ficar acima desse menor preço.
+    CREDIBILITY = "CREDIBILITY_DISCOUNTED_PRICE"
+    CREDIBILITY_DAYS = 30
+
+    def credibility_block(ev)
+      item_id = ev[:item].item_id
+      refused = @account.ml_promotion_actions.where(item_id: item_id, ok: false).where("created_at > ?", 14.days.ago)
+                        .where("error ILIKE ?", "%#{CREDIBILITY}%").exists?
+      return nil unless refused
+
+      price = ev[:best][:price].to_f
+      sales = MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+                         .where(o: { ml_account_id: @account.id }).where(item_id: item_id)
+                         .where("o.date_created > ?", CREDIBILITY_DAYS.days.ago).where.not(o: { status: %w[cancelled invalid] })
+                         .pluck("ml_order_items.unit_price", "o.date_created")
+      # o preço que o anúncio mostrou nas promoções (registrado a cada rodada como "antes") também conta, mesmo sem venda
+      shown = @account.ml_promotion_actions.where(item_id: item_id).where("created_at > ?", CREDIBILITY_DAYS.days.ago)
+                      .where.not(from_price: nil).pluck(:from_price, :created_at)
+      all = sales + shown
+      low = all.map { |p, _| p.to_f }.min
+      # a trava conta da última vez em que o anúncio esteve nesse menor preço
+      at = all.select { |p, _| low && p.to_f <= low + 0.005 }.map(&:last).max
+      return nil if low.nil? || price <= low.to_f + 0.005
+
+      free_on = (at + CREDIBILITY_DAYS.days).to_date
+      "o Mercado Livre recusou o desconto (preço não crível): ele só aceita promoção abaixo do menor preço praticado nos " \
+        "últimos 30 dias (#{brl(low)} em #{at.to_date.strftime('%d/%m')}). Proposto: #{brl(price)}. A trava sai em " \
+        "#{free_on.strftime('%d/%m')}; até lá, só com preço até #{brl(low)} (confira a margem)."
+    end
+
+    def brl(v) = "R$ #{format('%.2f', v.to_f).tr('.', ',')}"
 
     # Catálogo (com "Incluir anúncios de catálogo na automatização"): perdendo a vitrine, aplica a oferta que chega ao
     # preço para ganhar, se ela couber nas regras; depois, a conferência de 1 em 1 hora (CatalogCheck).
@@ -135,6 +173,9 @@ module Painel
     def fitting(run, ev, fit)
       soft = fit[:soft_reason].to_s
       ev = ev.merge(best: fit)
+      if (block = credibility_block(ev))
+        return skip(run, ev, "revisar", block, kind: "revisar", to: true)
+      end
       if soft.blank?
         return @mode == "apply" ? apply(run, ev, force: true) : simulate(run, ev)
       end

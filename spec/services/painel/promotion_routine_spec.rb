@@ -49,6 +49,20 @@ RSpec.describe Painel::PromotionRoutine do
       .with(account, item.item_id, source: "rotina", run: run, target: { promotion_id: "P-2", promotion_type: "DEAL", action: "aderir" })
   end
 
+  it "depois de uma recusa por preço não crível, não insiste: manda para revisar com o menor preço dos últimos 30 dias" do
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+    account.ml_promotion_actions.create!(item_id: item.item_id, kind: "aderir", source: "rotina", ok: false,
+                                         error: "Ml::Client: 400 — Errors: ERROR_CREDIBILITY_DISCOUNTED_PRICE - The discounted price is not credible.")
+    MlOrder.create!(order_id: 77, ml_account: account, status: "paid", date_created: 5.days.ago, total_amount: 45)
+    MlOrderItem.create!(order_id: 77, item_id: item.item_id, sku: "SKU-A", title: "A", quantity: 1, unit_price: 45, sale_fee: 4)
+
+    run = described_class.call(account, mode: "apply", trigger: "agendada")
+
+    blocked = run.actions.find_by(item_id: item.item_id)
+    expect(blocked).to have_attributes(kind: "revisar", error: a_string_including("menor preço praticado nos últimos 30 dias", "R$ 45,00"))
+    expect(Painel::PromotionActions).to have_received(:apply).once # só o outro anúncio
+  end
+
   it "o job de cada hora só roda para empresas com a rotina ligada, no horário e no dia escolhidos, no modo escolhido" do
     allow(described_class).to receive(:call)
     now = Time.find_zone("America/Sao_Paulo").parse("2026-11-03 14:00") # segunda-feira
