@@ -18,6 +18,19 @@ module Painel
       ids.to_h { |id| [ id, map[id].map { |s| s.to_s.strip }.reject(&:blank?).uniq ] }
     end
 
+    # Anúncios da conta que têm algum desses SKUs (no anúncio, nas variações ou nas vendas).
+    def self.items_with_skus(account, skus)
+      list = Array(skus).map(&:to_s).reject(&:blank?).uniq
+      return [] if list.empty?
+
+      ids = account.ml_items.where(sku: list).pluck(:item_id)
+      ids += account.ml_items.where("inventory_refs @> ANY (ARRAY[?]::jsonb[])", list.map { |s| [ { sku: s } ].to_json }).pluck(:item_id)
+      ids += account.item_metrics.where(sku: list).pluck(:item_id)
+      ids += MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+                        .where(o: { ml_account_id: account.id }).where(sku: list).distinct.pluck(:item_id)
+      ids.uniq
+    end
+
     # Acrescenta `items: [{ item_id:, skus: [] }]` a cada entrada que tem item_ids.
     def self.attach!(account, entries)
       entries = Array(entries)

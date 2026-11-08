@@ -72,6 +72,27 @@ RSpec.describe "Perguntas (/api/questions)", type: :request do
     expect(json["questions"]).to eq([])
   end
 
+  it "sugere resposta pela IA com as respostas do mesmo anúncio e dos anúncios do mesmo SKU" do
+    company.update!(openrouter_api_key: "sk-or")
+    account.ml_items.find_by(item_id: "MLB1").update!(sku: "LS-GLOSS-01")
+    create(:ml_item, ml_account: account, item_id: "MLB2", title: "Gloss Labial Letty Kit", sku: "LS-GLOSS-01", price: 50.0)
+    question(1)
+    question(2, item_id: "MLB2", status: "ANSWERED", text: "É vegano?", answer: "Olá! Sim, é vegano. Att Lunna Shop")
+    question(3, status: "ANSWERED", text: "Tem cheiro?", answer: "Olá! Tem leve aroma de baunilha. Att Lunna Shop")
+    stub_request(:get, "#{ml}/items/MLB1").to_return(status: 200, body: { attributes: [ { name: "Cor", value_name: "Rosa" } ] }.to_json)
+    stub_request(:get, "#{ml}/items/MLB1/description").to_return(status: 200, body: { plain_text: "Gloss vegano" }.to_json)
+    ai = stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+      .with { |req| req.body.include?("Sim, é vegano") && req.body.include?("baunilha") && req.body.include?("Cor: Rosa") }
+      .to_return(status: 200, body: { choices: [ { message: { content: { answer: "Olá! Temos sim, na cor rosa. Att Lunna Shop", sources: [ "ficha técnica" ], confidence: "alta" }.to_json } } ] }.to_json)
+
+    post "/api/questions/1/suggest", params: { account_id: account.id }, headers: auth_headers(member)
+
+    expect(response).to have_http_status(:ok)
+    expect(ai).to have_been_requested
+    expect(json).to include("answer" => "Olá! Temos sim, na cor rosa. Att Lunna Shop", "confidence" => "alta")
+    expect(json["used"]).to include("same_item" => 1, "same_sku" => 1, "skus" => [ "LS-GLOSS-01" ])
+  end
+
   it "erro do ML vira mensagem e fica registrado" do
     question(1)
     stub_request(:post, "#{ml}/answers").to_return(status: 400, body: { message: "contact info not allowed" }.to_json)

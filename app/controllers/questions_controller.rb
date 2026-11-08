@@ -3,6 +3,7 @@
 # GET    /api/questions?account_id=&view=sem_resposta|respondidas|todas&q=&page=  → lista + contadores
 # POST   /api/questions/:id/answer?account_id=                                   → responde no ML (admin; text, confirm: true)
 # DELETE /api/questions/:id?account_id=                                          → apaga a pergunta no ML (admin; confirm: true)
+# POST   /api/questions/:id/suggest?account_id=                                  → resposta sugerida pela IA (não envia)
 # GET    /api/question_templates?account_id=                                     → respostas padrão
 # POST   /api/question_templates?account_id=                                     → inclui (admin; title, body)
 # PATCH  /api/question_templates/:id?account_id=                                 → edita (admin)
@@ -89,6 +90,29 @@ class QuestionsController < ApplicationController
     render json: { ok: true, message: "A pergunta já não existia no Mercado Livre; tirada da lista." }
   rescue Ml::Client::Error => e
     render_errors([ "O Mercado Livre recusou apagar a pergunta: #{e.message.to_s.first(220)}" ], status: :unprocessable_content)
+  end
+
+  # Sugestão de resposta pela IA: dados do anúncio + respostas já dadas nele e nos anúncios do mesmo SKU.
+  def suggest
+    question = Current.account.ml_questions.find_by!(question_id: params[:id])
+    item = Current.account.ml_items.find_by(item_id: question.item_id)
+    answered = Current.account.ml_questions.where(status: "ANSWERED").where.not(answer_text: [ nil, "" ]).where.not(question_id: question.question_id)
+    same_item = answered.where(item_id: question.item_id).order(date_created: :desc).limit(15).to_a
+    skus = Painel::ItemSkus.for(Current.account, [ question.item_id ])[question.item_id] || []
+    sibling_ids = skus.any? ? Painel::ItemSkus.items_with_skus(Current.account, skus) - [ question.item_id ] : []
+    same_sku = sibling_ids.any? ? answered.where(item_id: sibling_ids).order(date_created: :desc).limit(15).to_a : []
+    full = (client.item_full(question.item_id) rescue {})
+    attributes = Array(full["attributes"]).filter_map { |a| "#{a['name']}: #{a['value_name']}" if a["value_name"].present? }.first(40).join("; ")
+    description = (client.item_description(question.item_id)["plain_text"] rescue nil)
+
+    tone = answered.order(date_created: :desc).limit(6).to_a
+    result = Ai::QuestionAnswerSuggestion.call(Current.account.company, question: question, item: item, description: description,
+                                               same_item: same_item, same_sku: same_sku, attributes: attributes, tone: tone)
+    render json: result.merge(used: { same_item: same_item.size, same_sku: same_sku.size, sku_items: sibling_ids.size, skus: skus })
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Pergunta não encontrada." ], status: :not_found)
+  rescue Ai::JsonChat::Error => e
+    render_errors([ e.message ], status: :unprocessable_content)
   end
 
   def templates

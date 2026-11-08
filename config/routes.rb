@@ -76,6 +76,7 @@ Rails.application.routes.draw do
     get "questions", to: "questions#index"
     post "questions/:id/answer", to: "questions#answer"
     delete "questions/:id", to: "questions#destroy"
+    post "questions/:id/suggest", to: "questions#suggest"
     get "question_templates", to: "questions#templates"
     post "question_templates", to: "questions#create_template"
     patch "question_templates/:id", to: "questions#update_template"
