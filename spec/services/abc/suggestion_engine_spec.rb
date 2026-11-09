@@ -269,8 +269,13 @@ RSpec.describe Abc::SuggestionEngine do
 
   # 19 — sem vídeo, curva A ou B
   it "sem vídeo, curva A -> prioridade 3" do
-    result = call(item: build_item(has_video: false), curve: "A")
+    result = call(item: build_item(has_video: false, has_clip: false), curve: "A")
     expect(find(result, "Adicionar vídeo")[:priority]).to eq(3)
+  end
+
+  it "vídeo no formato clip (sem video_id) ou ainda não lido -> não sugere vídeo" do
+    expect(find(call(item: build_item(has_video: false, has_clip: true), curve: "A"), "Adicionar vídeo")).to be_nil
+    expect(find(call(item: build_item(has_video: false, has_clip: nil), curve: "A"), "Adicionar vídeo")).to be_nil
   end
 
   it "sem vídeo, curva C -> não sugere" do

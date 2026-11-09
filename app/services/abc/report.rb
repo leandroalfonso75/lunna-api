@@ -178,7 +178,7 @@ module Abc
         month: entry[:economics].month,
         unit: entry[:economics].unit,
         listing: {
-          stock: metric.stock, pictures: item&.pictures_count, has_video: item&.has_video,
+          stock: metric.stock, pictures: item&.pictures_count, has_video: item&.has_video || item&.try(:has_clip) == true,
           description_len: item&.description_len, title_len: metric.title.to_s.length,
           quality_score: item&.quality_score, listing_type_label: Painel::Labels.listing_type(metric.listing_type)
         },

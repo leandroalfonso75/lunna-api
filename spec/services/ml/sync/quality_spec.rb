@@ -19,6 +19,22 @@ RSpec.describe Ml::Sync::Quality do
     expect(item.quality_checked_at).to be_present
   end
 
+  it "vídeo no formato clip: a regra HAS_SHORTS concluída marca has_clip (e pendente desmarca)" do
+    body = JSON.parse(ml_fixture("item_performance"))
+    body["buckets"] << { "title" => "Mídia", "variables" => [ { "key" => "SHORTS", "status" => "COMPLETED",
+                                                                "rules" => [ { "key" => "HAS_SHORTS", "status" => "COMPLETED" } ] } ] }
+    stub_request(:get, "https://api.mercadolibre.com/item/MLB1000000001/performance").to_return(status: 200, body: body.to_json)
+
+    described_class.call(client, [ "MLB1000000001" ])
+    expect(item.reload.has_clip).to be(true)
+
+    body["buckets"].last["variables"][0]["rules"][0]["status"] = "PENDING"
+    body["buckets"].last["variables"][0]["status"] = "PENDING"
+    stub_request(:get, "https://api.mercadolibre.com/item/MLB1000000001/performance").to_return(status: 200, body: body.to_json)
+    described_class.call(client, [ "MLB1000000001" ])
+    expect(item.reload.has_clip).to be(false)
+  end
+
   it "usa level quando não tem level_wording" do
     body = JSON.parse(ml_fixture("item_performance"))
     body["level_wording"] = nil

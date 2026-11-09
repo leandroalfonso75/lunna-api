@@ -253,6 +253,8 @@ module Abc
     # 19 — Sem vídeo em curva A ou B.
     def rule_video_missing
       return [] if @item&.has_video
+      # vídeo no formato atual do ML (clip) não vem em video_id: vale a regra de qualidade (has_clip); sem leitura, não sugere
+      return [] unless @item.respond_to?(:has_clip) && @item.has_clip == false
       return [] unless %w[A B].include?(@curve)
 
       [ suggestion(3, "vídeo", "Adicionar vídeo", "Sem vídeo no anúncio — ajuda a converter mais nas curvas A e B.", action: ciente_action) ]

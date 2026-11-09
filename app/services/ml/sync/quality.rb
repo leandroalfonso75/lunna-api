@@ -34,9 +34,22 @@ module Ml
           quality_level: data["level_wording"].presence || data["level"],
           quality_pending: pending_rules(data),
           quality_checked_at: Time.current
-        }
+        }.merge(clip_attrs(data))
       end
       private_class_method :attrs_from
+
+      # Vídeo no formato atual do ML (clip/shorts) não vem em video_id: a regra HAS_SHORTS (ou UP_HAS_SHORTS) da
+      # qualidade diz se o anúncio tem vídeo (COMPLETED) ou não (PENDING). Corrigido em 09/11/2026 (MLB2729901870
+      # tinha vídeo e o Lunna sugeria incluir).
+      SHORTS_KEYS = %w[HAS_SHORTS UP_HAS_SHORTS SHORTS HAS_VIDEO VIDEO].freeze
+
+      def self.clip_attrs(data)
+        rules = (data["buckets"] || []).flat_map { |b| (b["variables"] || []).flat_map { |v| [ v ] + (v["rules"] || []) } }
+        found = rules.select { |r| SHORTS_KEYS.include?(r["key"].to_s) }
+        return {} if found.empty?
+
+        { has_clip: found.any? { |r| r["status"] == "COMPLETED" } }
+      end
 
       # Uma entrada por regra com status PENDING em buckets[].variables[].rules[].
       def self.pending_rules(data)
