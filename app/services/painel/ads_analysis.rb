@@ -375,6 +375,10 @@ module Painel
       end
       items = items.compact
       items.each { |i| i[:value_kind], i[:value_label] = VALUE_KIND.fetch(i[:class]) }
+      # explicação em linguagem simples e passo a passo (pedido do usuário em 09/11/2026)
+      by_key = families.index_by { |f| f[:key] }
+      by_campaign = campaign_rows.index_by { |c| "campaign:#{c[:id]}" }
+      items.each { |i| i.merge!(AdsExplain.call(i, family: by_key[i[:key]], campaign: by_campaign[i[:key]])) }
       numbered, watch = items.partition { |i| i[:value].to_f.positive? }
       numbered = numbered.sort_by { |i| [ CLASS_ORDER.index(i[:class]), -i[:value] ] }
       queue = numbered.first(@max_actions).each_with_index.map { |i, idx| i.merge(n: idx + 1) }
