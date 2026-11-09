@@ -69,6 +69,8 @@ module Abc
       @skus = Painel::ItemSkus.for(@account, metrics.map(&:item_id))
       @products = OlistProduct.where(company_id: @account.company_id, sku: @skus.values.flatten.uniq).pluck(:sku, :description).to_h
       @acks = @account.abc_suggestion_acks.active.pluck(:item_id, :key).group_by(&:first).transform_values { |l| l.map(&:last).to_set }
+      @price_holds = @account.abc_suggestion_acks.active.where(key: AbcSuggestionAck::PRICE_KEY).pluck(:item_id, :kind, :until_at)
+                             .to_h { |id, kind, until_at| [ id, { kind: kind, until: until_at } ] }
       entries = build_entries(metrics, items_by_id, costs_by_sku, classification, classified_by_id)
       universe_rows = classification.rows.map { |row| row_payload(entries[row.metric.item_id]) }
       details = details_payload(classification, entries)
@@ -107,7 +109,10 @@ module Abc
           share_pct: classified&.share_pct, cum_pct: classified&.cum_pct,
           units_change_pct: classified&.units_change_pct, units_change_state: classified&.units_change_state,
           is_new: classified&.is_new, economics: economics, price: price,
-          suggestions: Abc::SuggestionEngine.call(ctx).reject { |sg| hidden.include?(sg[:key]) },
+          suggestions: Abc::SuggestionEngine.call(ctx).reject { |sg|
+            hidden.include?(sg[:key]) || (hidden.include?(AbcSuggestionAck::PRICE_KEY) && AbcSuggestionAck::PRICE_AREAS.include?(sg[:area]))
+          },
+          price_hold: @price_holds[metric.item_id],
           title_rule: ctx.title_rule,
           conversion_median: classification.conversion_median
         }
@@ -183,7 +188,7 @@ module Abc
           quality_score: item&.quality_score, listing_type_label: Painel::Labels.listing_type(metric.listing_type)
         },
         price: entry[:price], suggestions: entry[:suggestions], links: Painel::Labels.links(metric.item_id),
-        title_rule: entry[:title_rule]
+        title_rule: entry[:title_rule], price_hold: entry[:price_hold]
       }
     end
 

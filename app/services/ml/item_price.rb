@@ -38,6 +38,7 @@ module Ml
                                             before: { price: current, free_shipping: item.dig("shipping", "free_shipping") }, after: body)
       @client.update_item(@item_id, body)
       edit.update!(ok: true)
+      AbcSuggestionAck.hold_price!(@account, @item_id, kind: "aplicada", user: user) # preço em maturação por 15 dias
       @account.ml_items.where(item_id: @item_id).update_all(free_shipping ? { price: price, free_shipping: true } : { price: price })
       @account.item_metrics.where(item_id: @item_id).update_all(price: price)
       note = price >= 79 && current < 79 ? " A partir de R$ 79 o Mercado Livre passa a oferecer frete grátis (você paga o frete da faixa)." : ""

@@ -142,6 +142,9 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
       expect(put).to have_been_requested.once
       expect(account.ml_item_edits.sole).to have_attributes(kind: "preco", ok: true)
       expect(account.ml_items.find_by(item_id: "MLB1").price.to_f).to eq(83.58)
+      hold = account.abc_suggestion_acks.find_by(item_id: "MLB1", key: AbcSuggestionAck::PRICE_KEY)
+      expect(hold).to have_attributes(kind: "aplicada")
+      expect(hold.until_at).to be_within(1.minute).of(15.days.from_now) # sugestões de preço em maturação por 15 dias
     end
 
     it "no mesmo preço, aplicar o cenário com frete grátis liga o frete grátis" do
