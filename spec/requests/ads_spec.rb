@@ -210,6 +210,23 @@ RSpec.describe "/api/ads", type: :request do
         clicks: clicks, prints: prints, units: units)
     end
 
+    it "variações do mesmo anúncio pai: não sugere pausar uma variação; pausar vale para o anúncio inteiro" do
+      campaign(1, name: "Maquiagens")
+      yesterday = Date.current - 1
+      # duas variações (user products diferentes) do mesmo anúncio pai, gastando sem vender
+      %w[MLB21 MLB22].each_with_index do |id, i|
+        ad(id, 1, {}, title: "Base #{i}").update!(family_id: "F9", family_name: "Base Líquida", date_created: 90.days.ago)
+        create(:ml_item, ml_account: account, item_id: id, user_product_id: "MLBU#{i}")
+      end
+      item_day("MLB21", 1, yesterday, cost: 30, amount: 10, clicks: 40, prints: 2000, units: 1)
+      item_day("MLB22", 1, yesterday, cost: 8, amount: 200, clicks: 40, prints: 2000, units: 2)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+
+      fam = json["families"].find { |f| f["key"] == "F9" }
+      expect(fam["signals"].map { |x| x["type"] }).not_to include("familia_com_multiplos_anuncios_ativos")
+    end
+
     it "saúde com TACOS, famílias com sinais, intocáveis e a fila por dinheiro em jogo" do
       campaign(1, name: "Maquiagens")
       MlAdCampaign.where(campaign_id: 1).update_all(auction: { "7d" => { "impression_share" => 0.5, "lost_by_budget" => 0.3, "lost_by_ad_rank" => 0.2, "acos_benchmark" => 12.0, "consistent" => true } })

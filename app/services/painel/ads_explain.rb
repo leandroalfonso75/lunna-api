@@ -10,6 +10,8 @@ module Painel
       e = family&.dig(:economics) || {}
       ids = Array(entry[:item_ids])
       listings = ids.any? ? "#{ids.size == 1 ? 'o anúncio' : "os #{ids.size} anúncios"} listados acima" : "os anúncios da campanha"
+      # variações do mesmo anúncio pai: o ML só pausa a publicidade do anúncio inteiro
+      parent = ids.size > 1 ? "o anúncio inteiro (as #{ids.size} variações listadas acima saem juntas; o Mercado Livre não pausa uma variação sozinha)" : "o anúncio"
       camp = Array(entry[:campaigns]).first || campaign&.dig(:name)
       period = "nos últimos 7 dias"
       text =
@@ -28,7 +30,7 @@ module Painel
             steps: [
               "Confira se o custo destes produtos está certo no Lunna (Produtos). Custo errado muda toda a conta.",
               "Veja se dá para subir o preço sem perder vendas (Curva ABC › anúncio › Preço, ou Promoções). Com mais margem, a publicidade volta a se pagar.",
-              "Se não der para subir a margem, pause a publicidade só destes anúncios: #{ML_PATH} › #{camp || 'campanha'} › marque #{listings} › Pausar. Não exclua o anúncio, só a publicidade.",
+              "Se não der para subir a margem, pause a publicidade de #{parent}: #{ML_PATH} › #{camp || 'campanha'} › marque o anúncio › Pausar. Não exclua o anúncio, só a publicidade.",
               "Volte ao Lunna e clique em \"Marcar como feito\". Em 7 dias o Lunna mostra se o lucro melhorou."
             ]
           }
@@ -39,7 +41,7 @@ module Painel
             steps: [
               "Abra o anúncio e compare com o \"Mais vendido\" da categoria: preço, frete, fotos e título. Normalmente o motivo está aí.",
               "Corrija o que estiver pior (preço, frete grátis, capa, ficha técnica).",
-              "Se em 30 dias continuar sem vender, pause a publicidade destes anúncios: #{ML_PATH} › #{camp || 'campanha'} › marque #{listings} › Pausar.",
+              "Se em 30 dias continuar sem vender, pause a publicidade de #{parent}: #{ML_PATH} › #{camp || 'campanha'} › marque o anúncio › Pausar.",
               "Clique em \"Marcar como feito\" no Lunna para acompanhar."
             ]
           }
@@ -55,7 +57,7 @@ module Painel
           }
         when "familia_com_multiplos_anuncios_ativos"
           {
-            situation: "Você tem mais de um anúncio do mesmo produto com publicidade ligada, e eles disputam o mesmo comprador. " \
+            situation: "Você tem dois anúncios separados do mesmo produto (por exemplo, catálogo e tradicional) com publicidade ligada, e eles disputam o mesmo comprador. " \
                        "Um deles (#{family&.dig(:signals)&.find { |x| x[:type] == entry[:signal] }&.dig(:best) || 'o melhor'}) dá bem mais retorno que o outro.",
             steps: [
               "Confira se os dois anúncios têm o mesmo preço e estoque.",

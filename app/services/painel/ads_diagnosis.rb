@@ -74,7 +74,7 @@ module Painel
         discarded << "Não é orçamento: o problema é não converter, não falta de verba."
         return [ "Investimento sem retorno: #{brl(m[:cost])} gastos e nenhuma venda por Ads. A causa mais provável é oferta pouco competitiva na página (preço, frete, fotos) ou anúncio que o algoritmo já classificou como fraco.",
                  "gasta_e_nao_vende", [ act("Comparar preço, frete e fotos com o 'Mais vendido' da categoria; ajustar a oferta ou migrar para Full/Flex.", "imediato"),
-                                        act("Aguardar o ciclo de 30 dias desde a criação; se seguir zerado, pausar a publicidade do(s) anúncio(s) (não excluir: perde reviews e relevância).", "30 dias") ],
+                                        act("Aguardar o ciclo de 30 dias desde a criação; se seguir zerado, pausar a publicidade do anúncio inteiro, com todas as variações (não excluir: perde reviews e relevância).", "30 dias") ],
                  [ "Manter o anúncio ativo esperando melhora natural.", "Aumentar lance ou orçamento." ] ]
       end
       if m[:prints] >= AdsAnalysis::MIN_PRINTS && (m[:clicks].zero? || (@health[:ctr] && m[:ctr].to_f < @health[:ctr] * 0.6))
@@ -96,7 +96,7 @@ module Painel
       end
       if types.include?("abaixo_do_equilibrio")
         return [ "ROAS #{m[:roas]} abaixo do ROAS de Equilíbrio #{eq}: cada venda por Ads sai no prejuízo com os custos atuais (margem bruta #{f[:economics][:margin_pct]}%).",
-                 "abaixo_do_equilibrio", [ act("Rever custo e preço: a margem bruta precisa subir ou o ROAS precisa passar de #{eq}.", "imediato"), act("Se não houver como, pausar a publicidade desta família (sem excluir anúncios).", "30 dias") ],
+                 "abaixo_do_equilibrio", [ act("Rever custo e preço: a margem bruta precisa subir ou o ROAS precisa passar de #{eq}.", "imediato"), act("Se não houver como, pausar a publicidade do anúncio inteiro, com todas as variações (o ML não pausa uma variação sozinha; sem excluir anúncios).", "30 dias") ],
                  [ "Baixar o lance como primeira ação para melhorar o ACOS: corta exposição e mantém o problema." ] ]
       end
       if types.include?("familia_com_multiplos_anuncios_ativos")

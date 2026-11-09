@@ -193,6 +193,7 @@ module Painel
     # --- famílias ---
 
     def build_families(items, days, campaigns, economics)
+      @user_products = @account.ml_items.where(item_id: items.map(&:item_id)).pluck(:item_id, :user_product_id).to_h
       items.group_by { |i| i.family_id.presence || "item:#{i.item_id}" }.map do |key, group|
         rows = group.map { |i| item_row(i, days, campaigns) }
         active = rows.select { |r| r[:status] == "active" }
@@ -228,7 +229,7 @@ module Painel
         item_id: item.item_id, title: item.title, status: item.status, campaign_id: item.campaign_id, campaign: campaign&.name,
         thumbnail: item.thumbnail, permalink: item.permalink, price: item.price&.to_f, image_quality: item.image_quality,
         catalog: item.catalog_listing, buy_box_winner: item.buy_box_winner, recommended: item.recommended,
-        date_created: item.date_created, age_days: age, **m
+        date_created: item.date_created, age_days: age, user_product_id: (@user_products || {})[item.item_id], **m
       }
     end
 
@@ -280,7 +281,8 @@ module Painel
       if active.size > 1 && active.count { |r| r[:cost].positive? } > 1
         best, *rest = active.select { |r| r[:roas] }.sort_by { |r| -r[:roas] }
         worst = rest.last
-        if best && worst && worst[:cost] > best[:cost]
+        same_product = best && worst && best[:user_product_id].present? && best[:user_product_id] == worst[:user_product_id]
+        if best && worst && same_product && worst[:cost] > best[:cost]
           gain = (worst[:cost] * (best[:roas] - worst[:roas])).round(2)
           signals << { type: "familia_com_multiplos_anuncios_ativos", priority: "media", value: gain, best: best[:item_id], worst: worst[:item_id],
                        detail: "#{active.size} anúncios ativos do mesmo produto; a verba maior (#{brl(worst[:cost])}) está no de pior ROAS (#{worst[:roas]}) e o melhor (ROAS #{best[:roas]}) recebe #{brl(best[:cost])}." }
@@ -387,7 +389,10 @@ module Painel
 
     def queue_entry(f, s)
       name = f[:name]
-      ids = s[:item_ids] || f[:items].select { |r| r[:cost].positive? }.map { |r| r[:item_id] }.first(5)
+      # pausar a publicidade vale para o anúncio pai inteiro (todas as variações juntas: o ML não pausa uma variação sozinha)
+      pause = %w[gasto_sem_receita abaixo_do_equilibrio].include?(s[:type])
+      all_active = f[:items].select { |r| r[:status] == "active" }.map { |r| r[:item_id] }
+      ids = s[:item_ids] || (pause ? all_active.presence || f[:items].map { |r| r[:item_id] } : f[:items].select { |r| r[:cost].positive? }.map { |r| r[:item_id] }.first(5))
       campaigns = f[:items].select { |r| ids.include?(r[:item_id]) }.filter_map { |r| r[:campaign] }.uniq
       base = { key: f[:key], family_name: name, signal: s[:type], value: s[:value], evidence: s[:detail], reassess: "7 dias", item_ids: ids, campaigns: campaigns }
       case s[:type]
@@ -397,15 +402,15 @@ module Painel
                    check_before: "estoque no Olist/Full e situação do anúncio no ML")
       when "gasto_sem_receita"
         base.merge(class: "desperdicio", class_label: CLASSES["desperdicio"], title: name, value_how: "investimento sem retorno no período",
-                   action: "Comparar preço, frete e fotos com o líder da categoria; se seguir sem venda por 30 dias, pausar a publicidade do(s) anúncio(s) #{f[:items].select { |r| r[:cost].positive? }.map { |r| r[:item_id] }.join(', ')}.",
+                   action: "Comparar preço, frete e fotos com o líder da categoria; se seguir sem venda por 30 dias, pausar a publicidade do anúncio inteiro (#{ids.size > 1 ? "as #{ids.size} variações juntas" : ids.first}; o ML não pausa uma variação sozinha).",
                    check_before: "preço e frete contra o 'Mais vendido'; ficha técnica completa", reassess: "30 dias (maturação)")
       when "abaixo_do_equilibrio"
         base.merge(class: "desperdicio", class_label: CLASSES["desperdicio"], title: name, value_how: "parte do investimento acima do que a receita sustenta no equilíbrio",
-                   action: "ROAS #{f[:metrics][:roas]} abaixo do equilíbrio #{f[:economics][:roas_equilibrio]}: rever preço e custo (margem #{f[:economics][:margin_pct]}%); se não houver como subir a margem, pausar a publicidade desta família.",
+                   action: "ROAS #{f[:metrics][:roas]} abaixo do equilíbrio #{f[:economics][:roas_equilibrio]}: rever preço e custo (margem #{f[:economics][:margin_pct]}%); se não houver como subir a margem, pausar a publicidade do anúncio inteiro (#{ids.size > 1 ? "as #{ids.size} variações juntas" : "o anúncio"}; o ML não pausa uma variação sozinha).",
                    check_before: "custo do produto e preço no Lunna; não baixar lance como primeira ação")
       when "familia_com_multiplos_anuncios_ativos"
         base.merge(class: "alocacao", class_label: CLASSES["alocacao"], title: name, value_how: "verba do anúncio pior × diferença de ROAS",
-                   action: "Concentrar a verba no anúncio #{s[:best]} (melhor ROAS) e pausar a publicidade do #{s[:worst]}; não excluir o anúncio (perde reviews e relevância).",
+                   action: "Concentrar a verba no anúncio #{s[:best]} (melhor ROAS) e pausar a publicidade do #{s[:worst]} (mesmo produto, anúncios separados, como catálogo e tradicional); não excluir o anúncio.",
                    check_before: "estoque dos dois; preço igual entre eles")
       when "exposicao_perdida_por_orcamento"
         base.merge(class: "orcamento", class_label: CLASSES["orcamento"], title: name, value_how: "receita do período × impressões perdidas por orçamento ÷ impressões obtidas (estimativa)",
