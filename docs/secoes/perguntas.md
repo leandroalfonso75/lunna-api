@@ -11,16 +11,13 @@ Perguntas dos compradores nos anúncios do Mercado Livre, com resposta pelo Lunn
   (escrita só admin). Na tela: botão "Respostas padrão" em cada pergunta (Aplicar preenche o campo; menu "…" com Editar e
   Excluir; "Incluir resposta padrão" no topo) e também no topo da página (para gerenciar sem pergunta aberta).
 - Tela: `app/pages/perguntas.vue`, `components/perguntas/QuestionCard.vue`, `QuestionTemplatesMenu.vue`.
-
-# Seção Mensagens (08/11/2026)
-
-Só mensagens de pós-venda (tag post_sale); reclamações ficam em Reclamações.
-
-- **Importação** (`Ml::Sync::Messages`): o ML não lista todas as conversas; a cada rodada o Lunna relê as não lidas
-  (`/messages/unread`), as abertas com mensagem nos últimos 7 dias e as vendas dos últimos 60 dias ainda não conferidas
-  (80 por rodada; recentes relidas a cada 12 h; `ml_orders.messages_checked_at`). Sempre `mark_as_read=false`.
-  Tabela `ml_conversations` (mensagens em jsonb). Comprador = o da venda (mensagens do assistente do ML vêm de outro id).
-- **Enviar** (`POST /api/messages/:pack_id/send`): `POST /messages/packs/{pack}/sellers/{seller}?tag=post_sale`, até 350
-  caracteres (`seller_max_message_length`), só conversa `active` (bloqueada: pedido cancelado, reclamação, prazo...).
-  Admin, `confirm: true`, registro em `ml_message_sends`.
-- **Respostas padrão**: `question_templates.kind = "mensagem"` (até 350 caracteres), mesmo componente das Perguntas.
+- **Sugerir resposta** (`POST /api/questions/:id/suggest`, `Ai::QuestionAnswerSuggestion`): a IA escreve a resposta com os
+  dados do anúncio (título, ficha, descrição, preço, estoque, frete), as **fotos do anúncio** (até 10, modelo com visão
+  `google/gemini-2.5-flash`; cores, tons lado a lado, embalagem), as respostas já dadas no mesmo anúncio e nos anúncios
+  do mesmo SKU (`Painel::ItemSkus.items_with_skus`) e o tom das respostas recentes. Só preenche o campo e mostra as
+  fontes; não inventa (sem dado, diz que vai confirmar). Tons de maquiagem: compara claridade e subtom e confere pela
+  numeração (sobe do mais claro para o mais escuro).
+- **Excluir pergunta** (`DELETE /api/questions/:id`): `DELETE /questions/{id}` no ML; some do anúncio para todos e não dá
+  para desfazer (admin, `confirm: true`). Perguntas `DELETED` saem das listas.
+- **Ponto vermelho no menu** (`GET /api/attention`): perguntas sem resposta.
+- **Regra:** nunca enviar resposta real para testar.

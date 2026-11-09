@@ -8,12 +8,14 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 |---|---|---|
 | Visão geral | [visao-geral.md](visao-geral.md) | Números do dia, alertas e vendas recentes da conta do Mercado Livre |
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
-| Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade |
+| Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade; aba Catálogo (sincronizado com tradicional, ganhando/perdendo) |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
 | Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta e resolução no ML (devolução, reembolso total/parcial, mediação); assistente de contestação (A contestar / Contestadas); card Devoluções (expiradas, sem custo, com custos itemizados pelo extrato do ML) |
+| Perguntas | [perguntas.md](perguntas.md) | Perguntas dos compradores no ML: responder pelo Lunna, sugestão de resposta pela IA (dados, fotos e respostas do mesmo SKU), respostas padrão, excluir |
+| Mensagens | [mensagens.md](mensagens.md) | Mensagens de pós-venda com os compradores (sem reclamações): responder (até 350 caracteres), respostas padrão próprias, excluir da lista |
 | Ads | [ads.md](ads.md) | Campanhas e anúncios de publicidade (Product Ads) dos últimos 3 meses, com ACOS, ROAS e investimento |
 | Promoções | [promocoes.md](promocoes.md) | Central de Promoções do ML por anúncio: promoção atual, melhor oferta pela margem, margens por anúncio e exportação |
-| Financeiro | [financeiro.md](financeiro.md) | DRE do período x período anterior (receita, custos, tarifas, fretes, impostos, Full, devoluções, créditos, Ads), indicadores de saúde, gráficos, extrato do ML e conciliação |
+| Financeiro | [financeiro.md](financeiro.md) | DRE do período x período anterior (receita, custos, tarifas, fretes, cupons, impostos, Full, devoluções, créditos, Ads), indicadores de saúde, gráficos, extrato do ML, conciliação e Repasses do Mercado Pago |
 | Curva ABC | [curva-abc.md](curva-abc.md) | Classificação dos anúncios por faturamento, margem e plano com IA; ações com medidas, preço e frete com margem; gerar fotos com IA (OpenRouter), ordenar e publicar no anúncio |
 | Radar Mercado Livre | [radar-ml.md](radar-ml.md) | Consulta de anúncios coletados do Mercado Livre, com histórico de pesquisas |
 | Configurações | [configuracoes.md](configuracoes.md) | Empresa, impostos e margem, usuários e contas do Mercado Livre |
@@ -47,3 +49,9 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 
 Documentos de base: [SPEC.md](../SPEC.md), [DECISOES.md](../DECISOES.md) (prevalece sobre a SPEC) e
 [METRICS.md](../METRICS.md).
+
+## Pontos vermelhos do menu (09/11/2026)
+
+`GET /api/attention` (`attention_controller.rb`) conta o que aguarda o vendedor: reclamações em "A atender", perguntas sem
+resposta e conversas abertas com a última mensagem do comprador. O layout (`useAttention`) relê a cada minuto e ao trocar
+de página ou conta e mostra um ponto vermelho piscante ao lado de Reclamações, Perguntas e Mensagens.

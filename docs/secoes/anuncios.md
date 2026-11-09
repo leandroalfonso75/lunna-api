@@ -55,3 +55,10 @@ Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
 - **Lucro pós Ads** = lucro líquido − custo Ads por unidade (`Painel::ItemEconomics`, `net_profit_after_ads`); ordenável.
 - Na tabela, os custos (custo, comissão, frete/taxas, despesas fixas, imposto, custo Ads) mostram o valor em R$ em
   vermelho e, abaixo, o % sobre o preço de venda; os lucros mostram R$ em cima e % embaixo.
+
+## Aba Catálogo (08/11/2026)
+
+`GET /api/items/catalog` (`Painel::CatalogQuery`, `CatalogTable.vue`): todos os anúncios de catálogo com **Sincronizado**
+(tem `item_relations` com um tradicional, como em Promoções) ou **Não sincronizado**, **Ganhando / Compartilhando / Perdendo**
+(`catalog_status` do price_to_win, lido a cada 30 min só para ativos; pausados ficam "Sem leitura"), preço para ganhar,
+preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do topo filtram; busca por MLB, título ou SKU.

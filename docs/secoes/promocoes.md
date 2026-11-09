@@ -247,3 +247,10 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 - Redução de tarifa do PRICE_MATCHING: confirmar como o ML informa; hoje a conta usa a tarifa de `listing_prices`.
 - Ofertas relâmpago: entram reservando o estoque mínimo do ML e só com "Autorizar a adesão de Oferta Relâmpago".
 - Frete quando a promoção cruza R$ 79: hoje usa o frete do preço cheio.
+
+## Preço não crível (08/11/2026)
+
+Recusa `ERROR_CREDIBILITY_DISCOUNTED_PRICE`: o ML não aceita promoção com preço acima do menor preço praticado nos últimos
+30 dias (vendas e preço mostrado nas promoções). Depois da primeira recusa, a rotina (`PromotionRoutine#credibility_block`)
+não insiste: manda para revisar com o menor preço, o preço que o ML aceitaria e a data em que a trava sai (30 dias depois
+da última vez nesse preço). Vale para todos os anúncios (regra do usuário). Erro 500 do ML é instabilidade.

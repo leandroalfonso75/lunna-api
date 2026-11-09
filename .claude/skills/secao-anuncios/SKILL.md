@@ -9,3 +9,4 @@ description: Use ao alterar a página Anúncios do Lunna (tabela de anúncios, c
 4. A conta do lucro por venda (seção Vendas) segue a mesma ideia; se mudar custo, imposto ou despesas fixas, confira também `docs/secoes/vendas.md`.
 5. Anúncio com variações cujo SKU do anúncio não existe no Olist (ex.: MONDSC13-DIF): custo pela média dos SKUs das variações vendidas em 90 dias (`Painel::VariationCost`, fonte "variacoes"), também em Promoções e na Análise de Ads.
 6. Mudou regra ou arquivo? Atualize `docs/secoes/anuncios.md` no mesmo commit e rode os testes com `RAILS_ENV=test` (ver CLAUDE.md), por exemplo `spec/services/painel`.
+6. Aba Catálogo: `Painel::CatalogQuery` (`GET /api/items/catalog`) e `components/painel/CatalogTable.vue`; sincronização = `item_relations`, ganhando/perdendo = `catalog_status`.

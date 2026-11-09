@@ -116,3 +116,14 @@ O frete da venda é o de `/shipments/{id}/costs` (custo líquido do vendedor). O
 **etiqueta cheia** quando o comprador paga parte do frete (venda sem frete grátis); a parte do comprador vem no
 pagamento da venda, então cobrado = previsto + parte do comprador (conferido em 217 de 217 envios em 60 dias). O valor
 cobrado fica em `shipping.seller_cost_billed`, só para conferência (Financeiro › conciliação); o custo não muda.
+
+## Atualizações de 06–08/11/2026
+
+- **Cupom do vendedor é custo da venda** (regra do usuário): a parte do vendedor no cupom (`coupon_fee` do pagamento do
+  Mercado Pago, `mp_payments.coupon_amount`) entra no lucro de toda venda (`SalesQuery#coupons`; `economics.coupon_cost`) e o
+  desconto total dado ao comprador fica em `economics.coupon_discount`. Coluna **Cupom** na lista, linha no detalhe e no
+  card "Tarifas, frete e cupom".
+- **Histórico:** vendas importadas desde 05/2026; filtros de mês/datas vão até a venda mais antiga guardada (máx. 400 dias,
+  `SalesQuery#data_start`), não mais só 92 dias.
+- **Tarifa diferenciada:** em promoção SMART (co-participação), o ML devolve a parte dele no desconto como redução da
+  comissão; a tarifa da venda é a cobrada de fato (bate com `ml_sale_fee` do pagamento).

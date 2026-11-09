@@ -118,3 +118,9 @@ conta do Mercado Pago. Carrega à parte (`GET /api/finance/repasses`, `Painel::R
 - Guardar o extrato de mais períodos (hoje: aberto e anterior) para fechar meses mais antigos.
 - Levar o cupom com participação do vendedor (`mp_payments.coupon_amount`) para o custo da venda em Vendas e no DRE.
 - Pedir ao MP um relatório de liberações sob demanda (POST) para fechar a semana corrente sem esperar a segunda-feira.
+
+## Atualizações de 06–07/11/2026
+
+- **Cupons:** linha "(−) Cupons (parte do vendedor)" no DRE e em Despesas (descontada no pagamento do Mercado Pago; não
+  aparece no extrato do ML). Nos Repasses, o previsto já desconta o cupom.
+- **Repasses:** pagamentos e liberações do Mercado Pago desde 04–05/2026 (histórico importado em 06/11).

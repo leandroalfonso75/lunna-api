@@ -9,3 +9,4 @@ description: Use ao alterar a seção Financeiro do Lunna (DRE do período x ant
 4. Repasses (Mercado Pago): `Painel::RepassesQuery` cruza previsto x faturado x pagamento (`mp_payments`) x crédito na conta (`mp_release_lines`), por envio. Taxas do MP: tarifa = `ml_sale_fee` + `mp_processing_fee` + `mp_financing_*`; `financing_fee` é do comprador; `coupon_fee` é a parte do vendedor no cupom. O frete pago pelo comprador é outro pagamento (`marketplace_shipment`, `order_id` = envio). Relatório de liberações é semanal (segunda). Nova `description` no relatório: rótulo em `MpReleaseLine::LABELS`.
 5. Somente leitura: a seção não escreve no ML nem altera Vendas; divergências aparecem na conciliação.
 6. Mudou regra ou arquivo? Atualize `docs/secoes/financeiro.md` no mesmo commit e rode `RAILS_ENV=test` em `spec/requests/finance_spec.rb` e `spec/services/mp/sync_spec.rb`.
+6. Linha Cupons (parte do vendedor) no DRE/Despesas e previsto dos Repasses já descontando o cupom.

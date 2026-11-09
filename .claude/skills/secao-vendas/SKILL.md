@@ -11,3 +11,4 @@ description: Use ao alterar a página Vendas do Lunna (pedidos do Mercado Livre 
 6. Respeite: Mercado Livre somente leitura; do comprador só id, apelido, nome, CPF/CNPJ e cidade/UF (coluna Cliente, `Ml::Sync::BillingInfo`; CPF inteiro só para administrador); nunca telefone nem endereço; lucro calculado só na API.
 7. Mudou regra ou arquivo? Atualize `docs/secoes/vendas.md` no mesmo commit e rode os testes com `RAILS_ENV=test` (ver CLAUDE.md).
 8. Período: filtro por mês (`?month=YYYY-MM`, lista `months` com o atual primeiro); "Mês até hoje" saiu da tela.
+7. Cupom do vendedor é custo de toda venda (`SalesQuery#coupons`, `mp_payments.coupon_amount`); histórico até a venda mais antiga guardada (máx. 400 dias).

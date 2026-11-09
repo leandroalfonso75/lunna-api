@@ -169,3 +169,10 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
 ## Próximos passos (a definir com o usuário)
 - Filtros (tipo, situação, etapa, quem age, prazo, reputação, período, produto) e regras (alertas de prazo, custo das
   reclamações, motivos mais frequentes por produto).
+
+## Atualizações de 06/11/2026
+
+- "Última mensagem" mostra o texto inteiro com rolagem (não corta em 3 linhas).
+- **A atender** só quando o ML libera alguma ação ao vendedor (`ClaimsQuery.to_attend?` exige `seller_actions.any?`);
+  comprador aceitou a solução e não há o que fazer → fica só em Abertas (regra do usuário).
+- Detalhes: 401 "not available for Claims 1.0" numa parte não trava a releitura das demais; as abertas são relidas primeiro.

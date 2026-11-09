@@ -76,3 +76,18 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 - IA de texto: `Ai::JsonChat` com o modelo da empresa ou, sem ele, `google/gemini-2.5-flash` (só precisa da chave).
 - Rotas: GET/POST `/api/items/:id/title`, POST `/title/suggest`, GET/POST `/api/items/:id/specs`, POST `/specs/suggest`,
   POST `/api/items/:id/suggestion_acks`.
+
+## Atualizações de 07–09/11/2026
+
+- **Preço e frete:** todo cenário a partir de R$ 79 usa o frete grátis obrigatório pela tabela do ML por faixa
+  (`ml_items.ship_cost_tiers`: 79, 100, 120, 150, 200, lidos em todo anúncio pela sincronização de detalhes). Cada cenário
+  (menos "Hoje") tem **Aplicar novo preço sugerido** (`POST /api/items/:id/price`, `Ml::ItemPrice`: admin, confirmação,
+  registro em `ml_item_edits`, trava de 60%); no cenário "Com frete grátis" no mesmo preço, aplicar liga o frete grátis.
+  Campo **Simular outro preço** com a mesma conta (`calculator` na sugestão).
+- **Ficha técnica:** "Não se aplica" (value_id -1) nos campos não obrigatórios; números de documentos regulatórios (Anvisa,
+  CONAMA, AFE, INMETRO) não obrigatórios ficam fora (`Ml::SpecRules`); campo multivalorado vai separado por vírgula.
+- **Catálogo:** sem sugestões de título, fotos, descrição e ficha técnica (vêm do produto do catálogo).
+- **Vídeo:** o vídeo atual do ML (clip) não vem em `video_id`; vale a regra HAS_SHORTS da qualidade (`ml_items.has_clip`).
+  Sugestão de vídeo só quando o ML confirma que falta.
+- **Filtro** por produto (Olist), SKU, MLB ou palavra-chave, valendo em todas as abas (`skus`/`products` nas linhas).
+- **Avaliar aumento de preço:** preço abaixo da referência do ML — espaço para ganhar margem, não para exposição.

@@ -141,3 +141,12 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
 - A coluna de desempenho por palavra-chave não existe na API de Product Ads.
 
 - Períodos: Hoje, Ontem, 7 dias, Mês até hoje (`mtd`, do dia 1º até hoje), 30 dias, 60 dias, 3 meses ou datas escolhidas. Ao entrar na seção, o período começa em **Hoje** (pedido do usuário em 04/11/2026).
+
+## Atualizações de 08–09/11/2026
+
+- Cada sugestão da Análise mostra o anúncio e **todos os SKUs completos** (`Painel::ItemSkus`; nunca abreviar).
+- Cards em linguagem simples (`Painel::AdsExplain`): "O que está acontecendo" (com os números em R$) e "O que fazer, passo
+  a passo"; termos técnicos em "Detalhes técnicos".
+- **Variações:** o ML não pausa a publicidade de uma variação, só do anúncio pai inteiro (família com vários user
+  products). Sugestões de pausa listam todas as variações e dizem "anúncio inteiro"; "concentrar verba" só entre anúncios
+  separados do mesmo user product (ex.: catálogo e tradicional). Regra do usuário.
