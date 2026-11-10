@@ -43,13 +43,14 @@ module Painel
       Array(Array(claim.players).find { |p| p["role"] == "respondent" }&.dig("available_actions"))
     end
 
-    # A atender: aberta, o ML aguarda o vendedor (é o responsável pela próxima ação ou tem ação obrigatória) e há o que
-    # fazer. Sem nenhuma ação liberada ao vendedor (ex.: o comprador aceitou a solução e a devolução está em curso), a
-    # reclamação fica só em Abertas.
+    # A atender: aberta e o ML aguarda o vendedor — vale o "responsável pela próxima ação" do detalhe do ML (o que o painel
+    # do ML usa para o botão "Atender reclamação") ou uma ação obrigatória. Quando o comprador aceita a solução, o ML
+    # passa o responsável para o comprador e ela sai de A atender; as abertas são relidas a cada 15 minutos.
+    # 10/11/2026: até aqui também exigia ação liberada ao vendedor; reclamação recém-aberta (sem ações ainda na lista do
+    # ML) ficava de fora (#2000015809880991).
     def self.to_attend?(claim)
-      actions = seller_actions(claim)
-      claim.status == "opened" && actions.any? &&
-        (SELLER_ROLES.include?(claim.action_responsible.to_s) || actions.any? { |a| a["mandatory"] })
+      claim.status == "opened" &&
+        (SELLER_ROLES.include?(claim.action_responsible.to_s) || seller_actions(claim).any? { |a| a["mandatory"] })
     end
 
     def self.list(account, params) = new(account, params).list

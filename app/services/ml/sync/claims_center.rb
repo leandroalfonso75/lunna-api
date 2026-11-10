@@ -12,7 +12,7 @@ module Ml
     module ClaimsCenter
       PAGE = 100
       FULL_LIST_EVERY = 24.hours
-      REFRESH_OPEN_AFTER = 1.hour
+      REFRESH_OPEN_AFTER = 15.minutes # abertas: responsável e ações mudam rápido (ex.: comprador aceitou a solução)
       DETAILS_BATCH = 30
       REASON_TTL = 7.days
 
