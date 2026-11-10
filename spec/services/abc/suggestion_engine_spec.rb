@@ -477,6 +477,13 @@ RSpec.describe Abc::SuggestionEngine do
       expect(result.map { |s| s[:area] } & [ "título", "fotos", "descrição", "ficha técnica" ]).to be_empty
     end
 
+    it "toda sugestão sem botão próprio ganha os botões Ciente (ex.: logística); preço não" do
+      result = call(metric: build_metric(units_30d: 45, title: "a" * 39), curve: "A")
+      expect(find(result, "Avaliar Full")[:action]).to eq(kind: "ciente")
+      expect(find(result, "Ampliar título")[:action]).to eq(kind: "alterar_titulo")
+      expect(result.reject { |r| %w[preço frete dados].include?(r[:area]) }.map { |r| r[:action] }).to all(be_present)
+    end
+
     it "estoque tem os botões Ciente" do
       result = call(metric: build_metric(stock: 0))
       expect(find(result, "Repor estoque")).to include(action: { kind: "ciente" }, key: "estoque:Repor estoque")

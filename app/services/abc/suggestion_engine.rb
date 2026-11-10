@@ -40,8 +40,13 @@ module Abc
       @title_rule = ctx.title_rule || { editable: true }
     end
 
+    # Toda sugestão sem botão próprio ganha os botões "Ciente" (aplicada / aguardar), inclusive as que aparecerem no futuro
+    # (regra do usuário em 10/11/2026). Preço e Frete têm "Aplicar novo preço" e "Não aplicar nenhum preço sugerido".
+    NO_CIENTE_AREAS = [ "preço", "frete", "dados" ].freeze
+
     def call
       entries = RULES.flat_map { |rule| send(rule) }
+      entries.each { |e| e[:action] ||= ciente_action unless NO_CIENTE_AREAS.include?(e[:area]) }
       entries.each_with_index.sort_by { |suggestion, index| [ suggestion[:priority], index ] }.map(&:first)
     end
 
