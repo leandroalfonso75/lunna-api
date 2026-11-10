@@ -31,21 +31,18 @@ module Painel
     }.freeze
     SELLER_ROLES = %w[seller respondent].freeze
 
-    # Para quem o vendedor pode mandar mensagem agora (pelas ações liberadas pelo ML). Reclamação que aguarda o vendedor
-    # mas ainda veio sem nenhuma ação na API (recém-aberta; 10/11/2026, #2000015809880991): libera o campo para o mediador
-    # (mediação) ou para o comprador (reclamação), marcado como não confirmado; se o ML recusar, a tela mostra o motivo.
+    # Para quem o vendedor pode mandar mensagem agora (pelas ações liberadas pelo ML). Sem a ação, o ML recusa
+    # ("send message is not allowed", conferido em 10/11/2026 na #2000015809880991).
     def self.reply_targets(claim)
       return [] unless claim.status == "opened"
 
       actions = seller_actions(claim).map { |a| a["action"] }
-      targets = ClaimReply::RECEIVER_ACTIONS.select { |_, action| actions.include?(action) }.keys
-      return targets if targets.any? || actions.any? || !SELLER_ROLES.include?(claim.action_responsible.to_s)
-
-      [ claim.stage.to_s == "dispute" ? "mediator" : "complainant" ]
+      ClaimReply::RECEIVER_ACTIONS.select { |_, action| actions.include?(action) }.keys
     end
 
-    # Campo de resposta liberado sem a ação aparecer na API do ML (ver reply_targets).
-    def self.reply_unconfirmed?(claim) = claim.status == "opened" && seller_actions(claim).empty? && reply_targets(claim).any?
+    # Aguarda o vendedor, mas o ML não libera nenhuma ação pela integração (fluxo guiado do "Atender reclamação", com o
+    # assistente do ML): a resposta só pode ser dada no painel do Mercado Livre.
+    def self.ml_only?(claim) = claim.status == "opened" && seller_actions(claim).empty? && SELLER_ROLES.include?(claim.action_responsible.to_s)
 
     def self.seller_actions(claim)
       Array(Array(claim.players).find { |p| p["role"] == "respondent" }&.dig("available_actions"))
@@ -240,7 +237,7 @@ module Painel
         to_attend: self.class.to_attend?(c),
         deadline: c.due_date,
         seller_actions: c.status == "opened" ? self.class.seller_actions(c).map { |a| { action: a["action"], label: ACTIONS[a["action"]] || a["action"], due_date: a["due_date"], mandatory: a["mandatory"] } } : [],
-        reply_targets: self.class.reply_targets(c), reply_unconfirmed: self.class.reply_unconfirmed?(c),
+        reply_targets: self.class.reply_targets(c), ml_only: self.class.ml_only?(c),
         resolve_actions: ClaimAction.available(c),
         buyer_wants: Array(c.expected_resolutions).select { |e| e["player_role"] == "complainant" }.map { |e| EXPECTED[e["expected_resolution"]] || e["expected_resolution"] }.uniq,
         what_to_do: c.has_attribute?(:detail) && c.detail.present? ? { title: c.detail["title"], description: c.detail["description"] } : (c.detail_title && { title: c.detail_title, description: c.detail_description }),
