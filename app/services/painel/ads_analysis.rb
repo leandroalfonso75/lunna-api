@@ -464,8 +464,20 @@ module Painel
         start = d.decided_at.in_time_zone(@zone).to_date + 1
         finish = [ start + (DAYS - 1), @last ].min
         after = start <= @last ? after_metrics(d.key, families, campaign_rows, start, finish) : nil
-        self.class.decision_payload(d, after: after)
+        self.class.decision_payload(d, after: after).merge(campaigns_now: campaigns_now(d.key, families, campaign_rows))
       end
+    end
+
+    # Em que campanha(s) os anúncios da decisão estão hoje (ex.: a campanha criada a partir da sugestão, com o nome que o
+    # usuário deu no ML), para achar a decisão pelo nome da campanha (pedido do usuário em 10/11/2026).
+    def campaigns_now(key, families, campaign_rows)
+      if key.start_with?("campaign:")
+        cid = key.delete_prefix("campaign:").to_i
+        return campaign_rows.select { |c| c[:id] == cid }.map { |c| c[:name] }
+      end
+      item_ids = key.start_with?("item:") ? [ key.delete_prefix("item:") ] : Array(families.find { |f| f[:key] == key }&.dig(:items)).map { |i| i[:item_id] }
+      ids = @account.ml_ad_items.where(item_id: item_ids).where.not(campaign_id: nil).distinct.pluck(:campaign_id)
+      campaign_rows.select { |c| ids.include?(c[:id]) }.map { |c| c[:name] }
     end
 
     def after_metrics(key, families, campaign_rows, from, to)
