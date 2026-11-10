@@ -81,17 +81,22 @@ module Ml
 
       # --- 2) detalhes ---
 
+      # As que aguardam o vendedor ("A atender") são relidas a cada rodada: respondida no painel do ML, sai do Lunna em
+      # minutos (10/11/2026, #5609285262 ficou em A atender depois de respondida).
+      REFRESH_ATTEND_AFTER = 4.minutes
+
       def self.pending(account)
         account.ml_claims.where(
-          "details_synced_at IS NULL OR last_updated > details_synced_at OR (status = 'opened' AND details_synced_at <= ?)",
-          REFRESH_OPEN_AFTER.ago
+          "details_synced_at IS NULL OR last_updated > details_synced_at OR (status = 'opened' AND details_synced_at <= ?) " \
+          "OR (status = 'opened' AND action_responsible IN ('seller', 'respondent') AND details_synced_at <= ?)",
+          REFRESH_OPEN_AFTER.ago, REFRESH_ATTEND_AFTER.ago
         )
       end
 
       def self.details(client, account, limit, notes)
         reasons = {}
         done = 0
-        pending(account).order(Arel.sql("status = 'opened' DESC, details_synced_at IS NOT NULL, date_created DESC")).limit(limit).each do |claim|
+        pending(account).order(Arel.sql("(status = 'opened' AND action_responsible IN ('seller', 'respondent')) DESC, status = 'opened' DESC, details_synced_at IS NOT NULL, date_created DESC")).limit(limit).each do |claim|
           claim.update_columns(fetch_details(client, claim, reasons).merge(details_synced_at: Time.current, updated_at: Time.current))
           done += 1
         rescue Ml::Client::Error => e
