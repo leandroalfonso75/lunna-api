@@ -477,6 +477,11 @@ RSpec.describe Abc::SuggestionEngine do
       expect(result.map { |s| s[:area] } & [ "título", "fotos", "descrição", "ficha técnica" ]).to be_empty
     end
 
+    it "estoque tem os botões Ciente" do
+      result = call(metric: build_metric(stock: 0))
+      expect(find(result, "Repor estoque")).to include(action: { kind: "ciente" }, key: "estoque:Repor estoque")
+    end
+
     it "fotos trazem a ação de gerar imagens com a quantidade sugerida" do
       result = call(item: build_item(pictures_count: 4))
       expect(find(result, "Adicionar mais fotos")[:action]).to eq(kind: "gerar_fotos", suggested_count: 2)

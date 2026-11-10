@@ -84,7 +84,7 @@ module Abc
       return [] unless status == "active" && stock.zero?
 
       title = full? ? "Programar envio ao Full" : "Repor estoque"
-      [ suggestion(1, "estoque", title, "Estoque zerado em anúncio ativo — as vendas param até repor.") ]
+      [ suggestion(1, "estoque", title, "Estoque zerado em anúncio ativo — as vendas param até repor.", action: ciente_action) ]
     end
 
     # 4 — Estoque: cobertura 30d < 20 dias (só com estoque > 0).
@@ -95,7 +95,8 @@ module Abc
       return [] unless coverage.present? && coverage.to_f < 20
 
       priority = coverage.to_f < 10 ? 1 : 2
-      [ suggestion(priority, "estoque", "Repor estoque em breve", "Cobertura de #{coverage.to_f.round(1)} dias — abaixo do recomendado (20 dias).") ]
+      [ suggestion(priority, "estoque", "Repor estoque em breve", "Cobertura de #{coverage.to_f.round(1)} dias — abaixo do recomendado (20 dias).",
+                   action: ciente_action) ]
     end
 
     # 5 — Preço sugerido abaixo do atual.
