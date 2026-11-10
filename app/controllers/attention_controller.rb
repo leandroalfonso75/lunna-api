@@ -6,7 +6,7 @@ class AttentionController < ApplicationController
 
   def show
     account = Current.account
-    claims = account.ml_claims.where(status: "opened").select(:id, :status, :action_responsible, :players).to_a
+    claims = account.ml_claims.where(status: "opened").select(:id, :status, :stage, :action_responsible, :players).to_a
                     .count { |c| Painel::ClaimsQuery.to_attend?(c) }
     render json: {
       claims: claims,

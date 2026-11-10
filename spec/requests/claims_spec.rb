@@ -193,6 +193,8 @@ RSpec.describe "/api/claims", type: :request do
 
       expect(json["claims"].map { |c| c["claim_id"] }).to contain_exactly(1, 4)
       expect(json["attention"]).to include("to_attend" => 2, "open" => 4)
+      fresh = json["claims"].find { |c| c["claim_id"] == 4 }
+      expect(fresh).to include("reply_targets" => [ "mediator" ], "reply_unconfirmed" => true) # mediação sem ações na API: campo liberado
     end
 
     it "resolve pelo Lunna só com as ações que o ML libera, com confirmação, e registra" do
