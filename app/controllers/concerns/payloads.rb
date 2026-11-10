@@ -48,6 +48,8 @@ module Payloads
       status: account.status,
       last_error: account.last_error,
       connected_at: account.created_at,
+      ads_roas_target_enabled: account.ads_roas_target_enabled,
+      ads_roas_target: account.ads_roas_target&.to_f,
       last_sync: last_sync_payload(account)
     }
   end

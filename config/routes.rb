@@ -18,7 +18,7 @@ Rails.application.routes.draw do
     resource :company, only: [ :show, :update ], controller: "company"
     resources :users, only: [ :index, :create, :update, :destroy ]
 
-    resources :ml_accounts, only: [ :index, :destroy ] do
+    resources :ml_accounts, only: [ :index, :destroy, :update ] do
       post :authorize, on: :collection
       post :connect, on: :collection
     end

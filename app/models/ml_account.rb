@@ -13,6 +13,11 @@ class MlAccount < ApplicationRecord
   has_many :ml_claim_actions, dependent: :delete_all
   has_many :finance_entries, dependent: :delete_all
   has_many :ml_item_edits, dependent: :delete_all
+
+  validates :ads_roas_target, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }, allow_nil: true
+
+  # ROAS Objetivo do vendedor (Configurações › Ads); nil quando desligado.
+  def ads_roas_goal = ads_roas_target_enabled && ads_roas_target.present? ? ads_roas_target.to_f : nil
   has_many :ml_questions, dependent: :delete_all
   has_many :ml_conversations, dependent: :delete_all
   has_many :ml_message_sends, dependent: :delete_all

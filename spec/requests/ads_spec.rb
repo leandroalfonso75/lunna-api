@@ -210,6 +210,23 @@ RSpec.describe "/api/ads", type: :request do
         clicks: clicks, prints: prints, units: units)
     end
 
+    it "ROAS Objetivo do vendedor ligado: família lucrativa mas abaixo do alvo vira ação de subir o ROAS Objetivo" do
+      account.update!(ads_roas_target_enabled: true, ads_roas_target: 25)
+      campaign(1, name: "Modelador")
+      yesterday = Date.current - 1
+      ad("MLB31", 1, {}, title: "Modelador").update!(family_id: "F31", family_name: "Modelador", date_created: 90.days.ago)
+      item_day("MLB31", 1, yesterday, cost: 50, amount: 500, clicks: 100, prints: 5000, units: 8)
+
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(json["rules"]["roas_goal"]).to eq(25.0)
+      fam = json["families"].find { |f| f["key"] == "F31" }
+      expect(fam["signals"].map { |x| x["type"] }).to include("abaixo_do_roas_objetivo")
+      entry = (json["queue"] + json["next_round"]).find { |q| q["signal"] == "abaixo_do_roas_objetivo" }
+      expect(entry["action"]).to include("para 25")
+      expect(entry["value"]).to eq(30.0) # 50 − 500/25
+    end
+
     it "variações do mesmo anúncio pai: não sugere pausar uma variação; pausar vale para o anúncio inteiro" do
       campaign(1, name: "Maquiagens")
       yesterday = Date.current - 1

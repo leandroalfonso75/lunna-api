@@ -150,3 +150,10 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
 - **Variações:** o ML não pausa a publicidade de uma variação, só do anúncio pai inteiro (família com vários user
   products). Sugestões de pausa listam todas as variações e dizem "anúncio inteiro"; "concentrar verba" só entre anúncios
   separados do mesmo user product (ex.: catálogo e tradicional). Regra do usuário.
+
+## ROAS Objetivo do vendedor (10/11/2026)
+
+Configurações › Ads, por conta do ML (`ml_accounts.ads_roas_target_enabled` / `ads_roas_target`, `PATCH /api/ml_accounts/:id`,
+admin). Ligado: a Análise cria o sinal `abaixo_do_roas_objetivo` (família lucrativa, mas com ROAS abaixo do alvo; valor =
+gasto − receita ÷ alvo; ação: subir o ROAS Objetivo da campanha para o alvo), não sugere baixar o ROAS Objetivo de campanha
+abaixo dele (`campaign_rank_entry`) e as campanhas novas da Estrutura partem dele (`AdsStructure#roas_path`). `rules.roas_goal`.

@@ -10,6 +10,25 @@ class MlAccountsController < ApplicationController
     render json: { ml_accounts: Current.company.ml_accounts.order(:created_at).map { |account| ml_account_payload(account) } }
   end
 
+  # PATCH /api/ml_accounts/:id → configurações da conta (admin): ROAS Objetivo do Ads ligado/desligado e o valor.
+  def update
+    return render_errors([ "sem permissão" ], status: :forbidden) unless Current.user&.admin?
+
+    account = Current.company.ml_accounts.find(params[:id])
+    attrs = params.permit(:ads_roas_target_enabled, :ads_roas_target).to_h
+    attrs["ads_roas_target"] = attrs["ads_roas_target"].to_s.tr(",", ".").presence if attrs.key?("ads_roas_target")
+    if ActiveModel::Type::Boolean.new.cast(attrs["ads_roas_target_enabled"]) && (attrs["ads_roas_target"] || account.ads_roas_target).blank?
+      return render_errors([ "Informe o ROAS Objetivo para ligar." ], status: :unprocessable_content)
+    end
+
+    account.update!(attrs)
+    render json: { ml_account: ml_account_payload(account) }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Conta não encontrada." ], status: :not_found)
+  rescue ActiveRecord::RecordInvalid => e
+    render_errors(e.record.errors.full_messages, status: :unprocessable_content)
+  end
+
   def authorize
     unless Ml::OAuth.configured?
       return render_errors([ "Integração com o Mercado Livre não configurada." ], status: :unprocessable_content)

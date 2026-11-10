@@ -275,8 +275,10 @@ module Painel
     # equilíbrio × 1,35.
     def roas_path(current_target, practiced, eq)
       floor = [ (eq * FLOOR_FACTOR).round(1), 3.3 ].max
+      goal = @account.ads_roas_goal # ROAS Objetivo do vendedor: piso das campanhas sugeridas
+      floor = [ floor, goal ].max if goal
       start = [ ([ current_target.to_f, practiced.to_f ].min * STEP_FACTOR).round, floor ].max
-      [ start.to_f.clamp(1.0, 35.0), floor ]
+      [ start.to_f.clamp(1.0, [ 35.0, floor ].max), floor ]
     end
 
     def round5_up(v) = ((v.to_f / 5).ceil * 5).to_f

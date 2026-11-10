@@ -243,4 +243,24 @@ RSpec.describe "/api/ml_accounts", type: :request do
       expect(MlAccount.exists?(account.id)).to be false
     end
   end
+
+  describe "PATCH /api/ml_accounts/:id (ROAS Objetivo do Ads)" do
+    it "admin liga e define o ROAS Objetivo da conta; sem valor não liga; membro não altera" do
+      company = create(:company)
+      admin = create(:user, :admin, company: company)
+      member = create(:user, company: company)
+      account = create(:ml_account, company: company)
+
+      patch "/api/ml_accounts/#{account.id}", params: { ads_roas_target_enabled: true }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:unprocessable_content)
+
+      patch "/api/ml_accounts/#{account.id}", params: { ads_roas_target_enabled: true, ads_roas_target: "25" }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+
+      patch "/api/ml_accounts/#{account.id}", params: { ads_roas_target_enabled: true, ads_roas_target: "25" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:ok)
+      expect(json["ml_account"]).to include("ads_roas_target_enabled" => true, "ads_roas_target" => 25.0)
+      expect(account.reload.ads_roas_goal).to eq(25.0)
+    end
+  end
 end

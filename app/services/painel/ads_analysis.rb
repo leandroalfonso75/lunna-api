@@ -92,6 +92,7 @@ module Painel
       @account = account
       @company = account.company
       @max_actions = max_actions.to_i.clamp(1, 20)
+      @goal = account.ads_roas_goal # ROAS Objetivo do vendedor (Configurações › Ads), ou nil
       @zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
       @last = @zone.today - 1
       @from = @last - (DAYS - 1)
@@ -124,6 +125,7 @@ module Painel
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
         rules: { min_clicks: MIN_CLICKS, min_prints: MIN_PRINTS, relevant_cost: RELEVANT_COST, maturity_days: MATURITY_DAYS,
                  max_actions: @max_actions, tacos_target: TACOS_TARGET, tacos_bad: TACOS_BAD, reference_equilibrium: REFERENCE_EQUILIBRIUM,
+                 roas_goal: @goal,
                  note: "30 cliques para julgar conversão e 500 impressões para julgar CTR são regra da casa, não das fontes." },
         health: health,
         campaigns: campaign_rows,
@@ -278,6 +280,13 @@ module Painel
         signals << { type: "abaixo_do_equilibrio", priority: "alta", value: waste,
                      detail: "ROAS #{m[:roas]} abaixo do equilíbrio #{eq} (margem bruta #{family[:economics][:margin_pct]}%)#{family[:economics][:complete] ? '' : ' — equilíbrio parcial: sem a tarifa detalhada, o real é maior'}." }
       end
+      # abaixo do ROAS Objetivo do vendedor (acima do equilíbrio: dá lucro, mas gasta mais do que o alvo da conta)
+      if @goal && m[:roas] && m[:roas] < @goal && m[:revenue].positive? && m[:cost] >= RELEVANT_COST &&
+         signals.none? { |x| x[:type] == "abaixo_do_equilibrio" }
+        over = [ m[:cost] - m[:revenue] / @goal, 0 ].max.round(2)
+        signals << { type: "abaixo_do_roas_objetivo", priority: "media", value: over,
+                     detail: "ROAS #{m[:roas]} abaixo do seu ROAS Objetivo #{fmt_goal} (Configurações › Ads)#{eq ? "; equilíbrio do produto #{eq}" : ''}." }
+      end
       if active.size > 1 && active.count { |r| r[:cost].positive? } > 1
         best, *rest = active.select { |r| r[:roas] }.sort_by { |r| -r[:roas] }
         worst = rest.last
@@ -352,6 +361,8 @@ module Painel
       end
     end
 
+    def fmt_goal = format("%g", @goal.to_f)
+
     def budget_value(m, a)
       share = a[:impression_share].to_f
       return nil unless share.positive? && m[:revenue].positive?
@@ -408,6 +419,10 @@ module Painel
         base.merge(class: "desperdicio", class_label: CLASSES["desperdicio"], title: name, value_how: "parte do investimento acima do que a receita sustenta no equilíbrio",
                    action: "ROAS #{f[:metrics][:roas]} abaixo do equilíbrio #{f[:economics][:roas_equilibrio]}: rever preço e custo (margem #{f[:economics][:margin_pct]}%); se não houver como subir a margem, pausar a publicidade do anúncio inteiro (#{ids.size > 1 ? "as #{ids.size} variações juntas" : "o anúncio"}; o ML não pausa uma variação sozinha).",
                    check_before: "custo do produto e preço no Lunna; não baixar lance como primeira ação")
+      when "abaixo_do_roas_objetivo"
+        base.merge(class: "desperdicio", class_label: CLASSES["desperdicio"], title: name, value_how: "investimento acima do que o seu ROAS Objetivo permite",
+                   action: "Subir o ROAS Objetivo da campanha #{f[:campaign_names].first || ''} para #{fmt_goal} (o seu alvo em Configurações › Ads). O ML dá lances menores: menos exibições, mas cada venda custa menos em publicidade.",
+                   check_before: "vendas totais do anúncio (orgânico + Ads) nos 7 dias seguintes", reassess: "7 dias")
       when "familia_com_multiplos_anuncios_ativos"
         base.merge(class: "alocacao", class_label: CLASSES["alocacao"], title: name, value_how: "verba do anúncio pior × diferença de ROAS",
                    action: "Concentrar a verba no anúncio #{s[:best]} (melhor ROAS) e pausar a publicidade do #{s[:worst]} (mesmo produto, anúncios separados, como catálogo e tradicional); não excluir o anúncio.",
@@ -445,13 +460,15 @@ module Painel
     end
 
     def campaign_rank_entry(c)
+      # com ROAS Objetivo do vendedor ligado, não sugere baixar abaixo dele
+      return nil if @goal && c[:roas_target] && c[:roas_target].to_f <= @goal
       a = c[:auction]
       share = a[:impression_share].to_f
       value = share.positive? && c[:metrics][:revenue].positive? ? [ c[:metrics][:revenue] * a[:lost_by_ad_rank].to_f / share, c[:metrics][:revenue] ].min.round(2) : nil
       { key: "campaign:#{c[:id]}", campaign_id: c[:id], item_ids: [], campaigns: [ c[:name] ], class: "posicao", class_label: CLASSES["posicao"], title: "Campanha #{c[:name]}",
         signal: "exposicao_perdida_por_ad_rank", value: value, value_how: "receita do período × parcela perdida por classificação (estimativa, teto: dobrar a receita)",
         evidence: "aparece em #{pct(share)} das oportunidades; perde #{pct(a[:lost_by_ad_rank])} por classificação e #{pct(a[:lost_by_budget])} por orçamento; ACOS #{c[:metrics][:acos] || '—'}% contra benchmark #{a[:acos_benchmark]}%; ROAS Objetivo #{c[:roas_target] || '—'}.",
-        action: "Baixar o ROAS Objetivo da campanha #{c[:name]}#{c[:roas_target] ? " de #{c[:roas_target]} para #{(c[:roas_target] * 0.8).round(1)}" : ''} para o lance subir, e melhorar capa/ficha dos anúncios de maior gasto; aumentar orçamento não compra posição.",
+        action: "Baixar o ROAS Objetivo da campanha #{c[:name]}#{c[:roas_target] ? " de #{c[:roas_target]} para #{[ (c[:roas_target] * 0.8).round(1), @goal.to_f ].max}" : ''} para o lance subir, e melhorar capa/ficha dos anúncios de maior gasto; aumentar orçamento não compra posição.",
         check_before: "margem das famílias (ROAS Objetivo não pode ficar abaixo do equilíbrio)", reassess: "7 dias" }
     end
 

@@ -34,6 +34,18 @@ module Painel
               "Volte ao Lunna e clique em \"Marcar como feito\". Em 7 dias o Lunna mostra se o lucro melhorou."
             ]
           }
+        when "abaixo_do_roas_objetivo"
+          goal = entry[:action].to_s[/para ([\d.,]+)/, 1]
+          {
+            situation: "#{period.capitalize} você investiu #{brl(m[:cost])} em anúncios pagos destes produtos e eles venderam " \
+                       "#{brl(m[:revenue])}: cada R$ 1 trouxe #{brl(m[:roas])}. Dá lucro (o equilíbrio é #{brl(e[:roas_equilibrio])}), " \
+                       "mas está abaixo do seu ROAS Objetivo (#{goal}), definido em Configurações › Ads.",
+            steps: [
+              "#{ML_PATH} › #{camp || 'campanha'} › Editar › ROAS objetivo: #{goal}.",
+              "O ML passa a dar lances menores: o anúncio aparece menos, mas cada venda custa menos em publicidade.",
+              "Acompanhe as vendas totais do anúncio (com e sem Ads) por 7 dias e clique em \"Marcar como feito\" no Lunna."
+            ]
+          }
         when "gasto_sem_receita"
           {
             situation: "#{period.capitalize} você investiu #{brl(m[:cost])} em anúncios pagos destes produtos e eles não venderam " \
