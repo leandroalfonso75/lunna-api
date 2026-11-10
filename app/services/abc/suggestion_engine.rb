@@ -230,7 +230,8 @@ module Abc
       missing = Array(@item&.attrs_missing_main)
       return [] if missing.empty?
 
-      [ suggestion(2, "ficha técnica", "Completar características principais", "Características principais faltando: #{missing.join(', ')}.",
+      # ficha incompleta é sempre urgente, obrigatória ou não (regra do usuário em 10/11/2026)
+      [ suggestion(1, "ficha técnica", "Completar características principais", "Características principais faltando: #{missing.join(', ')}.",
                    action: { kind: "alterar_ficha" }) ]
     end
 

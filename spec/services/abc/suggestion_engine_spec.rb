@@ -236,11 +236,11 @@ RSpec.describe Abc::SuggestionEngine do
   end
 
   # 16 — características principais faltando
-  it "características principais faltando -> prioridade 2" do
+  it "características principais faltando -> prioridade 1 (ficha incompleta é sempre urgente)" do
     item = build_item(attrs_missing_main: [ "Cor" ], details_checked_at: Time.current)
     result = call(item: item)
     suggestion = find(result, "Completar características principais")
-    expect(suggestion[:priority]).to eq(2)
+    expect(suggestion[:priority]).to eq(1)
     expect(suggestion[:why]).to include("Cor")
   end
 
