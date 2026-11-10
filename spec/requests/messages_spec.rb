@@ -92,6 +92,19 @@ RSpec.describe "Mensagens (/api/messages)", type: :request do
     expect(json["conversations"].size).to eq(1)
   end
 
+  it "conversa com o assistente de IA do ML: a resposta vai para o caminho da conversa e para o agente" do
+    account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "active", messages_count: 1, last_from: "buyer", seller_max_length: 350,
+                                     conversation_path: "/packs/10/sellers/430/conversations/ai-seller", agent_id: 777)
+    sent = stub_request(:post, %r{#{ml}/messages/packs/10/sellers/430/conversations/ai-seller})
+      .with(body: { from: { user_id: 430 }, to: { user_id: 777 }, text: "Garantia de 12 meses." }.to_json).to_return(status: 200, body: "{}")
+    stub_pack(10, [ ml_message("a", 777, 430, "O comprador quer saber da garantia", "2026-11-10T10:00:00Z") ])
+
+    post "/api/messages/10/send", params: { account_id: account.id, text: "Garantia de 12 meses.", confirm: true }, headers: auth_headers(admin)
+
+    expect(response).to have_http_status(:ok)
+    expect(sent).to have_been_requested.once
+  end
+
   it "conversa bloqueada pelo ML não envia" do
     account.ml_conversations.create!(pack_id: 10, buyer_id: 99, status: "blocked", substatus: "blocked_by_cancelled_order", messages_count: 1, last_from: "buyer")
 

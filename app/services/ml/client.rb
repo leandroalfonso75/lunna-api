@@ -167,8 +167,9 @@ module Ml
     end
 
     # Envia mensagem ao comprador (até 350 caracteres). Escrita: admin, com confirmação, registrada em ml_message_sends.
-    def send_pack_message(seller_id, pack_id, buyer_id, text)
-      write(:post, "/messages/packs/#{pack_id}/sellers/#{seller_id}", { tag: "post_sale" },
+    # path: caminho da conversa quando não é a padrão (ex.: ".../conversations/ai-seller", conversa com o assistente do ML).
+    def send_pack_message(seller_id, pack_id, buyer_id, text, path: nil)
+      write(:post, path.present? ? "/messages#{path}" : "/messages/packs/#{pack_id}/sellers/#{seller_id}", { tag: "post_sale" },
             { from: { user_id: seller_id.to_i }, to: { user_id: buyer_id.to_i }, text: text })
     end
 

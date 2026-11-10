@@ -55,7 +55,8 @@ class MessagesController < ApplicationController
     return render_errors([ "Comprador da conversa não identificado." ], status: :unprocessable_content) if conv.buyer_id.blank?
 
     log = Current.account.ml_message_sends.create!(pack_id: conv.pack_id, user: Current.user, text: text)
-    client.send_pack_message(Current.account.seller_id, conv.pack_id, conv.buyer_id, text)
+    to = conv.conversation_path.present? && conv.agent_id.present? ? conv.agent_id : conv.buyer_id
+    client.send_pack_message(Current.account.seller_id, conv.pack_id, to, text, path: conv.conversation_path)
     log.update!(ok: true)
     Ml::Sync::Messages.refresh(client, Current.account, conv.pack_id)
     conv.reload

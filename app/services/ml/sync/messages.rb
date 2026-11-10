@@ -69,7 +69,8 @@ module Ml
           { "id" => m["id"], "from" => m.dig("from", "user_id"), "to" => m.dig("to", "user_id"), "text" => m["text"],
             "date" => m.dig("message_date", "created") || m.dig("message_date", "received"), "read" => m.dig("message_date", "read"),
             "status" => m["status"], "moderation" => m.dig("message_moderation", "status"),
-            "attachments" => Array(m["message_attachments"]).map { |a| a.slice("filename", "original_filename", "type", "size") } }
+            "attachments" => Array(m["message_attachments"]).map { |a| a.slice("filename", "original_filename", "type", "size") },
+            "agent" => m.dig("data", "agent", "name") }
         end.sort_by { |m| m["date"].to_s }
         last = list.last
         # comprador = o da venda (mensagens do assistente do ML vêm de outro usuário); sem venda, a outra ponta da conversa
@@ -80,7 +81,10 @@ module Ml
           buyer_id: buyer, status: conv["status"], substatus: conv["substatus"], claim_ids: Array(conv["claim_ids"]),
           messages: list, messages_count: list.size, unread_count: list.count { |m| m["from"] != seller && m["read"].nil? },
           last_message_at: last && last["date"], last_from: last && (last["from"] == seller ? "seller" : "buyer"),
-          seller_max_length: max_length, checked_at: Time.current
+          seller_max_length: max_length, checked_at: Time.current,
+          # conversa com o assistente de IA do ML: a resposta vai para o caminho dela e para o agente (não o comprador)
+          conversation_path: (conv["path"].to_s.include?("/conversations/") ? conv["path"] : nil),
+          agent_id: list.reverse.find { |m| m["agent"].present? && m["from"] != seller }&.dig("from")
         )
       end
     end

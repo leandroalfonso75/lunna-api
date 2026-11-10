@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_09_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -424,6 +424,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_09_010001) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "hidden_at"
+    t.string "conversation_path"
+    t.bigint "agent_id"
     t.index ["ml_account_id", "last_message_at"], name: "index_ml_conversations_on_ml_account_id_and_last_message_at"
     t.index ["ml_account_id", "pack_id"], name: "index_ml_conversations_on_ml_account_id_and_pack_id", unique: true
   end
