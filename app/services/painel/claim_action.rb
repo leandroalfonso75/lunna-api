@@ -54,6 +54,7 @@ module Painel
       response = client.claim_resolve(@claim.claim_id, @action, percentage: @percentage)
       record.update!(status: "done", response: response.is_a?(Hash) ? response : { "data" => response })
       refresh(client)
+      Ml::ClaimRefreshJob.schedule(@account, @claim.claim_id) # relê de novo em 10 s e 60 s
       Result.new(ok: true, message: DONE[@action], record: record)
     rescue Ml::Client::Error => e
       record&.update!(status: "failed", error: e.message.truncate(500))

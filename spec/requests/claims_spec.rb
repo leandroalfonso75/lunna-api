@@ -197,6 +197,18 @@ RSpec.describe "/api/claims", type: :request do
       expect(fresh).to include("reply_targets" => [], "ml_only" => true) # o ML recusa mensagem sem a ação: responder no painel do ML
     end
 
+    it "Já respondi no Mercado Livre: relê agora, agenda novas leituras e a reclamação sai de A atender" do
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({ action_responsible: "complainant" })
+
+      expect { post "/api/claims/1/refresh", params: { account_id: account.id }, headers: auth_headers(member) }
+        .to have_enqueued_job(Ml::ClaimRefreshJob).twice
+
+      expect(response).to have_http_status(:ok)
+      expect(json["to_attend"]).to be(false)
+      expect(account.ml_claims.find_by(claim_id: 1).action_responsible).to eq("complainant")
+    end
+
     it "resolve pelo Lunna só com as ações que o ML libera, com confirmação, e registra" do
       refund = stub_request(:post, "#{base}/1/expected-resolutions/refund").to_return(status: 200, body: [ { expected_resolution: "refund" } ].to_json)
       allow(Ml::OAuth).to receive(:refresh!)

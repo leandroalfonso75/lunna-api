@@ -92,6 +92,15 @@ class ClaimsController < ApplicationController
     render_errors([ "Reclamação não encontrada." ], status: :not_found)
   end
 
+  # POST /api/claims/:id/refresh → relê a reclamação no ML agora (ex.: respondida direto no painel do ML) e de novo em 10 s.
+  def refresh
+    claim = Ml::ClaimRefreshJob.refresh_now(Current.account, params[:id].to_i)
+    return render_errors([ "Reclamação não encontrada." ], status: :not_found) unless claim
+
+    Ml::ClaimRefreshJob.schedule(Current.account, claim.claim_id)
+    render json: { ok: true, to_attend: Painel::ClaimsQuery.to_attend?(claim), claim: Painel::ClaimsQuery.detail(Current.account, claim.claim_id) }
+  end
+
   def show
     render json: Painel::ClaimsQuery.detail(Current.account, params[:id].to_i)
   rescue ActiveRecord::RecordNotFound
