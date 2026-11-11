@@ -1,13 +1,13 @@
 # Resultado por unidade de cada anúncio da tabela de Anúncios:
 #
-#   Lucro líquido = preço de venda − custo − comissão − frete/taxas − despesas fixas − imposto
+#   Lucro antes Ads = preço de venda − custo − comissão − frete/taxas − despesas operacionais − imposto
 #
 # - Custo: do Olist/Tiny pelo SKU (Olist::UnitCost); sem ele, o custo manual do SKU
 #   (ml_costs: cost + extra); sem nenhum, o anúncio fica "sem custo" e o lucro não é calculado.
 # - Comissão: a parte percentual da tarifa de venda prevista no anúncio (fee_now menos taxa fixa
 #   e financiamento). Sem o detalhe da tarifa, a tarifa inteira entra como comissão.
 # - Frete/taxas: frete que o vendedor paga (ship_cost) + taxa fixa + financiamento.
-# - Despesas fixas: % do preço de venda definida na empresa (padrão 3%).
+# - Despesas Operacionais: % do preço de venda definida na empresa (padrão 3%).
 # - Imposto: % do preço de venda cadastrada em Configurações > Impostos e margem (tax_pct da empresa).
 module Painel
   class ItemEconomics

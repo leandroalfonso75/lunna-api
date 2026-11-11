@@ -40,14 +40,14 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
 
 ## Regras
 - **Margem da oferta** (`Painel::PromotionEvaluator`), sempre **pós Ads** ("margem real" e "lucro real" na tela):
-  lucro = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas − Ads; margem = lucro ÷ preço.
+  lucro = preço + parte do ML − custo − tarifa − frete − imposto − despesas operacionais − Ads; margem = lucro ÷ preço.
   - Ads: custo de Ads por unidade do anúncio nos últimos 15 dias fechados = gasto (`ml_ad_item_dailies`) ÷ unidades
     vendidas no mesmo período (vendas não canceladas). Sem gasto, ou gasto sem venda, vale zero (a tela mostra o gasto).
   - O painel do anúncio mostra os custos por unidade linha a linha, hoje e depois da melhor oferta.
   - Parte do ML: ofertas com desconto dividido (`meli_percentage`) — o ML banca esse % do preço original.
   - Tarifa: a do ML no preço da oferta (`/sites/MLB/listing_prices`, guardada em `ml_promotion_offers.fees`); em outro
     preço, % da tarifa × preço + taxa fixa.
-  - Frete, custo, imposto e despesas fixas: os mesmos da seção Anúncios.
+  - Frete, custo, imposto e despesas operacionais: os mesmos da seção Anúncios.
 - **Preço da oferta:** fixo (SMART, PRICE_MATCHING, relâmpago com ML, DOD) ou, nas de faixa (campanha do vendedor,
   DEAL, desconto próprio, relâmpago), o maior preço permitido. Com margem máxima, desce o preço até ela.
 - **O preço cheio do anúncio nunca muda** e é o teto (`price_cap`): a promoção parte dele e o preço final fica abaixo

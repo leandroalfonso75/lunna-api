@@ -1,5 +1,5 @@
-# Despesas fixas mensais da empresa (Financeiro › Despesas › Incluir Despesas). Leitura para todos; escrita só admin.
-# GET    /api/finance/fixed_expenses?month=YYYY-MM   → lançamentos do mês, comparativo Faturamento x Despesas Fixas e os meses lançados
+# Despesas Operacionais mensais da empresa (Financeiro › Despesas › Incluir Despesas). Leitura para todos; escrita só admin.
+# GET    /api/finance/fixed_expenses?month=YYYY-MM   → lançamentos do mês, comparativo Faturamento x Despesas Operacionais e os meses lançados
 # POST   /api/finance/fixed_expenses                 { month, category, description, amount }
 # PATCH  /api/finance/fixed_expenses/:id
 # DELETE /api/finance/fixed_expenses/:id

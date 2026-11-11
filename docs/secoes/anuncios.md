@@ -1,19 +1,19 @@
 # Anúncios
 
-Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
+Tabela de anúncios do Mercado Livre com o **lucro antes Ads por unidade**.
 
 ## O que mostra
 - Abas por situação (Ativos, Pausados, Finalizados, Todos), busca e filtros por tipo e envio.
-- Colunas: Anúncio, SKU, Preço, Estoque, **Custo, Comissão, Frete/taxas, Desp. fixas, Imposto, Lucro líquido (% em cima,
+- Colunas: Anúncio, SKU, Preço, Estoque, **Custo, Comissão, Frete/taxas, Desp. Oper., Imposto, Lucro antes Ads (% em cima,
   R$ embaixo)**, Cobertura e Qualidade. Cobertura e Qualidade somem abaixo de 1280 px de largura (continuam no detalhe).
 - A tabela não tem barra de rolagem horizontal.
 - Ao clicar no anúncio abrem cards: Preço e oferta, **Desempenho 7 dias** (visitas, vendas, conversão, variação nas
   vendas, faturado, após tarifa), **Resultado por unidade**, Estoque e cadastro, Qualidade.
-- Ordenação por preço, estoque, cobertura, qualidade, título, SKU e **% de lucro líquido** (as colunas de custo e
+- Ordenação por preço, estoque, cobertura, qualidade, título, SKU e **% de lucro antes Ads** (as colunas de custo e
   despesas não ordenam).
 
-## Conta do lucro líquido (por unidade vendida)
-`preço de venda − custo − comissão − frete/taxas − despesas fixas − imposto`
+## Conta do lucro antes Ads (por unidade vendida)
+`preço de venda − custo − comissão − frete/taxas − despesas operacionais − imposto`
 - **Custo:** do Olist pelo SKU (`Olist::UnitCost`: PEPS → cadastro → médio → custo da última entrada; kit = soma dos componentes). Sem custo no
   Olist, usa o custo manual do SKU (`ml_costs`: custo + extra). Anúncio com variações cujo SKU do anúncio não existe
   no Olist (ex.: MONDSC13-DIF, variações LS-SC13-DIF-110/220, kits do secador + LS-DIF): custo = média dos SKUs das
@@ -22,7 +22,7 @@ Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
 - **Comissão:** parte percentual da tarifa prevista no anúncio (`fee_now` menos taxa fixa e financiamento, lidos de
   `fee_details`). Sem o detalhe, a tarifa inteira entra como comissão.
 - **Frete/taxas:** frete pago pelo vendedor (`ship_cost`) + taxa fixa + financiamento.
-- **Despesas fixas:** % do preço, campo `companies.fixed_expenses_pct` (padrão 3%; ainda sem tela de edição).
+- **Despesas Operacionais:** % do preço, campo `companies.fixed_expenses_pct` (padrão 3%; ainda sem tela de edição).
 - **Imposto:** `companies.tax_pct` (Configurações > Impostos e margem) × preço.
 - Lucro em R$ e em % do preço de venda. Implementado em `Painel::ItemEconomics`.
 
@@ -46,14 +46,14 @@ Tabela de anúncios do Mercado Livre com o **lucro líquido por unidade**.
 ## Pendências
 - Anúncio sem custo é o de produto sem nenhuma entrada com valor no Olist; preencher o preço de custo no cadastro do produto
   (aba Custos) resolve na próxima leitura.
-- Campo "Despesas fixas" editável em outra página.
+- Campo "Despesas Operacionais" editável em outra página.
 
 ## Custo de Ads e lucro pós Ads (30/10)
 - **Custo Ads** por unidade = gasto do anúncio em Product Ads nos últimos N dias fechados ÷ unidades vendidas dele no
   período (vendas não canceladas), com N em Configurações → Anúncios (`companies.ads_cost_days`: 7, 15 ou 30; padrão
   15). Sem gasto, ou gasto sem venda, fica zero. Código em `Painel::AdsUnitCost` (também usado pelas Promoções).
-- **Lucro pós Ads** = lucro líquido − custo Ads por unidade (`Painel::ItemEconomics`, `net_profit_after_ads`); ordenável.
-- Na tabela, os custos (custo, comissão, frete/taxas, despesas fixas, imposto, custo Ads) mostram o valor em R$ em
+- **Lucro pós Ads** = lucro antes Ads − custo Ads por unidade (`Painel::ItemEconomics`, `net_profit_after_ads`); ordenável.
+- Na tabela, os custos (custo, comissão, frete/taxas, despesas operacionais, imposto, custo Ads) mostram o valor em R$ em
   vermelho e, abaixo, o % sobre o preço de venda; os lucros mostram R$ em cima e % embaixo.
 
 ## Aba Catálogo (08/11/2026)

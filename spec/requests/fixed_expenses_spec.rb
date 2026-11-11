@@ -43,7 +43,7 @@ RSpec.describe "/api/finance/fixed_expenses", type: :request do
     expect(response).to have_http_status(:no_content)
   end
 
-  it "recalcula as despesas fixas das vendas do mês fechado em Vendas e no DRE; mês corrente e mês sem lançamento usam o padrão" do
+  it "recalcula as despesas operacionais das vendas do mês fechado em Vendas e no DRE; mês corrente e mês sem lançamento usam o padrão" do
     create(:olist_product, company: company, sku: "SKU-A", cost_price: 40, status: "A", kind: "S")
     sale(1, at: zone.local(last_month.year, last_month.month, 10, 12))
     sale(2, at: zone.now.beginning_of_month + 1.hour)

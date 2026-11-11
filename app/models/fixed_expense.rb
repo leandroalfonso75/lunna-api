@@ -1,5 +1,5 @@
-# Despesa fixa mensal da empresa (aluguel, salários, FGTS, INSS...), lançada em Financeiro › Despesas › Incluir Despesas.
-# O total do mês sobre o faturamento do mês vira o percentual de despesas fixas das vendas daquele mês (ver
+# Despesa Operacional mensal da empresa (aluguel, salários, FGTS, INSS...), lançada em Financeiro › Despesas › Incluir Despesas.
+# O total do mês sobre o faturamento do mês vira o percentual de despesas operacionais das vendas daquele mês (ver
 # Painel::FixedExpenseRate).
 class FixedExpense < ApplicationRecord
   CATEGORIES = [ "Aluguel", "Salários", "FGTS", "INSS", "Bonificações", "Pró-labore", "Transporte", "Material de expediente",

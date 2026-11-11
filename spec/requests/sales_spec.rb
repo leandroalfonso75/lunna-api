@@ -23,7 +23,7 @@ RSpec.describe "/api/sales", type: :request do
     create(:olist_product, company: company, sku: sku, cost_price: value, status: "A", kind: "S")
   end
 
-  it "calcula o lucro líquido da venda: receita − custo − tarifa − frete − despesas fixas − imposto" do
+  it "calcula o lucro antes Ads da venda: receita − custo − tarifa − frete − despesas operacionais − imposto" do
     with_cost("SKU-A", 40)
     sale(1, shipment: { "status" => "delivered", "logistic_type" => "fulfillment", "seller_cost" => 20.0 })
 

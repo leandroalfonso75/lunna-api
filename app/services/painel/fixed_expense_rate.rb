@@ -1,6 +1,6 @@
-# Percentual de despesas fixas que vale para cada mês (regra do usuário em 11/11/2026).
-#   - Mês já fechado, com despesas fixas lançadas (Financeiro › Despesas › Incluir Despesas) e com faturamento:
-#     percentual = total das despesas fixas do mês ÷ faturamento do mês. Vale para todas as vendas daquele mês (Vendas e DRE).
+# Percentual de despesas operacionais que vale para cada mês (regra do usuário em 11/11/2026).
+#   - Mês já fechado, com despesas operacionais lançadas (Financeiro › Despesas › Incluir Despesas) e com faturamento:
+#     percentual = total das despesas operacionais do mês ÷ faturamento do mês. Vale para todas as vendas daquele mês (Vendas e DRE).
 #   - Mês corrente, mês sem lançamento ou sem faturamento: o padrão de Configurações › Empresa (`fixed_expenses_pct`).
 # Faturamento do mês = receita das vendas não canceladas de todas as contas da empresa (preço × quantidade, pela data da
 # venda no fuso de São Paulo), a mesma receita da seção Vendas.

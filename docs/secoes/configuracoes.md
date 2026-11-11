@@ -19,7 +19,7 @@ Cadastros da empresa e das contas conectadas.
 - Tudo é escopado por empresa (`Current.company`); só administradores alteram.
 - Mudar os parâmetros de negócio recalcula as métricas (`Painel::ItemMetrics.refresh`).
 - A chave da IA fica cifrada e nunca volta para o front (só os 4 últimos caracteres).
-- `fixed_expenses_pct` (despesas fixas, padrão 3%) já existe na API e aparece no payload da empresa, mas **ainda não tem
+- `fixed_expenses_pct` (despesas operacionais, padrão 3%) já existe na API e aparece no payload da empresa, mas **ainda não tem
   campo na tela**.
 - A conexão com o **Olist ERP** é feita pela API (`POST /api/olist/authorize`, rake `olist:conectar[email]`) ou pelo
   botão "Reconectar ao Olist" da página Produtos; ainda não há aba dela aqui.
@@ -34,7 +34,7 @@ Cadastros da empresa e das contas conectadas.
 - Modelos `company`, `ml_account`, `user`
 
 ## Pendências
-- Campo de despesas fixas e aba do Olist.
+- Campo de despesas operacionais e aba do Olist.
 
 ## Atenção: desconectar uma conta do Mercado Livre
 - Hoje "Desconectar" apaga a conta e **todos os dados dela** no Lunna (vendas, anúncios, Ads, promoções, limites de

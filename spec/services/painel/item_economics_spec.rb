@@ -18,7 +18,7 @@ RSpec.describe Painel::ItemEconomics do
 
   def call(*metrics) = described_class.for_page(account, metrics)
 
-  it "lucro líquido = preço − custo − comissão − frete/taxas − despesas fixas (3%) − imposto (da empresa)" do
+  it "lucro antes Ads = preço − custo − comissão − frete/taxas − despesas operacionais (3%) − imposto (da empresa)" do
     m = metric
     item(fee_now: 16.5, ship_cost: 8.0)
     olist_cost("SKU-1", 40)
@@ -99,7 +99,7 @@ RSpec.describe Painel::ItemEconomics do
     expect(result).to include(cost: nil, cost_source: nil, net_profit: nil, net_profit_pct: nil, commission: 16.5)
   end
 
-  it "usa a % de despesas fixas da empresa" do
+  it "usa a % de despesas operacionais da empresa" do
     company.update!(fixed_expenses_pct: 5)
     m = metric
     item(fee_now: 0, ship_cost: 0)

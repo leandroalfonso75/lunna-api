@@ -1,6 +1,6 @@
 # Margem de cada oferta de promoção de um anúncio e a melhor delas (seção Promoções).
 #
-#   lucro antes do Ads = preço + parte do ML − custo − tarifa − frete − imposto − despesas fixas
+#   lucro antes do Ads = preço + parte do ML − custo − tarifa − frete − imposto − despesas operacionais
 #   lucro (pós Ads)    = lucro antes do Ads − Ads por unidade
 #   margem = lucro ÷ preço (as duas são calculadas; a empresa escolhe qual vale para os limites: `basis`)
 #

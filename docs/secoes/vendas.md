@@ -1,13 +1,13 @@
 # Vendas
 
-Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o que a API entrega e o lucro líquido de cada uma.
+Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o que a API entrega e o lucro antes Ads de cada uma.
 
 ## O que mostra
 - **Período:** Hoje (padrão ao abrir), Ontem, 7 dias, 30 dias, 60 dias, 3 meses, **Mês** (lista com o mês atual
   primeiro, "até hoje", e os anteriores em ordem decrescente: 11/2026, 10/2026...; o mais antigo, cortado no limite de 92
   dias, aparece como "parcial"; `?month=2026-10` mostra do dia 1º ao último dia) ou datas escolhidas (no máximo 92 dias
   para trás). O botão "Mês até hoje" saiu em 03/11/2026: é o mês atual da lista (`mtd` continua aceito pela API).
-- **Resumo:** vendas, faturamento (e ticket médio), lucro líquido (e % do faturamento), tarifas + frete, imposto + despesas
+- **Resumo:** vendas, faturamento (e ticket médio), lucro antes Ads (e % do faturamento), tarifas + frete, imposto + despesas
   fixas e custo dos produtos. Vendas canceladas ficam fora dos totais (só aparecem contadas).
 - **Contagem de vendas:** uma venda = um carrinho do Mercado Livre (`pack_id`) quando houver, senão o pedido. Carrinho
   com dois produtos são dois pedidos no ML e uma venda no Olist e na tela de vendas do ML; o Lunna conta igual nos
@@ -23,15 +23,15 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   forma de envio: imagem para Full e Agência (`public/logistica/` no lunna-web-radar: `ml-oval.png`, `full.png` com
   fundo transparente, `agencia.png`); Flex, Coleta e as demais ficam em texto. Pedido do usuário em 02/11/2026.
 - **Tabela:** data, produto (foto, título, nº da venda e, na linha de baixo, SKU e unidades), **Cliente** (nome, CPF/CNPJ
-  e cidade/UF, uma informação por linha; "Carregando…" até o faturamento ser lido), valor, tarifa, frete, custo, lucro líquido (% em cima, R$ embaixo) e envio.
-  Colunas de valores: valor, tarifa, frete, imposto, despesas fixas, custo, **lucro líquido**, **Custo Ads** e **Lucro pós
+  e cidade/UF, uma informação por linha; "Carregando…" até o faturamento ser lido), valor, tarifa, frete, custo, lucro antes Ads (% em cima, R$ embaixo) e envio.
+  Colunas de valores: valor, tarifa, frete, imposto, despesas operacionais, custo, **lucro antes Ads**, **Custo Ads** e **Lucro pós
   Ads** (% em cima, R$ embaixo). Resumo com os cartões "Custo com Ads" e "Lucro pós Ads". Ordena por data, valor e % de lucro. Sem barra de rolagem horizontal (tarifa, frete e custo somem em tela estreita).
 - **Detalhe (clique na linha):** resultado da venda linha a linha, produtos (variação, tarifa, tipo de anúncio),
   pagamento (forma, parcelas, cupom, reembolso) e envio (situação, logística, destino cidade/UF, rastreio, frete pago pelo
   vendedor e pelo comprador, datas de cada etapa), com link para a venda no Mercado Livre.
 
-## Conta do lucro líquido da venda
-`receita dos itens − custo − tarifa de venda − frete pago pelo vendedor − despesas fixas − imposto`
+## Conta do lucro antes Ads da venda
+`receita dos itens − custo − tarifa de venda − frete pago pelo vendedor − despesas operacionais − imposto`
 - **Custo:** soma, por item, do custo do SKU × quantidade (`Olist::UnitCost`: PEPS → cadastro → médio; kit = componentes;
   senão o custo manual `ml_costs`). Sem custo em algum item, o lucro da venda não é calculado e ela é contada em
   "vendas sem custo".
@@ -41,7 +41,7 @@ Todas as vendas (pedidos) do Mercado Livre dos últimos **3 meses**, com tudo o 
   uma. O Lunna divide esse frete entre as vendas do envio, proporcional às unidades de cada uma (vendas canceladas
   ficam de fora), para não contar o mesmo frete duas vezes. O detalhe mostra o frete do envio, a parte da venda e as
   outras vendas do carrinho.
-- **Despesas fixas e imposto:** `companies.fixed_expenses_pct` e `tax_pct` × receita.
+- **Despesas Operacionais e imposto:** `companies.fixed_expenses_pct` e `tax_pct` × receita.
 Implementado em `Painel::SalesQuery#economics`.
 
 ## Custo de Ads e lucro pós Ads
@@ -105,11 +105,11 @@ Implementado em `Painel::SalesQuery#economics`.
 - A comissão e a tarifa fixa aparecem somadas (`sale_fee`); separar exigiria `/orders/{id}` + `/payments`.
 - Venda com reembolso parcial (`partially_refunded`) ainda conta a receita inteira.
 - Sem exportação para planilha.
-- Despesas fixas (3%) ainda sem campo de edição em Configurações.
+- Despesas Operacionais (3%) ainda sem campo de edição em Configurações.
 - Vendas sem SKU no anúncio do Mercado Livre ficam sem custo; preencher o SKU no anúncio resolve.
 - Custo Ads é um rateio pelo período: o Mercado Livre não informa qual venda veio de qual clique.
-- Formato (30/10): valores em R$; sob cada custo (tarifa, frete, imposto, despesas fixas, custo Ads) o % sobre a receita da
-  venda (R$ em vermelho, % em preto); lucro líquido e lucro pós Ads com R$ em cima e % embaixo.
+- Formato (30/10): valores em R$; sob cada custo (tarifa, frete, imposto, despesas operacionais, custo Ads) o % sobre a receita da
+  venda (R$ em vermelho, % em preto); lucro antes Ads e lucro pós Ads com R$ em cima e % embaixo.
 
 ## Frete cobrado x previsto (06/11/2026)
 O frete da venda é o de `/shipments/{id}/costs` (custo líquido do vendedor). O extrato de faturamento do ML cobra a
@@ -134,7 +134,7 @@ cobrado fica em `shipping.seller_cost_billed`, só para conferência (Financeiro
   sem Ads). Não usar o ACOS da campanha por venda nem dividir só pelas vendas atribuídas a Ads: os dois somam mais que o
   gasto real (o ML não diz qual pedido veio do anúncio pago). Dia não fechado deixa a venda "pendente".
 
-## Despesas fixas por mês (11/11/2026)
+## Despesas Operacionais por mês (11/11/2026)
 
-- O percentual de despesas fixas da venda é o do **mês da venda**: lançado em Financeiro › Despesas › Incluir Despesas
+- O percentual de despesas operacionais da venda é o do **mês da venda**: lançado em Financeiro › Despesas › Incluir Despesas
   (mês fechado) ou o padrão da empresa (`economics.fixed_expenses_pct`). Ver `docs/secoes/financeiro.md`.

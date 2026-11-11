@@ -1,8 +1,8 @@
 # Seção Vendas: lista de pedidos do Mercado Livre com filtros, busca, ordenação, paginação,
 # totais e série diária. Tudo resolvido aqui (regra na API; o front só exibe).
 #
-# Lucro líquido do pedido (mesma conta de Anúncios, ver Painel::ItemEconomics):
-#   receita − custo − tarifa de venda − frete pago pelo vendedor − despesas fixas − imposto
+# Lucro antes Ads do pedido (mesma conta de Anúncios, ver Painel::ItemEconomics):
+#   receita − custo − tarifa de venda − frete pago pelo vendedor − despesas operacionais − imposto
 # Frete do carrinho: vendas do mesmo carrinho (pack) viajam no MESMO envio e o ML informa o frete do
 # envio inteiro em cada uma. O frete do vendedor é dividido entre as vendas do envio, proporcional às
 # unidades de cada uma (as canceladas ficam de fora).
@@ -352,7 +352,7 @@ module Painel
       fee = lines.sum { |l| l.sale_fee.to_f * l.quantity.to_i }
       shipping_cost = shipping_cost_share.to_f
       tax = revenue * @company.tax_pct.to_f / 100.0
-      # despesas fixas: o percentual do mês da venda (lançado em Financeiro › Despesas, mês fechado) ou o padrão da empresa
+      # despesas operacionais: o percentual do mês da venda (lançado em Financeiro › Despesas, mês fechado) ou o padrão da empresa
       fixed_pct = fixed_rate.pct_for(sale_day(order))
       fixed = revenue * fixed_pct / 100.0
       cost = total_cost(lines, olist, manual)

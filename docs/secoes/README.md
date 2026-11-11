@@ -8,7 +8,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 |---|---|---|
 | Visão geral | [visao-geral.md](visao-geral.md) | Números do dia, alertas e vendas recentes da conta do Mercado Livre |
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
-| Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro líquido por unidade; aba Catálogo (sincronizado com tradicional, ganhando/perdendo) |
+| Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro antes Ads por unidade; aba Catálogo (sincronizado com tradicional, ganhando/perdendo) |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
 | Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta e resolução no ML (devolução, reembolso total/parcial, mediação); assistente de contestação (A contestar / Contestadas); card Devoluções (expiradas, sem custo, com custos itemizados pelo extrato do ML) |
 | Perguntas | [perguntas.md](perguntas.md) | Perguntas dos compradores no ML: responder pelo Lunna, sugestão de resposta pela IA (dados, fotos e respostas do mesmo SKU), respostas padrão, excluir |
@@ -43,7 +43,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 - Uma branch por assunto (`feature/...`), commits pequenos em português, pull request quando estiver pronto.
 - Nada vai para o GitHub, nem para produção, sem o dono pedir (a branch `feature/anuncios-lucro` já foi enviada, sem pull request).
 - Testes da API sempre com `RAILS_ENV=test` (ver `CLAUDE.md`); rodar sem isso cai no banco de desenvolvimento.
-- Lucro líquido (Anúncios e Vendas): receita − custo − tarifa − frete − despesas fixas (3%) − imposto (11,3%); custo do Olist
+- Lucro antes Ads (Anúncios e Vendas): receita − custo − tarifa − frete − despesas operacionais (3%) − imposto (11,3%); custo do Olist
   conforme [produtos.md](produtos.md).
 - Segredos (`.env`, tokens) nunca entram nos commits.
 

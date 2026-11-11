@@ -11,7 +11,7 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 - Lucro/sobra por unidade e no mês (`Abc::Economics`): preço − tarifa − frete − imposto − custo (custo manual `ml_costs`).
 - Preço sugerido e custo máximo (`Abc::PriceSuggestion`), diagnóstico e recomendações (`Abc::SuggestionEngine`).
 - Custo: o manual (`ml_costs`) e, sem ele (desde 04/11/2026), o do Olist (`Olist::UnitCost`) e o das variações vendidas
-  (`Painel::VariationCost`), como em Promoções. Ainda **não** usa as despesas fixas (diferença para Anúncios).
+  (`Painel::VariationCost`), como em Promoções. Ainda **não** usa as despesas operacionais (diferença para Anúncios).
 - **Detalhes das ações** (pedido do usuário em 04/11/2026), em "O que fazer para vender mais":
   - **Exposição:** `steps` com as medidas que valem para o anúncio (Product Ads se não estiver em campanha ativa, título,
     promoções, frete grátis, Full, ficha técnica, qualidade, preço frente à referência).
@@ -56,7 +56,7 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 - `app/jobs/ai/` (geração do plano em segundo plano, lida por polling)
 
 ## Pendências
-- Usar as despesas fixas, para ficar coerente com Anúncios.
+- Usar as despesas operacionais, para ficar coerente com Anúncios.
 - Fotos: o primeiro envio real confirma se o app do Lunna pode alterar fotos do anúncio (anúncio de catálogo pode recusar).
 
 ## Título, ficha técnica e "Ciente" (07/11/2026)

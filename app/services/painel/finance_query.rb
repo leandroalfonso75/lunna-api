@@ -4,7 +4,7 @@
 #
 # Fontes, todas já no Lunna:
 #   - Vendas (Painel::SalesQuery, mesma conta e mesmos filtros da seção Vendas): receita, custo dos produtos, tarifa de
-#     venda, frete do vendedor, imposto, despesas fixas, reembolsos, Ads por venda;
+#     venda, frete do vendedor, imposto, despesas operacionais, reembolsos, Ads por venda;
 #   - Ads (ml_ad_daily_metrics): gasto por dia;
 #   - Devoluções (Painel::ReturnsQuery): custos das devoluções do período;
 #   - Extrato de faturamento do ML (ml_billing_charges): despesas do Full (armazenamento, coleta, estoque antigo),
@@ -245,8 +245,8 @@ module Painel
         row.(:coupon, "(−) Cupons (parte do vendedor)", "expense", c[:coupon], p[:coupon],
              note: "#{c[:coupon_orders]} venda(s) com cupom · desconto total #{money(c[:coupon_discount])}, descontado no pagamento do Mercado Pago"),
         row.(:tax, "(−) Impostos (#{@company.tax_pct.to_f}% da receita)", "expense", c[:tax], p[:tax]),
-        row.(:fixed, "(−) Despesas fixas (#{pct(c[:fixed], c[:revenue])}% da receita)", "expense", c[:fixed], p[:fixed],
-             note: "mês fechado com despesas fixas lançadas (Despesas › Incluir Despesas): total do mês ÷ faturamento do mês; nos demais, o padrão de #{@company.fixed_expenses_pct.to_f}% (Configurações › Empresa)"),
+        row.(:fixed, "(−) Despesas Operacionais (#{pct(c[:fixed], c[:revenue])}% da receita)", "expense", c[:fixed], p[:fixed],
+             note: "mês fechado com despesas operacionais lançadas (Despesas › Incluir Despesas): total do mês ÷ faturamento do mês; nos demais, o padrão de #{@company.fixed_expenses_pct.to_f}% (Configurações › Empresa)"),
         row.(:returns, "(−) Despesas com devoluções", "expense", c[:returns][:total], p[:returns][:total],
              note: "#{c[:returns][:count]} devolução(ões) com custo de #{c[:returns][:completed]} efetivadas; #{c[:returns][:expired]} expiradas",
              breakdown: c[:returns][:by_kind].map { |k, v| { label: ReturnsQuery::CATEGORY_LABELS[{ "frete_envio" => :envio, "frete_devolucao" => :devolucao, "tarifa_venda" => :venda }[k]] || k.to_s.humanize, amount: v } }),
@@ -261,7 +261,7 @@ module Painel
              breakdown: c[:entries][:expenses].group_by(&:category).map { |k, v| { label: k, amount: v.sum { |e| e.amount.to_f }.round(2) } }),
         row.(:operating, "= Lucro antes de Ads", "subtotal", c[:operating], p[:operating], note: "margem #{pct(c[:operating], c[:revenue])}%"),
         row.(:ads, "(−) Product Ads", "expense", c[:ads], p[:ads], note: basis_note(:ads, c)),
-        row.(:net, "= Lucro líquido pós Ads", "total", c[:net], p[:net], note: "margem líquida #{pct(c[:net], c[:revenue])}%")
+        row.(:net, "= Lucro pós Ads", "total", c[:net], p[:net], note: "margem líquida #{pct(c[:net], c[:revenue])}%")
       ]
     end
 
@@ -309,7 +309,7 @@ module Painel
       end
       expenses = [
         [ "Custo dos produtos", c[:cogs] ], [ "Tarifas de venda", c[:fee] ], [ "Fretes", c[:shipping] ], [ "Cupons", c[:coupon] ], [ "Impostos", c[:tax] ],
-        [ "Despesas fixas", c[:fixed] ], [ "Devoluções e reembolsos", c[:returns][:total] + c[:refunds] ], [ "Full", c[:full][:net] ],
+        [ "Despesas Operacionais", c[:fixed] ], [ "Devoluções e reembolsos", c[:returns][:total] + c[:refunds] ], [ "Full", c[:full][:net] ],
         [ "Outras do ML", c[:other_ml] ], [ "Product Ads", c[:ads] ]
       ].map { |label, v| { label: label, amount: v.to_f.round(2), pct: pct(v, c[:revenue]) } }.reject { |e| e[:amount].abs < 0.005 }
       { daily: daily, expenses: expenses }
@@ -468,7 +468,7 @@ module Painel
         [ :shipping, "Fretes pagos pelo vendedor", c[:shipping], p[:shipping], basis_note(:shipping, c) ],
         [ :coupon, "Cupons (parte do vendedor)", c[:coupon], p[:coupon], "descontado no pagamento do Mercado Pago" ],
         [ :tax, "Impostos", c[:tax], p[:tax], "#{@company.tax_pct.to_f}% da receita" ],
-        [ :fixed, "Despesas fixas", c[:fixed], p[:fixed], "#{pct(c[:fixed], c[:revenue])}% da receita (lançadas por mês em Incluir Despesas; sem lançamento, padrão de #{@company.fixed_expenses_pct.to_f}%)" ],
+        [ :fixed, "Despesas Operacionais", c[:fixed], p[:fixed], "#{pct(c[:fixed], c[:revenue])}% da receita (lançadas por mês em Incluir Despesas; sem lançamento, padrão de #{@company.fixed_expenses_pct.to_f}%)" ],
         [ :returns, "Devoluções", c[:returns][:total], p[:returns][:total], "card Devoluções em Reclamações" ],
         [ :refunds, "Reembolsos a compradores", c[:refunds], p[:refunds], "reduzem a receita" ],
         [ :full, "Full (armazenamento, coleta, estoque antigo)", c[:full][:net], p[:full][:net], "extrato do ML" ],

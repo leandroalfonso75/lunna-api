@@ -35,13 +35,13 @@ mesmo tamanho** (hoje x ontem; 30 dias x os 30 anteriores; setembro x agosto). T
   4. (−) Custo dos produtos vendidos (Olist PEPS ou manual; venda sem custo fica de fora e a nota diz quantas)
   5. = Lucro bruto (margem bruta = lucro bruto ÷ receita líquida)
   6. (−) Tarifas de venda do ML · 7. (−) Fretes pagos pelo vendedor (base Por venda ou Extrato)
-  8. (−) Impostos (% da empresa) · 9. (−) Despesas fixas (% da empresa)
+  8. (−) Impostos (% da empresa) · 9. (−) Despesas Operacionais (% da empresa)
   10. (−) Despesas com devoluções (card Devoluções: frete de envio retido, frete de devolução, tarifas, reembolso parcial)
   11. (−) Despesas do Full (extrato: armazenamento `CFWA`, coleta `CFCBE`, estoque antigo `CFBA`)
   12. (−) Outras cobranças do ML (extrato: Minha página `CESM`, DIFAL `CDIFAL`, não classificadas)
   13. (+) Créditos e bonificações do ML (extrato: cancelamentos de tarifa/frete de vendas que estão na receita, anulação
       de Ads e outras; bonificação de venda **cancelada** fica fora, porque a venda já não está na receita)
-  14. = Lucro antes de Ads · 15. (−) Product Ads (Ads por dia ou `PADS` do extrato) · 16. = Lucro líquido pós Ads
+  14. = Lucro antes de Ads · 15. (−) Product Ads (Ads por dia ou `PADS` do extrato) · 16. = Lucro pós Ads
 - **Extrato do Mercado Livre no período**, por grupo (cobrado, devolvido, líquido, linhas): tarifas de venda, fretes,
   devoluções, Product Ads, taxa de parcelamento (**neutra**: o comprador paga o acréscimo e o ML repassa a mesma
   cobrança), Full e outras.
@@ -92,7 +92,7 @@ conta do Mercado Pago. Carrega à parte (`GET /api/finance/repasses`, `Painel::R
 
 ## Regras e fontes
 - Vendas e custos por venda: `Painel::SalesQuery#period_rows` (mesma conta de Vendas: receita − custo − tarifa − frete −
-  despesas fixas − imposto; Ads rateado por anúncio no período). Período anterior: `window` com `@window_override`.
+  despesas operacionais − imposto; Ads rateado por anúncio no período). Período anterior: `window` com `@window_override`.
 - Ads do período: `ml_ad_daily_metrics.cost` por dia (soma das campanhas).
 - Devoluções: `Painel::ReturnsQuery` com `from/to` do período (pela abertura da reclamação).
 - Extrato: `ml_billing_charges` (`Ml::Sync::BillingCharges`, ver reclamacoes.md), grupos em `FinanceQuery::GROUPS`
@@ -125,15 +125,15 @@ conta do Mercado Pago. Carrega à parte (`GET /api/finance/repasses`, `Painel::R
   aparece no extrato do ML). Nos Repasses, o previsto já desconta o cupom.
 - **Repasses:** pagamentos e liberações do Mercado Pago desde 04–05/2026 (histórico importado em 06/11).
 
-## Despesas fixas mensais (11/11/2026)
+## Despesas Operacionais mensais (11/11/2026)
 
-- **Tela:** Financeiro › Despesas › botão "Incluir Despesas" abre `/financeiro/despesas-fixas`: escolhe o mês, lança as
-  despesas fixas (aluguel, salários, FGTS, INSS, bonificações, transporte, material de expediente...; categorias em
+- **Tela:** Financeiro › Despesas › botão "Incluir Despesas" abre `/financeiro/despesas-operacionais`: escolhe o mês, lança as
+  despesas operacionais (aluguel, salários, FGTS, INSS, bonificações, transporte, material de expediente...; categorias em
   `FixedExpense::CATEGORIES`), lista relida a cada inclusão, alterar/excluir, "Copiar do mês anterior" quando o mês está
-  vazio. No fim, o comparativo **Faturamento x Despesas Fixas** com o percentual e a lista dos meses lançados.
+  vazio. No fim, o comparativo **Faturamento x Despesas Operacionais** com o percentual e a lista dos meses lançados.
 - **Regra** (`Painel::FixedExpenseRate`): mês **fechado** com despesas lançadas e faturamento → percentual = total das
-  despesas fixas do mês ÷ faturamento do mês, e ele substitui o padrão em **todas as vendas daquele mês** (Vendas:
-  despesas fixas e lucro; DRE: linha "Despesas fixas"). **Mês corrente**, mês sem lançamento ou sem faturamento → o
+  despesas operacionais do mês ÷ faturamento do mês, e ele substitui o padrão em **todas as vendas daquele mês** (Vendas:
+  despesas operacionais e lucro; DRE: linha "Despesas Operacionais"). **Mês corrente**, mês sem lançamento ou sem faturamento → o
   padrão de Configurações › Empresa (`companies.fixed_expenses_pct`). Nada é gravado na venda: a conta é refeita na
   leitura, então lançar, alterar ou excluir recalcula na hora.
 - **Faturamento do mês:** receita das vendas não canceladas de todas as contas da empresa (preço × quantidade, data da

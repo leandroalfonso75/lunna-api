@@ -209,7 +209,7 @@ RSpec.describe Painel::ItemQuery do
     end
   end
 
-  describe "ordenar por percentual de lucro líquido (net_profit_pct)" do
+  describe "ordenar por percentual de lucro antes Ads (net_profit_pct)" do
     let(:company) { account.company }
 
     # Preço 100, sem tarifa/frete: lucro % = 100 − custo − 3 (despesas) − imposto (0).
