@@ -69,6 +69,7 @@ Rails.application.routes.draw do
     get "ads/diagnosis", to: "ads#diagnosis"
     post "ads/decisions", to: "ads#decide"
     delete "ads/decisions/:id", to: "ads#undecide"
+    patch "ads/decisions/:id", to: "ads#review"
     post "ads/sync", to: "ads#sync"
     get "attention", to: "attention#show"
     get "messages", to: "messages#index"

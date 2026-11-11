@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_020001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -218,6 +218,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_020001) do
     t.datetime "decided_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "review_at"
+    t.datetime "archived_at"
+    t.jsonb "follow_ups", default: [], null: false
     t.index ["ml_account_id", "key", "signal", "decided_at"], name: "idx_on_ml_account_id_key_signal_decided_at_1d40952a75"
     t.index ["ml_account_id"], name: "index_ml_ad_decisions_on_ml_account_id"
     t.index ["user_id"], name: "index_ml_ad_decisions_on_user_id"

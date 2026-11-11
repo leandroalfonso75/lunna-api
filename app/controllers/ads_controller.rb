@@ -5,7 +5,7 @@
 class AdsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :sync, :decide, :undecide ]
+  before_action :require_admin!, only: [ :sync, :decide, :undecide, :review ]
 
   def index
     render json: Painel::AdsQuery.call(Current.account, params)
@@ -30,10 +30,23 @@ class AdsController < ApplicationController
 
   # Marca um item da fila como feito ou ignorado (guarda o "antes"); a análise mostra o "depois" 7 dias depois.
   def decide
-    decision = Painel::AdsAnalysis.decide(Current.account, params.permit(:key, :signal, :status).to_h.symbolize_keys, user: Current.user)
+    decision = Painel::AdsAnalysis.decide(Current.account, params.permit(:key, :signal, :status, :parent_id).to_h.symbolize_keys, user: Current.user)
     return render_errors([ "Essa sugestão mudou desde que a tela foi aberta (nova leitura dos dados ou outra decisão). A análise foi atualizada." ], status: :not_found) unless decision
 
     render json: Painel::AdsAnalysis.decision_payload(decision), status: :created
+  end
+
+  # Histórico de Ações: op=aguardar (revisão em mais 7 dias) ou op=arquivar (sai do histórico).
+  def review
+    decision = Current.account.ml_ad_decisions.in_history.find(params[:id])
+    case params[:op].to_s
+    when "aguardar" then decision.add_follow_up!(type: "aguardar", user: Current.user&.name)
+    when "arquivar" then decision.update!(archived_at: Time.current)
+    else return render_errors([ "Operação inválida." ], status: :unprocessable_entity)
+    end
+    render json: Painel::AdsAnalysis.decision_payload(decision)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Ação não encontrada no histórico." ], status: :not_found)
   end
 
   def undecide

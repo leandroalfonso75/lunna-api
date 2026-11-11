@@ -314,12 +314,67 @@ RSpec.describe "/api/ads", type: :request do
 
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
       expect(json["decisions"].size).to eq(1)
-      expect(json["decisions"].first["after"]).to be_nil # ainda não passou um dia fechado
-      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_nil # decidido: sai de "O que mexer agora" e fica nas Decisões
-      expect(json["decided_hidden"]).to eq(1)
+      expect(json["history"].size).to eq(1)
+      expect(json["history"].first).to include("due" => false, "days_left" => 7, "suggestions" => [])
+      expect(json["history"].first["after"]).to be_nil # ainda não passou um dia fechado
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_nil # feito: sai de "O que mexer agora" e vai para o Histórico de Ações
+      expect(json["routed"]).to eq("history" => 1, "ignored" => 0)
 
       delete "/api/ads/decisions/#{MlAdDecision.last.id}", params: { account_id: account.id }, headers: auth_headers(admin)
       expect(response).to have_http_status(:no_content)
+    end
+
+    it "Histórico de Ações: feito espera 7 dias, na revisão mostra a evolução e as sugestões; aguardar, arquivar e ignorar por 15 dias" do
+      campaign(1, name: "Maquiagens")
+      yesterday = Date.current - 1
+      ad("MLB3", 1, {}, title: "Pincel").update!(family_id: "F2", family_name: "Pincel", date_created: 90.days.ago)
+      item_day("MLB3", 1, yesterday, cost: 12, amount: 0, clicks: 3, prints: 600, units: 0)
+
+      post "/api/ads/decisions", params: { account_id: account.id, key: "F2", signal: "gasto_sem_receita", status: "feito" }, headers: auth_headers(admin)
+      decision = MlAdDecision.last
+      expect(decision.review_at).to be_within(1.minute).of(7.days.from_now)
+
+      # 8º dia: o problema persiste e aparece no card da revisão, com a evolução; a fila não repete
+      decision.update!(decided_at: 8.days.ago, review_at: 1.day.ago)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      h = json["history"].first
+      expect(h).to include("due" => true, "days_left" => 0)
+      expect(h["suggestions"].map { |x| x["signal"] }).to eq([ "gasto_sem_receita" ])
+      expect(h["suggestions"].first).to include("persists" => true)
+      expect(h["evolution"]["since"]).to include("cost" => 12.0)
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_nil
+
+      # "Marcar como feito" na sugestão do card: fica na mesma ação, revisão em mais 7 dias
+      post "/api/ads/decisions", params: { account_id: account.id, key: "F2", signal: "gasto_sem_receita", status: "feito", parent_id: decision.id }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:created)
+      expect(MlAdDecision.count).to eq(1)
+      expect(decision.reload.follow_ups.map { |f| f["type"] }).to eq([ "feito" ])
+      expect(decision.review_at).to be_within(1.minute).of(7.days.from_now)
+
+      # Aguardar mais 7 dias e arquivar (membro não pode)
+      decision.update!(review_at: 1.day.ago)
+      patch "/api/ads/decisions/#{decision.id}", params: { account_id: account.id, op: "aguardar" }, headers: auth_headers(member)
+      expect(response).to have_http_status(:forbidden)
+      patch "/api/ads/decisions/#{decision.id}", params: { account_id: account.id, op: "aguardar" }, headers: auth_headers(admin)
+      expect(response).to have_http_status(:ok)
+      expect(decision.reload.review_at).to be_within(1.minute).of(7.days.from_now)
+      patch "/api/ads/decisions/#{decision.id}", params: { account_id: account.id, op: "arquivar" }, headers: auth_headers(admin)
+      expect(decision.reload.archived_at).to be_present
+
+      # arquivada: some do histórico e, como o problema segue, a sugestão volta para a Análise
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["history"]).to eq([])
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_present
+
+      # Ignorar: sai da Análise por 15 dias e volta depois, se persistir
+      post "/api/ads/decisions", params: { account_id: account.id, key: "F2", signal: "gasto_sem_receita", status: "ignorado" }, headers: auth_headers(admin)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_nil
+      expect(json["ignored"].first).to include("signal" => "gasto_sem_receita", "back_on" => (MlAdDecision.last.decided_at + 15.days).iso8601)
+      expect(json["routed"]).to eq("history" => 0, "ignored" => 1)
+      MlAdDecision.last.update!(decided_at: 16.days.ago)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_present
     end
 
     it "respeita o máximo de ações e manda o resto para a próxima rodada" do
@@ -411,8 +466,9 @@ RSpec.describe "/api/ads", type: :request do
       st = json["structure"]
       expect(st["round"]["locked"].map { |l| l["name"] }).to eq([ "Geral" ])
       expect(st["round"]["next_round_on"]).to eq((Time.current.in_time_zone("America/Sao_Paulo").to_date + 7).iso8601)
-      expect(st["suggestions"].map { |x| x["type"] }).to eq([ "ativar" ]) # ignorado não trava; segue marcado
-      expect(st["suggestions"].first["decided"]).to include("status" => "ignorado")
+      expect(st["suggestions"]).to eq([]) # ignorado não trava, mas sai da Análise por 15 dias
+      expect(json["ignored"].map { |d| d["signal"] }).to eq([ "estrutura_ativar" ])
+      expect(json["history"].map { |d| d["signal"] }).to eq([ "estrutura_dividir" ])
     end
 
     it "sem limite diário o plano avisa; com teto apertado o dinheiro novo fica marcado e uma campanha abaixo do equilíbrio cede verba" do

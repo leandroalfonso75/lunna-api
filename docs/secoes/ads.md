@@ -63,8 +63,18 @@ a execução é no Seller Center. Decisões do usuário (30/10): só recomendar;
   prazo, o que não fazer e incerteza.
 - **Decisões** (`ml_ad_decisions`, `POST /api/ads/decisions`, `DELETE /api/ads/decisions/:id`, só administradores): cada
   item da fila pode ser marcado como feito ou ignorado; o "antes" é gravado na hora e o "depois" (7 dias fechados
-  seguintes, parcial até completar) aparece no bloco "Decisões dos últimos 30 dias". Item decidido nos últimos 7 dias
-  fica marcado na fila.
+  seguintes, parcial até completar) fica gravado.
+- **Histórico de Ações** (guia dentro de Análise, regras do usuário em 10/11/2026; `history` e `ignored` da análise,
+  `PATCH /api/ads/decisions/:id` com `op=aguardar|arquivar`, colunas `review_at`, `archived_at`, `follow_ups`):
+  - **Ignorar** tira a sugestão (mesma chave e sinal) da Análise por 15 dias (`MlAdDecision::IGNORE_DAYS`); depois volta
+    só se o problema seguir. Vale também para sugestões de Estrutura.
+  - **Feito** leva para o Histórico de Ações; a revisão é no 8º dia (`review_at` = decidido + 7 dias). Até lá o mesmo
+    sinal não volta à fila.
+  - **Na revisão** o card mostra a evolução (antes, 1ª semana depois, últimos 7 dias, média por dia desde a alteração) e
+    todas as sugestões atuais do mesmo anúncio/campanha (saem da fila e ficam no card, com "o mesmo problema continua"
+    quando é o sinal já tratado). Botões: "Aguardar mais 7 dias", "Arquivar" e, em cada sugestão, "Marcar como feito"
+    (registra em `follow_ups` da mesma ação, `parent_id`, e a revisão volta para +7 dias) e "Ignorar" (15 dias).
+  - **Arquivar** tira do histórico; se o problema seguir, a sugestão volta para a Análise.
 - **Estrutura de campanhas** (`Painel::AdsStructure`, bloco "Estrutura de campanhas", chave `structure` da análise; só
   recomendação, a execução é no Seller Center). Montada como **uma rodada semanal coerente** (regras do usuário em
   03/11/2026, depois de conflitos entre sugestões): cada sugestão é lançada num razão por campanha (orçamento e ROAS

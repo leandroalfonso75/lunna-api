@@ -46,11 +46,19 @@ module Painel
     def self.call(account, max_actions: MAX_ACTIONS) = new(account, max_actions: max_actions).call
 
     # Marca um item da fila (família/campanha + sinal) como feito ou ignorado, guardando o "antes".
+    # Com parent_id (sugestão nova no card do Histórico de Ações): "feito" fica registrado na própria ação do histórico e
+    # a revisão volta a ser em 7 dias; "ignorado" tira só aquela sugestão por 15 dias.
     def self.decide(account, attrs, user: nil)
       analysis = call(account)
-      item = (analysis[:queue] + analysis[:next_round] + analysis[:watch] + structure_entries(analysis))
-        .find { |q| q[:key] == attrs[:key].to_s && q[:signal] == attrs[:signal].to_s }
+      pool = analysis[:queue] + analysis[:next_round] + analysis[:watch] + structure_entries(analysis) + analysis[:history].flat_map { |h| h[:suggestions] }
+      item = pool.find { |q| q[:key] == attrs[:key].to_s && q[:signal] == attrs[:signal].to_s }
       return nil unless item
+
+      parent = attrs[:parent_id].present? && account.ml_ad_decisions.in_history.find_by(id: attrs[:parent_id])
+      if parent && attrs[:status].to_s == "feito"
+        parent.add_follow_up!(type: "feito", signal: item[:signal], title: item[:title], action: item[:action], value: item[:value], user: user&.name)
+        return parent
+      end
 
       before = snapshot(analysis, item[:key])
       account.ml_ad_decisions.create!(key: item[:key], signal: item[:signal], klass: item[:class], title: item[:title], action: item[:action],
@@ -59,13 +67,15 @@ module Painel
 
     # Sugestões de estrutura no formato da fila (key + signal "estrutura_<tipo>"), para "Feito"/"Ignorar".
     def self.structure_entries(analysis)
-      (analysis.dig(:structure, :suggestions) || []).map do |s|
-        { key: s[:key], signal: "estrutura_#{s[:type]}", class: "estrutura", title: s[:title],
-          action: [ s[:from_campaign] && s[:to_campaign] ? "De #{s[:from_campaign]} para #{s[:to_campaign]}." : (s[:to_campaign] && "Para #{s[:to_campaign]}."),
-                    s[:daily_budget] ? "Orçamento #{s[:daily_budget].negative? ? '−' : '+'}R$ #{format('%.0f', s[:daily_budget].abs)}/dia" : nil,
-                    s[:roas_target] ? "ROAS Objetivo #{s[:roas_target]}#{s[:roas_floor] && s[:roas_floor] != s[:roas_target] ? " (piso #{s[:roas_floor]})" : ''}." : nil ].compact.join(" "),
-          value: s[:value] }
-      end
+      (analysis.dig(:structure, :suggestions) || []).map { |s| structure_entry(s) }
+    end
+
+    def self.structure_entry(s)
+      { key: s[:key], signal: "estrutura_#{s[:type]}", class: "estrutura", class_label: STRUCTURE_CLASS["estrutura"], title: s[:title],
+        action: [ s[:from_campaign] && s[:to_campaign] ? "De #{s[:from_campaign]} para #{s[:to_campaign]}." : (s[:to_campaign] && "Para #{s[:to_campaign]}."),
+                  s[:daily_budget] ? "Orçamento #{s[:daily_budget].negative? ? '−' : '+'}R$ #{format('%.0f', s[:daily_budget].abs)}/dia" : nil,
+                  s[:roas_target] ? "ROAS Objetivo #{s[:roas_target]}#{s[:roas_floor] && s[:roas_floor] != s[:roas_target] ? " (piso #{s[:roas_floor]})" : ''}." : nil ].compact.join(" "),
+        value: s[:value], why: s[:why] }
     end
 
     # Métricas da família/campanha no momento da decisão (os 7 dias fechados de então).
@@ -85,7 +95,8 @@ module Painel
 
     def self.decision_payload(d, after: nil)
       { id: d.id, key: d.key, signal: d.signal, class: d.klass, class_label: CLASSES.merge(STRUCTURE_CLASS).fetch(d.klass, d.klass), title: d.title, action: d.action,
-        value: d.value&.to_f, status: d.status, decided_at: d.decided_at, user: d.user&.name, before: d.before, after: after }
+        value: d.value&.to_f, status: d.status, decided_at: d.decided_at, user: d.user&.name, before: d.before, after: after,
+        review_at: d.review_at, archived_at: d.archived_at, follow_ups: d.follow_ups }
     end
 
     def initialize(account, max_actions: MAX_ACTIONS)
@@ -114,19 +125,20 @@ module Painel
       queue, next_round, watch = build_queue(families, campaign_rows)
       health = health_block(days)
       decisions = decisions_block(families, campaign_rows)
-      mark_decided!(queue + next_round + watch, decisions)
-      # Decidido (Feito/Ignorado) nos últimos 7 dias sai de "O que mexer agora" e fica só em Decisões, com o antes e depois;
-      # volta à fila se o problema seguir depois de 7 dias (pedido do usuário em 11/11/2026). A vaga vai para o próximo.
-      decided_count = (queue + next_round + watch).count { |e| e[:decided] }
-      numbered = (queue + next_round).reject { |e| e[:decided] }
-      queue = numbered.first(@max_actions).each_with_index.map { |e, idx| e.merge(n: idx + 1) }
-      next_round = numbered.drop(@max_actions)
-      watch = watch.reject { |e| e[:decided] }
       structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows, decisions: decisions })
       structure[:suggestions].each { |s| s[:signal] = "estrutura_#{s[:type]}" }
-      mark_decided!(structure[:suggestions], decisions)
       # SKUs completos de cada anúncio citado nas sugestões (pedido do usuário em 08/11/2026)
       ItemSkus.attach!(@account, queue + next_round + watch + structure[:suggestions])
+      # Histórico de Ações (pedido do usuário em 10/11/2026): "Ignorar" tira a sugestão da Análise por 15 dias (volta só se
+      # o problema seguir); "Feito" leva para o Histórico de Ações até a revisão (8º dia), quando o card mostra a evolução e
+      # as sugestões atuais do mesmo anúncio/campanha. A vaga na fila vai para o próximo.
+      history, ignored = history_block(families, campaign_rows)
+      routed = route_decided!(queue + next_round + watch + structure[:suggestions], history, ignored)
+      numbered = (queue + next_round).reject { |e| e[:routed] }
+      queue = numbered.first(@max_actions).each_with_index.map { |e, idx| e.merge(n: idx + 1) }
+      next_round = numbered.drop(@max_actions)
+      watch = watch.reject { |e| e[:routed] }
+      structure[:suggestions] = structure[:suggestions].reject { |e| e[:routed] }
 
       {
         period: { from: @from.iso8601, to: @last.iso8601, days: DAYS, prev_from: @prev_from.iso8601, prev_to: @prev_to.iso8601 },
@@ -137,7 +149,9 @@ module Painel
         health: health,
         campaigns: campaign_rows,
         families: families.map { |f| f.except(:_items) },
-        queue: queue, next_round: next_round, watch: watch, decided_hidden: decided_count,
+        queue: queue, next_round: next_round, watch: watch, routed: routed,
+        history: history.map { |h| h.except(:_record) },
+        ignored: ignored.map { |d| self.class.decision_payload(d).merge(back_on: (d.decided_at + MlAdDecision::IGNORE_DAYS.days).iso8601) },
         untouchables: families.filter_map { |f| f[:untouchable] && { key: f[:key], name: f[:name], reason: f[:untouchable][:reason], until: f[:untouchable][:until] } },
         closing: closing(health, queue),
         decisions: decisions,
@@ -579,13 +593,47 @@ module Painel
       m.slice(:cost, :revenue, :roas, :clicks, :prints).merge(from: from.iso8601, to: to.iso8601, days: (to - from).to_i + 1, partial: (to - from).to_i + 1 < DAYS)
     end
 
-    # Item já decidido nos últimos 7 dias: fica marcado na fila (a tela mostra "feito em…" e não repete sem avisar).
-    def mark_decided!(entries, decisions)
-      recent = decisions.select { |d| d[:decided_at] > 7.days.ago }
-      entries.each do |e|
-        d = recent.find { |x| x[:key] == e[:key] && x[:signal] == e[:signal] }
-        e[:decided] = d && { id: d[:id], status: d[:status], at: d[:decided_at] }
+    # Histórico de Ações: as decisões "Feito" ainda não arquivadas, com a evolução desde a alteração. "since" = do dia
+    # seguinte à decisão até ontem; "last_week" = os últimos 7 dias fechados, quando já são todos depois da decisão.
+    # Também devolve as "Ignorado" dos últimos 15 dias (a sugestão fica fora da Análise até lá).
+    def history_block(families, campaign_rows)
+      ignored = @account.ml_ad_decisions.ignoring.order(decided_at: :desc).includes(:user).to_a
+      rows = @account.ml_ad_decisions.in_history.order(decided_at: :desc).includes(:user).map do |d|
+        start = d.decided_at.in_time_zone(@zone).to_date + 1
+        first_week = start <= @last ? after_metrics(d.key, families, campaign_rows, start, [ start + (DAYS - 1), @last ].min) : nil
+        since = start <= @last ? after_metrics(d.key, families, campaign_rows, start, @last) : nil
+        last_week = start <= @from ? after_metrics(d.key, families, campaign_rows, @from, @last) : nil
+        self.class.decision_payload(d, after: first_week).merge(
+          _record: d, due: d.due?, days_left: d.due? ? 0 : ((d.review_at - Time.current) / 1.day).ceil,
+          evolution: { since: since, last_week: last_week },
+          campaigns_now: campaigns_now(d.key, families, campaign_rows), suggestions: []
+        )
       end
+      [ rows, ignored ]
+    end
+
+    # Tira da Análise o que já foi decidido: ignorado nos últimos 15 dias (mesma chave e sinal), ou com uma ação "Feito"
+    # no histórico (mesmo sinal enquanto espera; na revisão, tudo do mesmo anúncio/campanha vai para o card dela, com
+    # "persiste" quando é o mesmo problema). Devolve quantos saíram de cada jeito.
+    def route_decided!(entries, history, ignored)
+      counts = { history: 0, ignored: 0 }
+      entries.each do |e|
+        if ignored.any? { |d| d.key == e[:key] && d.signal == e[:signal] }
+          e[:routed] = "ignorado"
+          counts[:ignored] += 1
+          next
+        end
+        h = history.find { |x| x[:key] == e[:key] && (x[:due] || x[:_record].handled_signals.include?(e[:signal])) }
+        next unless h
+
+        e[:routed] = "historico"
+        counts[:history] += 1
+        next unless h[:due]
+
+        card = e[:signal].to_s.start_with?("estrutura_") ? self.class.structure_entry(e) : e.except(:routed)
+        h[:suggestions] << card.merge(persists: h[:_record].handled_signals.include?(e[:signal]))
+      end
+      counts
     end
 
     # --- saúde da conta ---
