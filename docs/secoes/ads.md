@@ -171,3 +171,16 @@ abaixo dele (`campaign_rank_entry`) e as campanhas novas da Estrutura partem del
   (partindo do maior entre o atual e o praticado), alavancas de conversão do anúncio (ficha, qualidade, fotos, clip, capa,
   CTR) em paralelo, trava de vendas (−30% → volta um degrau e segura 2 semanas), aviso de campanha compartilhada. Campanha já
   no alvo: vira acompanhamento (sem valor em jogo) com a trava.
+
+## Atualizações de 10–11/11/2026
+
+- **ROAS Objetivo da conta** (Configurações › Ads, `ml_accounts.ads_roas_target_enabled`/`ads_roas_target`): sinal
+  `abaixo_do_roas_objetivo`; nunca sugerir ROAS objetivo abaixo do alvo; a Estrutura usa o alvo como piso.
+- **Plano em degraus** (`goal_plan`): subir até 25% por semana, alavancas de conversão, trava se as vendas totais caírem
+  30% (volta um degrau e segura 2 semanas), aviso de campanha compartilhada; já no alvo, só acompanhamento.
+- **"hoje na campanha X"** (`campaigns_now`): em que campanha os anúncios da decisão estão hoje.
+- **Histórico de Ações** (ver "Decisões" acima): Ignorar = 15 dias fora da Análise; Feito = revisão no 8º dia com
+  evolução, Aguardar mais 7 dias, Arquivar e novas sugestões.
+- **Explicações "?"** (`components/ui/HelpTip.vue`) em Próxima rodada (fila de espera do "O que mexer agora", sem data
+  marcada), Observar (sinais sem valor estimável) e Intocáveis (em maturação: anúncios com menos de 30 dias; amostra
+  insuficiente: menos de 30 cliques e 500 impressões em 7 dias).

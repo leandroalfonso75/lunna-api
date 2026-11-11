@@ -173,6 +173,17 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
 ## Atualizações de 06/11/2026
 
 - "Última mensagem" mostra o texto inteiro com rolagem (não corta em 3 linhas).
-- **A atender** só quando o ML libera alguma ação ao vendedor (`ClaimsQuery.to_attend?` exige `seller_actions.any?`);
-  comprador aceitou a solução e não há o que fazer → fica só em Abertas (regra do usuário).
+- **A atender** (revisto em 09–10/11/2026): reclamação aberta em que o ML aguarda o vendedor
+  (`detail.action_responsible` seller/respondent) ou com ação obrigatória. Não exige `available_actions`: recém-aberta
+  pode vir sem ações. Comprador aceitou a solução e não há o que fazer → fica só em Abertas (regra do usuário).
 - Detalhes: 401 "not available for Claims 1.0" numa parte não trava a releitura das demais; as abertas são relidas primeiro.
+
+## Atualizações de 09–10/11/2026
+
+- **Releitura:** abertas a cada 15 min; as que aguardam o vendedor a cada rodada (4 min), com prioridade.
+- **Sem ação liberada pela API** mas aguardando o vendedor: o card mostra o aviso `ml_only` com link para responder no
+  painel do ML (o ML recusa o envio pela integração com "send message is not allowed").
+- **Depois de responder:** `Ml::ClaimRefreshJob` relê na hora, +10 s e +60 s; a tela recarrega a lista 12 s depois.
+- **"Já respondi no Mercado Livre":** `POST /api/claims/:id/refresh` relê a reclamação na hora (sai do A atender assim
+  que o ML registrar).
+- Aviso quando o envio ainda não foi liberado pelo ML.

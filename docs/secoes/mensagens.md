@@ -18,3 +18,8 @@ Só mensagens de pós-venda (tag post_sale); reclamações ficam em Reclamaçõe
 - Tela: `app/pages/mensagens.vue`, `components/mensagens/ConversationCard.vue` e o mesmo `QuestionTemplatesMenu.vue`
   (`kind="mensagem"`). API: `messages_controller.rb`, `Ml::Sync::Messages`, `MlConversation`, `MlMessageSend`.
 - **Regra:** nunca enviar mensagem real para testar.
+
+## Atualização de 10/11/2026
+
+- **Conversa com o assistente de IA do ML** (`conversations/ai-seller`): a resposta vai pelo caminho da conversa e para o
+  agente (`ml_conversations.conversation_path`, `agent_id`); evita o 409 "conversation ID invalid".

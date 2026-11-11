@@ -127,3 +127,9 @@ cobrado fica em `shipping.seller_cost_billed`, só para conferência (Financeiro
   `SalesQuery#data_start`), não mais só 92 dias.
 - **Tarifa diferenciada:** em promoção SMART (co-participação), o ML devolve a parte dele no desconto como redução da
   comissão; a tarifa da venda é a cobrada de fato (bate com `ml_sale_fee` do pagamento).
+
+## Custo Ads por venda: regra confirmada (11/11/2026)
+
+- O usuário revisou e manteve o rateio: gasto do anúncio no período ÷ todas as unidades vendidas dele no período (com e
+  sem Ads). Não usar o ACOS da campanha por venda nem dividir só pelas vendas atribuídas a Ads: os dois somam mais que o
+  gasto real (o ML não diz qual pedido veio do anúncio pago). Dia não fechado deixa a venda "pendente".

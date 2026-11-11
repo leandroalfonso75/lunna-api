@@ -91,3 +91,11 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   Sugestão de vídeo só quando o ML confirma que falta.
 - **Filtro** por produto (Olist), SKU, MLB ou palavra-chave, valendo em todas as abas (`skus`/`products` nas linhas).
 - **Avaliar aumento de preço:** preço abaixo da referência do ML — espaço para ganhar margem, não para exposição.
+
+## Atualizações de 10/11/2026
+
+- **Preço em maturação:** depois de aplicar um preço sugerido ou clicar "Não aplicar nenhum preço sugerido", o anúncio
+  fica 15 dias sem sugestões de preço e frete (ack "preço:*", `AbcSuggestionAck.hold_price!`); a tela mostra o aviso.
+- **Ciente por padrão:** toda sugestão sem botão próprio ganha os botões Ciente (inclusive tipos futuros); só preço, frete
+  e dados ficam de fora (`NO_CIENTE_AREAS`). Estoque e Logística já têm.
+- **Ficha técnica incompleta** (obrigatória ou principal) é sempre **Urgente**.
