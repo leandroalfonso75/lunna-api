@@ -133,3 +133,8 @@ cobrado fica em `shipping.seller_cost_billed`, só para conferência (Financeiro
 - O usuário revisou e manteve o rateio: gasto do anúncio no período ÷ todas as unidades vendidas dele no período (com e
   sem Ads). Não usar o ACOS da campanha por venda nem dividir só pelas vendas atribuídas a Ads: os dois somam mais que o
   gasto real (o ML não diz qual pedido veio do anúncio pago). Dia não fechado deixa a venda "pendente".
+
+## Despesas fixas por mês (11/11/2026)
+
+- O percentual de despesas fixas da venda é o do **mês da venda**: lançado em Financeiro › Despesas › Incluir Despesas
+  (mês fechado) ou o padrão da empresa (`economics.fixed_expenses_pct`). Ver `docs/secoes/financeiro.md`.

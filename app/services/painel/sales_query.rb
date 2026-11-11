@@ -185,6 +185,8 @@ module Painel
 
     def sale_day(order) = order.date_created.in_time_zone(@zone).to_date
 
+    def fixed_rate = @fixed_rate ||= FixedExpenseRate.new(@company)
+
     def ads_days
       from, to = window
       from.in_time_zone(@zone).to_date..to.in_time_zone(@zone).to_date
@@ -350,7 +352,9 @@ module Painel
       fee = lines.sum { |l| l.sale_fee.to_f * l.quantity.to_i }
       shipping_cost = shipping_cost_share.to_f
       tax = revenue * @company.tax_pct.to_f / 100.0
-      fixed = revenue * @company.fixed_expenses_pct.to_f / 100.0
+      # despesas fixas: o percentual do mês da venda (lançado em Financeiro › Despesas, mês fechado) ou o padrão da empresa
+      fixed_pct = fixed_rate.pct_for(sale_day(order))
+      fixed = revenue * fixed_pct / 100.0
       cost = total_cost(lines, olist, manual)
       coupon = (@coupons || {})[order.order_id] || {}
       coupon_cost = coupon[:seller].to_f
@@ -362,7 +366,7 @@ module Painel
         revenue: revenue, cost: cost, fee: fee, shipping_cost: shipping_cost,
         shipping_known: shipment.present? && !shipment["seller_cost"].nil?,
         coupon_cost: coupon_cost, coupon_discount: coupon[:total].to_f,
-        fixed_expenses: fixed, tax: tax,
+        fixed_expenses: fixed, fixed_expenses_pct: fixed_pct, tax: tax,
         net_profit: profit, net_profit_pct: profit && revenue.positive? ? profit / revenue * 100.0 : nil,
         ads_cost: ads_info[:cost], ads_state: ads_info[:state], ads_lines: ads_info[:lines],
         net_profit_after_ads: after_ads,

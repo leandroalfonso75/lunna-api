@@ -13,3 +13,4 @@ description: Use ao alterar a página Vendas do Lunna (pedidos do Mercado Livre 
 8. Período: filtro por mês (`?month=YYYY-MM`, lista `months` com o atual primeiro); "Mês até hoje" saiu da tela.
 7. Cupom do vendedor é custo de toda venda (`SalesQuery#coupons`, `mp_payments.coupon_amount`); histórico até a venda mais antiga guardada (máx. 400 dias).
 9. Custo Ads da venda = gasto do anúncio no período ÷ todas as unidades vendidas dele (confirmado pelo usuário em 11/11/2026); não trocar por ACOS por venda.
+10. Despesas fixas da venda = percentual do mês da venda (`Painel::FixedExpenseRate`), não mais sempre o padrão da empresa.

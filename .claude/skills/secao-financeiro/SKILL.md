@@ -10,3 +10,4 @@ description: Use ao alterar a seção Financeiro do Lunna (DRE do período x ant
 5. Somente leitura: a seção não escreve no ML nem altera Vendas; divergências aparecem na conciliação.
 6. Mudou regra ou arquivo? Atualize `docs/secoes/financeiro.md` no mesmo commit e rode `RAILS_ENV=test` em `spec/requests/finance_spec.rb` e `spec/services/mp/sync_spec.rb`.
 6. Linha Cupons (parte do vendedor) no DRE/Despesas e previsto dos Repasses já descontando o cupom.
+- Despesas fixas mensais (11/11/2026): `/financeiro/despesas-fixas`, `FixedExpense`, `Painel::FixedExpenseRate`; mês fechado com lançamento usa total ÷ faturamento nas vendas e no DRE; mês corrente e mês sem lançamento usam `companies.fixed_expenses_pct`.

@@ -124,3 +124,21 @@ conta do Mercado Pago. Carrega à parte (`GET /api/finance/repasses`, `Painel::R
 - **Cupons:** linha "(−) Cupons (parte do vendedor)" no DRE e em Despesas (descontada no pagamento do Mercado Pago; não
   aparece no extrato do ML). Nos Repasses, o previsto já desconta o cupom.
 - **Repasses:** pagamentos e liberações do Mercado Pago desde 04–05/2026 (histórico importado em 06/11).
+
+## Despesas fixas mensais (11/11/2026)
+
+- **Tela:** Financeiro › Despesas › botão "Incluir Despesas" abre `/financeiro/despesas-fixas`: escolhe o mês, lança as
+  despesas fixas (aluguel, salários, FGTS, INSS, bonificações, transporte, material de expediente...; categorias em
+  `FixedExpense::CATEGORIES`), lista relida a cada inclusão, alterar/excluir, "Copiar do mês anterior" quando o mês está
+  vazio. No fim, o comparativo **Faturamento x Despesas Fixas** com o percentual e a lista dos meses lançados.
+- **Regra** (`Painel::FixedExpenseRate`): mês **fechado** com despesas lançadas e faturamento → percentual = total das
+  despesas fixas do mês ÷ faturamento do mês, e ele substitui o padrão em **todas as vendas daquele mês** (Vendas:
+  despesas fixas e lucro; DRE: linha "Despesas fixas"). **Mês corrente**, mês sem lançamento ou sem faturamento → o
+  padrão de Configurações › Empresa (`companies.fixed_expenses_pct`). Nada é gravado na venda: a conta é refeita na
+  leitura, então lançar, alterar ou excluir recalcula na hora.
+- **Faturamento do mês:** receita das vendas não canceladas de todas as contas da empresa (preço × quantidade, data da
+  venda em São Paulo), igual ao total de Vendas do mês.
+- **Fora da regra:** Anúncios, Curva ABC e Promoções (preço para frente) seguem no padrão da empresa.
+- **API:** `GET/POST /api/finance/fixed_expenses`, `PATCH/DELETE /api/finance/fixed_expenses/:id`,
+  `POST /api/finance/fixed_expenses/copy`; escopo da empresa; escrita só admin. Tabela `fixed_expenses`.
+- **Atenção:** despesa lançada aqui não deve ser lançada de novo em "Outras despesas (lançadas)" (contaria duas vezes).
