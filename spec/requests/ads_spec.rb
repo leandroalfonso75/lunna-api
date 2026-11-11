@@ -223,8 +223,16 @@ RSpec.describe "/api/ads", type: :request do
       fam = json["families"].find { |f| f["key"] == "F31" }
       expect(fam["signals"].map { |x| x["type"] }).to include("abaixo_do_roas_objetivo")
       entry = (json["queue"] + json["next_round"]).find { |q| q["signal"] == "abaixo_do_roas_objetivo" }
-      expect(entry["action"]).to include("para 25")
+      expect(entry["action"]).to include("até 25")
+      expect(entry["plan"]["path"].last).to eq("25")
+      expect(entry["steps"].join).to include("degrau")
       expect(entry["value"]).to eq(30.0) # 50 − 500/25
+
+      # já com o ROAS Objetivo da campanha no alvo: não manda subir de novo; vira acompanhamento com a trava de vendas
+      MlAdCampaign.where(campaign_id: 1).update_all(roas_target: 25)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      watch = json["watch"].find { |q| q["signal"] == "abaixo_do_roas_objetivo" }
+      expect(watch["action"]).to include("já está em 25", "voltar para 20")
     end
 
     it "variações do mesmo anúncio pai: não sugere pausar uma variação; pausar vale para o anúncio inteiro" do

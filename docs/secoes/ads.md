@@ -157,3 +157,7 @@ Configurações › Ads, por conta do ML (`ml_accounts.ads_roas_target_enabled` 
 admin). Ligado: a Análise cria o sinal `abaixo_do_roas_objetivo` (família lucrativa, mas com ROAS abaixo do alvo; valor =
 gasto − receita ÷ alvo; ação: subir o ROAS Objetivo da campanha para o alvo), não sugere baixar o ROAS Objetivo de campanha
 abaixo dele (`campaign_rank_entry`) e as campanhas novas da Estrutura partem dele (`AdsStructure#roas_path`). `rules.roas_goal`.
+- **Estratégia até o alvo (11/11/2026):** `AdsAnalysis#goal_plan` — degraus de até 25% por semana no ROAS Objetivo
+  (partindo do maior entre o atual e o praticado), alavancas de conversão do anúncio (ficha, qualidade, fotos, clip, capa,
+  CTR) em paralelo, trava de vendas (−30% → volta um degrau e segura 2 semanas), aviso de campanha compartilhada. Campanha já
+  no alvo: vira acompanhamento (sem valor em jogo) com a trava.

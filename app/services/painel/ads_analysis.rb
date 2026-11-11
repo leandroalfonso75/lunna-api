@@ -284,7 +284,7 @@ module Painel
       if @goal && m[:roas] && m[:roas] < @goal && m[:revenue].positive? && m[:cost] >= RELEVANT_COST &&
          signals.none? { |x| x[:type] == "abaixo_do_equilibrio" }
         over = [ m[:cost] - m[:revenue] / @goal, 0 ].max.round(2)
-        signals << { type: "abaixo_do_roas_objetivo", priority: "media", value: over,
+        signals << { type: "abaixo_do_roas_objetivo", priority: "media", value: over, plan: goal_plan(family, m),
                      detail: "ROAS #{m[:roas]} abaixo do seu ROAS Objetivo #{fmt_goal} (Configurações › Ads)#{eq ? "; equilíbrio do produto #{eq}" : ''}." }
       end
       if active.size > 1 && active.count { |r| r[:cost].positive? } > 1
@@ -363,6 +363,54 @@ module Painel
 
     def fmt_goal = format("%g", @goal.to_f)
 
+    # Plano para chegar ao ROAS Objetivo do vendedor sem derrubar as vendas (pedido do usuário em 11/11/2026):
+    # - subir o ROAS Objetivo da campanha em degraus de até 25% por semana (o ML reaprende os lances a cada mudança; salto
+    #   grande corta exibições de uma vez), partindo do maior entre o ROAS Objetivo atual e o ROAS praticado;
+    # - em paralelo, subir a conversão (ROAS = receita ÷ investimento: converter mais sobe o ROAS sem perder exibição);
+    # - trava: se as vendas totais do anúncio caírem mais de 30% depois de um degrau, voltar um degrau e segurar 2 semanas;
+    # - campanha compartilhada com outras famílias: subir o ROAS Objetivo afeta todas; separar antes (Estrutura).
+    STEP_UP = 1.25
+    SALES_DROP_LIMIT = 30
+
+    def goal_plan(family, m)
+      cid = family[:campaigns].first
+      camp = @account.ml_ad_campaigns.find_by(campaign_id: cid)
+      current = camp&.roas_target&.to_f
+      base = [ current.to_f, m[:roas].to_f ].max
+      path = []
+      step = base
+      while step < @goal && path.size < 8
+        step = [ (step * STEP_UP * 2).round / 2.0, @goal ].min
+        path << format("%g", step)
+      end
+      path = [ format("%g", @goal) ] if path.empty?
+      shared = @account.ml_ad_items.where(campaign_id: cid).where.not(family_id: family[:family_id]).exists?
+      # a campanha já está no alvo (ou acima): o ROAS da semana ainda é o do lance antigo; é maturar e vigiar as vendas
+      at_goal = current && current >= @goal - 0.001
+      { campaign: camp&.name, current: current && format("%g", current), next: path.first, path: path, weeks: path.size,
+        at_goal: at_goal, step_back: format("%g", ((@goal / STEP_UP) * 2).round / 2.0),
+        shared: shared, levers: conversion_levers(family, m), sales_drop_limit: SALES_DROP_LIMIT }
+    end
+
+    # Alavancas de conversão do anúncio de maior gasto da família (qualidade, ficha, fotos, vídeo, capa, CTR/CVR da conta).
+    def conversion_levers(family, m)
+      lead = family[:items].max_by { |r| r[:cost].to_f }
+      item = lead && @account.ml_items.find_by(item_id: lead[:item_id])
+      levers = []
+      return levers unless item
+
+      missing = Array(item.attrs_missing_required).size + Array(item.attrs_missing_main).size
+      levers << { short: "completar a ficha técnica", detail: "#{missing} característica(s) faltando na ficha (Curva ABC › Alterar ficha técnica AGORA)" } if missing.positive?
+      levers << { short: "melhorar a qualidade", detail: "qualidade do anúncio #{item.quality_score}/100 no ML" } if item.quality_score.present? && item.quality_score.to_i < 85
+      levers << { short: "mais fotos", detail: "só #{item.pictures_count} fotos (meta 6 a 10)" } if item.pictures_count.to_i < 6
+      levers << { short: "vídeo (clip)", detail: "anúncio sem vídeo; o ML favorece anúncios com clip" } if item.has_clip == false && !item.has_video
+      levers << { short: "capa", detail: "capa sem selo de boa qualidade do ML" } if lead[:image_quality].present? && lead[:image_quality] != "good_quality_thumbnail"
+      if @account_ctr && m[:ctr] && m[:ctr] < @account_ctr * 0.8 && m[:prints].to_i >= MIN_PRINTS
+        levers << { short: "título e capa (CTR baixo)", detail: "CTR #{m[:ctr]}% abaixo da média da conta (#{@account_ctr}%)" }
+      end
+      levers
+    end
+
     def budget_value(m, a)
       share = a[:impression_share].to_f
       return nil unless share.positive? && m[:revenue].positive?
@@ -420,9 +468,20 @@ module Painel
                    action: "ROAS #{f[:metrics][:roas]} abaixo do equilíbrio #{f[:economics][:roas_equilibrio]}: rever preço e custo (margem #{f[:economics][:margin_pct]}%); se não houver como subir a margem, pausar a publicidade do anúncio inteiro (#{ids.size > 1 ? "as #{ids.size} variações juntas" : "o anúncio"}; o ML não pausa uma variação sozinha).",
                    check_before: "custo do produto e preço no Lunna; não baixar lance como primeira ação")
       when "abaixo_do_roas_objetivo"
+        p = s[:plan]
+        if p[:at_goal]
+          # já no alvo: sem valor em jogo (vai para "observar"); o card explica a maturação e a trava
+          return base.merge(class: "ajuste", class_label: CLASSES["ajuste"], title: name, value: nil, value_how: nil, plan: p,
+                          action: "ROAS Objetivo da campanha #{p[:campaign]} já está em #{p[:current]} (seu alvo #{fmt_goal}): aguardar o ML ajustar os lances " \
+                                  "por 7 dias e subir a conversão#{p[:levers].any? ? " (#{p[:levers].map { |l| l[:short] }.join(', ')})" : ''}; " \
+                                  "se as vendas totais caírem mais de #{p[:sales_drop_limit]}%, voltar para #{p[:step_back]}.",
+                          check_before: "vendas totais do anúncio (orgânico + Ads) na semana", reassess: "7 dias")
+        end
         base.merge(class: "desperdicio", class_label: CLASSES["desperdicio"], title: name, value_how: "investimento acima do que o seu ROAS Objetivo permite",
-                   action: "Subir o ROAS Objetivo da campanha #{f[:campaign_names].first || ''} para #{fmt_goal} (o seu alvo em Configurações › Ads). O ML dá lances menores: menos exibições, mas cada venda custa menos em publicidade.",
-                   check_before: "vendas totais do anúncio (orgânico + Ads) nos 7 dias seguintes", reassess: "7 dias")
+                   plan: p,
+                   action: "Escalar o ROAS Objetivo da campanha #{p[:campaign] || ''} aos poucos até #{fmt_goal}: esta semana de #{p[:current] || '—'} para #{p[:next]} " \
+                           "(caminho: #{p[:path].join(' → ')}, um passo por semana) e, junto, subir a conversão do anúncio#{p[:levers].any? ? " (#{p[:levers].map { |l| l[:short] }.join(', ')})" : ''}.",
+                   check_before: "vendas totais do anúncio (orgânico + Ads) e o ROAS da semana antes de cada passo", reassess: "7 dias")
       when "familia_com_multiplos_anuncios_ativos"
         base.merge(class: "alocacao", class_label: CLASSES["alocacao"], title: name, value_how: "verba do anúncio pior × diferença de ROAS",
                    action: "Concentrar a verba no anúncio #{s[:best]} (melhor ROAS) e pausar a publicidade do #{s[:worst]} (mesmo produto, anúncios separados, como catálogo e tradicional); não excluir o anúncio.",

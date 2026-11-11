@@ -35,16 +35,39 @@ module Painel
             ]
           }
         when "abaixo_do_roas_objetivo"
-          goal = entry[:action].to_s[/para ([\d.,]+)/, 1]
+          p = entry[:plan] || {}
+          goal = Array(p[:path]).last
+          if p[:at_goal]
+            steps = Array(p[:levers]).map { |l| "Subir a conversão: #{l[:detail]}. Converter mais aumenta o ROAS sem perder exibições." }
+            steps << "Não mexa no ROAS objetivo nesta semana: o ML está reaprendendo os lances com o novo alvo (#{p[:current]})."
+            steps << "Trava de segurança: se as vendas totais do anúncio (com e sem Ads) caírem mais de #{p[:sales_drop_limit]}% em relação à semana anterior, " \
+                     "volte o ROAS objetivo para #{p[:step_back]} (#{ML_PATH} › #{p[:campaign]} › Editar) e segure 2 semanas antes de tentar #{goal} de novo."
+            steps << "Em 7 dias o Lunna mostra aqui o ROAS e as vendas já com o novo alvo."
+            return {
+              situation: "O ROAS objetivo da campanha #{p[:campaign]} já foi para #{p[:current]}, o seu alvo. Os números dos últimos 7 dias " \
+                         "(cada R$ 1 trouxe #{brl(m[:roas])}) ainda são do lance antigo; agora é deixar o ML ajustar e vigiar as vendas.",
+              steps: steps
+            }
+          end
+          steps = []
+          if p[:shared]
+            steps << "Esta campanha tem outros produtos: subir o ROAS objetivo afeta todos. Se só este estiver abaixo do alvo, " \
+                     "separe-o numa campanha própria primeiro (veja Estrutura de campanhas)."
+          end
+          Array(p[:levers]).each { |l| steps << "Subir a conversão: #{l[:detail]}. Converter mais aumenta o ROAS sem perder exibições." }
+          steps << "Esta semana: #{ML_PATH} › #{p[:campaign] || camp || 'campanha'} › Editar › ROAS objetivo de #{p[:current] || '—'} para #{p[:next]}. " \
+                   "Não pule direto para #{goal}: o ML reaprende os lances a cada mudança, e um salto grande corta as exibições de uma vez."
+          if Array(p[:path]).size > 1
+            steps << "Nas semanas seguintes, um degrau por semana: #{Array(p[:path]).drop(1).join(' → ')} (cerca de #{p[:weeks]} semanas até #{goal}). O Lunna mostra o próximo degrau aqui."
+          end
+          steps << "Trava de segurança: se as vendas totais do anúncio (com e sem Ads) caírem mais de #{p[:sales_drop_limit] || 30}% depois de um degrau, volte ao degrau anterior e segure por 2 semanas."
+          steps << "Depois de cada mudança, clique em \"Marcar como feito\" no Lunna para acompanhar o antes e depois."
           {
             situation: "#{period.capitalize} você investiu #{brl(m[:cost])} em anúncios pagos destes produtos e eles venderam " \
                        "#{brl(m[:revenue])}: cada R$ 1 trouxe #{brl(m[:roas])}. Dá lucro (o equilíbrio é #{brl(e[:roas_equilibrio])}), " \
-                       "mas está abaixo do seu ROAS Objetivo (#{goal}), definido em Configurações › Ads.",
-            steps: [
-              "#{ML_PATH} › #{camp || 'campanha'} › Editar › ROAS objetivo: #{goal}.",
-              "O ML passa a dar lances menores: o anúncio aparece menos, mas cada venda custa menos em publicidade.",
-              "Acompanhe as vendas totais do anúncio (com e sem Ads) por 7 dias e clique em \"Marcar como feito\" no Lunna."
-            ]
+                       "mas está abaixo do seu ROAS Objetivo (#{goal}). O caminho é chegar lá em degraus, sem derrubar as vendas, e " \
+                       "subindo a conversão ao mesmo tempo.",
+            steps: steps
           }
         when "gasto_sem_receita"
           {
