@@ -115,6 +115,13 @@ module Painel
       health = health_block(days)
       decisions = decisions_block(families, campaign_rows)
       mark_decided!(queue + next_round + watch, decisions)
+      # Decidido (Feito/Ignorado) nos últimos 7 dias sai de "O que mexer agora" e fica só em Decisões, com o antes e depois;
+      # volta à fila se o problema seguir depois de 7 dias (pedido do usuário em 11/11/2026). A vaga vai para o próximo.
+      decided_count = (queue + next_round + watch).count { |e| e[:decided] }
+      numbered = (queue + next_round).reject { |e| e[:decided] }
+      queue = numbered.first(@max_actions).each_with_index.map { |e, idx| e.merge(n: idx + 1) }
+      next_round = numbered.drop(@max_actions)
+      watch = watch.reject { |e| e[:decided] }
       structure = AdsStructure.call(@account, { families: families, campaigns: campaign_rows, decisions: decisions })
       structure[:suggestions].each { |s| s[:signal] = "estrutura_#{s[:type]}" }
       mark_decided!(structure[:suggestions], decisions)
@@ -130,7 +137,7 @@ module Painel
         health: health,
         campaigns: campaign_rows,
         families: families.map { |f| f.except(:_items) },
-        queue: queue, next_round: next_round, watch: watch,
+        queue: queue, next_round: next_round, watch: watch, decided_hidden: decided_count,
         untouchables: families.filter_map { |f| f[:untouchable] && { key: f[:key], name: f[:name], reason: f[:untouchable][:reason], until: f[:untouchable][:until] } },
         closing: closing(health, queue),
         decisions: decisions,

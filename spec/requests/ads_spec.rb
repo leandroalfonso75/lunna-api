@@ -315,7 +315,8 @@ RSpec.describe "/api/ads", type: :request do
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
       expect(json["decisions"].size).to eq(1)
       expect(json["decisions"].first["after"]).to be_nil # ainda não passou um dia fechado
-      expect(json["queue"].find { |q| q["key"] == "F2" }["decided"]).to include("status" => "feito")
+      expect(json["queue"].find { |q| q["key"] == "F2" }).to be_nil # decidido: sai de "O que mexer agora" e fica nas Decisões
+      expect(json["decided_hidden"]).to eq(1)
 
       delete "/api/ads/decisions/#{MlAdDecision.last.id}", params: { account_id: account.id }, headers: auth_headers(admin)
       expect(response).to have_http_status(:no_content)
