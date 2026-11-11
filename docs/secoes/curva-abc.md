@@ -99,3 +99,12 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 - **Ciente por padrão:** toda sugestão sem botão próprio ganha os botões Ciente (inclusive tipos futuros); só preço, frete
   e dados ficam de fora (`NO_CIENTE_AREAS`). Estoque e Logística já têm.
 - **Ficha técnica incompleta** (obrigatória ou principal) é sempre **Urgente**.
+
+## Ficha técnica em anúncio com variações (11/11/2026)
+
+- Erro 400 `item.attributes.invalid` no MLB2729901870 (variações Preto 127V / Preto 220V): o Lunna pedia de novo Cor e
+  Voltagem (já estão nas combinações das variações) e mandava tudo no anúncio. Agora `Ml::ItemSpecs` conta as combinações
+  e os atributos das variações como preenchidos; atributo com tag `variation_attribute` vai em cada variação
+  (`per_variation: "same"`, mesmo valor para todas), e o GTIN tem um campo por variação (`"each"`). O PUT manda todas
+  as variações (a que fica de fora o ML apaga), com os atributos que já tinham.
+- Recusa do ML mostra só as mensagens de `cause` (`ItemSpecs.ml_reason`); o erro completo fica em `ml_item_edits.error`.

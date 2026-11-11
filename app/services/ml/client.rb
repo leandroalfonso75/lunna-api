@@ -379,18 +379,19 @@ module Ml
         return (JSON.parse(response.body) rescue { "message" => response.body.to_s })
       end
 
-      raise_for(response, path)
+      # escrita recusada: guarda a resposta inteira (até 4 KB), para a tela mostrar o motivo do ML
+      raise_for(response, path, size: 4000)
     rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
       raise Error.new(status: nil, path: path, body: e.message)
     end
 
-    def raise_for(response, path)
+    def raise_for(response, path, size: BODY_EXCERPT_SIZE)
       klass = response.status == 404 ? NotFound : Error
-      raise klass.new(status: response.status, path: path, body: short_body(response.body))
+      raise klass.new(status: response.status, path: path, body: short_body(response.body, size))
     end
 
-    def short_body(body)
-      body.to_s.byteslice(0, BODY_EXCERPT_SIZE)
+    def short_body(body, size = BODY_EXCERPT_SIZE)
+      body.to_s.byteslice(0, size).to_s.scrub("")
     end
 
     def connection

@@ -97,6 +97,49 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
       expect(account.ml_item_edits.sole).to have_attributes(kind: "ficha_tecnica", ok: true)
     end
 
+    it "anúncio com variações: não pede o que já está nas variações e manda atributo de variação em cada variação" do
+      create(:ml_item, ml_account: account, item_id: "MLV", price: 197.0)
+      stub_request(:get, "#{ml}/categories/MLB5412/attributes").to_return(status: 200, body: [
+        { id: "COLOR", name: "Cor", value_type: "string", tags: { allow_variations: true }, relevance: 1 },
+        { id: "VOLTAGE", name: "Voltagem", value_type: "string", tags: { allow_variations: true }, relevance: 1 },
+        { id: "TECHNOLOGIES", name: "Tecnologias", value_type: "string", tags: { multivalued: true }, relevance: 1 },
+        { id: "MAIN_COLOR", name: "Cor principal", value_type: "list", tags: { variation_attribute: true }, relevance: 1, values: [ { id: "2450295", name: "Preto" } ] },
+        { id: "GTIN", name: "Código universal de produto", value_type: "string", tags: { variation_attribute: true, multivalued: true }, relevance: 1 }
+      ].to_json)
+      stub_request(:get, "#{ml}/items/MLV").to_return(status: 200, body: {
+        id: "MLV", title: "Secador", category_id: "MLB5412", attributes: [],
+        variations: [
+          { id: 11, attribute_combinations: [ { id: "COLOR", value_name: "Preto" }, { id: "VOLTAGE", value_name: "127V" } ], attributes: [ { id: "SELLER_SKU", value_name: "S-127" } ] },
+          { id: 12, attribute_combinations: [ { id: "COLOR", value_name: "Preto" }, { id: "VOLTAGE", value_name: "220V" } ], attributes: [] }
+        ]
+      }.to_json)
+
+      get "/api/items/MLV/specs", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["fields"].map { |f| [ f["id"], f["per_variation"] ] }).to eq([ [ "TECHNOLOGIES", nil ], [ "MAIN_COLOR", "same" ], [ "GTIN", "each" ] ])
+      expect(json["variations"]).to eq([ { "id" => 11, "label" => "Preto · 127V" }, { "id" => 12, "label" => "Preto · 220V" } ])
+
+      put = stub_request(:put, "#{ml}/items/MLV").with(body: {
+        attributes: [ { id: "TECHNOLOGIES", value_name: "Ionic" } ],
+        variations: [
+          { id: 11, attributes: [ { id: "SELLER_SKU", value_name: "S-127" }, { id: "MAIN_COLOR", value_id: "2450295" }, { id: "GTIN", value_name: "7891" } ] },
+          { id: 12, attributes: [ { id: "MAIN_COLOR", value_id: "2450295" }, { id: "GTIN", value_name: "7892" } ] }
+        ]
+      }.to_json).to_return(status: 200, body: "{}")
+      post "/api/items/MLV/specs", params: { account_id: account.id, confirm: true,
+                                             values: { TECHNOLOGIES: { value_name: "Ionic" }, MAIN_COLOR: { value_id: "2450295" },
+                                                       GTIN: { variations: { "11" => { value_name: "7891" }, "12" => { value_name: "7892" } } } } },
+                                   headers: auth_headers(admin), as: :json
+      expect(response).to have_http_status(:ok)
+      expect(put).to have_been_requested.once
+    end
+
+    it "recusa do ML aparece com o motivo, sem o JSON cru" do
+      stub_request(:put, "#{ml}/items/MLB1").to_return(status: 400, body: { message: "Validation error", cause: [ { code: "item.attributes.invalid", message: "Attribute [COLOR] is not valid" } ] }.to_json)
+      post "/api/items/MLB1/specs", params: { account_id: account.id, confirm: true, values: { MAIN_COLOR: { value_id: "52049" } } }, headers: auth_headers(admin), as: :json
+      expect(json.to_s).to include("Attribute [COLOR] is not valid")
+      expect(json.to_s).not_to include("item.attributes.invalid")
+    end
+
     it "a IA só sugere valores da lista permitida" do
       content = { values: { MAIN_COLOR: { value_id: "999", value_name: "Rosa", why: "título" }, NOPE: { value_name: "x" } } }
       stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
