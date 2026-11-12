@@ -19,8 +19,8 @@ Cadastros da empresa e das contas conectadas.
 - Tudo é escopado por empresa (`Current.company`); só administradores alteram.
 - Mudar os parâmetros de negócio recalcula as métricas (`Painel::ItemMetrics.refresh`).
 - A chave da IA fica cifrada e nunca volta para o front (só os 4 últimos caracteres).
-- `fixed_expenses_pct` (despesas operacionais, padrão 3%) já existe na API e aparece no payload da empresa, mas **ainda não tem
-  campo na tela**.
+- `fixed_expenses_pct` (Despesas Operacionais padrão) tem campo em Empresa › Impostos e margem desde 11/11/2026; mês
+  fechado com despesas lançadas em Financeiro › Incluir Despesas usa o percentual real do mês (ver financeiro.md).
 - A conexão com o **Olist ERP** é feita pela API (`POST /api/olist/authorize`, rake `olist:conectar[email]`) ou pelo
   botão "Reconectar ao Olist" da página Produtos; ainda não há aba dela aqui.
 
