@@ -6,7 +6,7 @@ require "csv" # stdlib; vira gem no Ruby 3.4
 module Painel
   class PromotionsQuery
     PER_PAGES = [ 25, 50, 100 ].freeze
-    SORTS = %w[gain margin best_margin title price].freeze
+    SORTS = %w[gain margin best_margin title price review_round].freeze
     STATUSES = {
       "trocar" => [ "Trocar por melhor", "warn" ], "acima_maxima" => [ "Acima da máxima", "warn" ],
       "sem_promocao" => [ "Sem promoção", "warn" ],
@@ -37,6 +37,7 @@ module Painel
     # dentro; anúncio sem pai fica numa linha própria. Contagens, resumo e filtros são por anúncio; a paginação, por linha.
     def call
       rows = build_rows(items_scope.to_a)
+      attach_review_rounds!(rows)
       # "Para revisar" não conta os anúncios marcados para não automatizar (quem não automatiza não precisa revisar)
       counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k && !(k == "para_revisar" && r[:manual]) } }
       counts["nao_automatizados"] = rows.count { |r| r[:manual] }
@@ -560,7 +561,12 @@ module Painel
       end
     end
 
-    def sort_key = SORTS.include?(@params[:sort].to_s) ? @params[:sort].to_s : "gain"
+    # Em "Para revisar" a ordem padrão é pela rodada em que o anúncio entrou, da mais recente para a mais antiga.
+    def sort_key
+      return @params[:sort].to_s if SORTS.include?(@params[:sort].to_s)
+
+      @params[:status].to_s == "para_revisar" ? "review_round" : "gain"
+    end
     def sort_dir = @params[:dir].to_s == "asc" ? "asc" : "desc"
 
     def sort(rows)
@@ -570,12 +576,56 @@ module Painel
         when "margin" then r[:group] ? r[:current_margin] : r.dig(:current, :margin_pct)
         when "best_margin" then r[:group] ? r[:best_margin] : r.dig(:best, :margin_pct)
         when "price" then r[:group] ? r[:price_min] : r[:full_price]
+        when "review_round" then review_round_value(r)
         when "title" then nil
         end
         next [ 0, r[:title].to_s.downcase ] if sort_key == "title"
 
         [ value.nil? ? 1 : 0, sort_dir == "asc" ? (value || 0) : -(value || 0) ]
       end.then { |list| sort_key == "title" && sort_dir == "desc" ? list.reverse : list }
+    end
+
+    # --- rodada em que entrou em "Para revisar" (pedido do usuário em 12/11/2026) ---
+
+    # Para cada anúncio em "Para revisar": a rodada (aplicação real) em que ele entrou, isto é, a mais antiga de uma
+    # sequência ininterrupta de rodadas que o mandaram para revisar (ou que programaram a troca para quando a promoção
+    # atual acabar, e por isso ele segue em revisar até lá), terminando na última. O que a última rodada disse dele vai
+    # junto (ex.: "troca programada para 29/11"). Sem registro nessa sequência, entrou depois da última rodada (mudança
+    # de preço, custo, oferta ou regra): "Depois da rodada de dd/mm".
+    REVIEW_KINDS = %w[revisar agendar].freeze
+    REVIEW_ROUNDS_LOOKBACK = 60
+
+    def attach_review_rounds!(rows)
+      reviewing = rows.select { |r| r[:status][:key] == "para_revisar" }
+      return if reviewing.empty?
+
+      runs = @account.ml_promotion_runs.where(mode: "apply").where.not(finished_at: nil).order(started_at: :desc).limit(REVIEW_ROUNDS_LOOKBACK).to_a
+      acts = @account.ml_promotion_actions.where(run_id: runs.map(&:id), item_id: reviewing.map { |r| r[:item_id] })
+                     .pluck(:run_id, :item_id, :kind, :error)
+      # pular porque a troca já está programada (de uma rodada anterior) também mantém a sequência
+      sets = acts.select { |a| REVIEW_KINDS.include?(a[2]) || (a[2] == "pular" && a[3].to_s.include?("programad")) }.group_by(&:first).transform_values { |v| v.map { |a| a[1] }.to_set }
+      last = runs.first
+      last_note = acts.select { |a| last && a[0] == last.id }.to_h { |a| [ a[1], a[2] == "agendar" || a[2] == "pular" ? a[3] : nil ] }
+      reviewing.each do |r|
+        entry = nil
+        runs.each do |run|
+          break unless sets[run.id]&.include?(r[:item_id])
+
+          entry = run
+        end
+        note = last_note[r[:item_id]].presence
+        r[:review_round] = if entry
+          { at: entry.started_at, run_id: entry.id, after_last: false, label: "Rodada de #{date(entry.started_at)}", note: note }
+        else
+          { at: nil, run_id: nil, after_last: true, label: last ? "Depois da rodada de #{date(last.started_at)}" : "Ainda sem rodada", note: note }
+        end
+      end
+    end
+
+    # Valor de ordenação: data da rodada; quem entrou depois da última rodada é o mais recente de todos.
+    def review_round_value(r)
+      list = r[:group] ? Array(r[:children]) : [ r ]
+      list.filter_map { |x| x[:review_round] && (x[:review_round][:at] || Time.current) }.max&.to_f
     end
 
     def paging

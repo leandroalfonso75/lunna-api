@@ -138,6 +138,31 @@ RSpec.describe "/api/promotions", type: :request do
     expect(json["best"]["price"]).to be <= 100.0
   end
 
+  it "Para revisar mostra a rodada em que o anúncio entrou e ordena da mais recente para a mais antiga (ou ao contrário)" do
+    company.update!(min_margin_pct: 40)
+    run = ->(at) { account.ml_promotion_runs.create!(mode: "apply", trigger: "agendada", started_at: at, finished_at: at + 2.minutes, status: "done") }
+    revisar = ->(r, id) { account.ml_promotion_actions.create!(run: r, item_id: id, kind: "revisar", source: "rotina", ok: true) }
+    r1 = run.(3.days.ago)
+    r2 = run.(2.days.ago)
+    r3 = run.(1.day.ago)
+    round = lambda do |params = {}|
+      get "/api/promotions", params: { account_id: account.id, status: "para_revisar" }.merge(params), headers: auth_headers(member)
+      json["items"].flat_map { |r| r["children"] || [ r ] }.find { |r| r["item_id"] == item.item_id }["review_round"]
+    end
+
+    revisar.(r1, item.item_id); revisar.(r2, item.item_id); revisar.(r3, item.item_id)
+    expect(round.()).to include("run_id" => r1.id, "after_last" => false) # em revisar desde r1, sem interrupção
+    expect(json).to include("sort" => "review_round", "dir" => "desc")
+    expect(round.(sort: "review_round", dir: "asc")).to be_present
+    expect(json).to include("dir" => "asc")
+
+    account.ml_promotion_actions.where(run: r2).delete_all
+    expect(round.()).to include("run_id" => r3.id) # saiu em r2: entrou de novo em r3
+
+    account.ml_promotion_actions.where(run: r3).delete_all
+    expect(round.()).to include("after_last" => true, "label" => a_string_including("Depois da rodada")) # entrou depois da última rodada
+  end
+
   it "anúncio em que nenhuma oferta cabe nas regras vai para revisar, com a regra que barrou" do
     company.update!(min_margin_pct: 40)
 

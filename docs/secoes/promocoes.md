@@ -254,3 +254,12 @@ Recusa `ERROR_CREDIBILITY_DISCOUNTED_PRICE`: o ML não aceita promoção com pre
 30 dias (vendas e preço mostrado nas promoções). Depois da primeira recusa, a rotina (`PromotionRoutine#credibility_block`)
 não insiste: manda para revisar com o menor preço, o preço que o ML aceitaria e a data em que a trava sai (30 dias depois
 da última vez nesse preço). Vale para todos os anúncios (regra do usuário). Erro 500 do ML é instabilidade.
+
+## Para revisar: rodada em que entrou (12/11/2026)
+
+- Cada anúncio em "Para revisar" mostra a rodada (aplicação real) em que entrou: a mais antiga de uma sequência sem
+  interrupção de rodadas que o mandaram para revisar ou programaram a troca, até a última; junto, o que a última rodada
+  disse dele (ex.: "troca programada para 29/11"). Sem essa sequência: "Depois da rodada de dd/mm" (entrou por mudança
+  de preço, custo, oferta ou regra depois da última rodada).
+- A guia abre ordenada por essa rodada, da mais recente para a mais antiga (`sort=review_round`, `dir=desc`); clicar em
+  "Situação · rodada" inverte para crescente.
