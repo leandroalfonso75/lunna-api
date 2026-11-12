@@ -63,6 +63,27 @@ module Ml
         true
       end
 
+      # Quem "tem a vez" na conversa (pedido do usuário em 12/11/2026): mensagem do Mercado Livre (nem vendedor nem
+      # comprador) logo depois de uma resposta do vendedor é só aviso ("Resposta enviada ao comprador.") e não deixa a
+      # conversa aguardando o vendedor; mensagem do ML antes disso (ex.: assistente perguntando o que responder) conta como
+      # pedido de resposta, igual ao comprador.
+      def self.effective_last_from(list, seller, buyer)
+        list.reduce(nil) do |state, m|
+          if m["from"].to_i == seller.to_i then "seller"
+          elsif buyer && m["from"].to_i == buyer.to_i then "buyer"
+          else state == "seller" ? "seller" : "buyer"
+          end
+        end
+      end
+
+      # Recalcula o last_from das conversas já guardadas (sem chamar o ML).
+      def self.recompute_last_from(account)
+        account.ml_conversations.find_each do |row|
+          value = effective_last_from(Array(row.messages), account.seller_id, row.buyer_id)
+          row.update_columns(last_from: value) if value && value != row.last_from
+        end
+      end
+
       def self.save(account, pack, conv, msgs, max_length)
         seller = account.seller_id.to_i
         list = msgs.map do |m|
@@ -80,7 +101,7 @@ module Ml
         row.update!(
           buyer_id: buyer, status: conv["status"], substatus: conv["substatus"], claim_ids: Array(conv["claim_ids"]),
           messages: list, messages_count: list.size, unread_count: list.count { |m| m["from"] != seller && m["read"].nil? },
-          last_message_at: last && last["date"], last_from: last && (last["from"] == seller ? "seller" : "buyer"),
+          last_message_at: last && last["date"], last_from: effective_last_from(list, seller, buyer),
           seller_max_length: max_length, checked_at: Time.current,
           # conversa com o assistente de IA do ML: a resposta vai para o caminho dela e para o agente (não o comprador)
           conversation_path: (conv["path"].to_s.include?("/conversations/") ? conv["path"] : nil),

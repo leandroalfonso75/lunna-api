@@ -23,3 +23,9 @@ Só mensagens de pós-venda (tag post_sale); reclamações ficam em Reclamaçõe
 
 - **Conversa com o assistente de IA do ML** (`conversations/ai-seller`): a resposta vai pelo caminho da conversa e para o
   agente (`ml_conversations.conversation_path`, `agent_id`); evita o 409 "conversation ID invalid".
+
+## Avisos do Mercado Livre (12/11/2026)
+
+- Mensagem do ML (nem vendedor nem comprador) logo depois da resposta do vendedor, como "Resposta enviada ao comprador.", é
+  só aviso: a conversa não fica "Aguardando você" nem acende o ponto vermelho. Mensagem do ML antes da resposta (o
+  assistente perguntando o que responder) continua contando como pedido de resposta (`Ml::Sync::Messages.effective_last_from`).

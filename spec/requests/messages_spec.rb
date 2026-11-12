@@ -38,6 +38,27 @@ RSpec.describe "Mensagens (/api/messages)", type: :request do
       expect(read.with(query: hash_including(mark_as_read: "false"))).to have_been_requested
       expect(MlOrder.find_by(order_id: 10).messages_checked_at).to be_present
     end
+
+    it "aviso do ML depois da resposta do vendedor não deixa a conversa aguardando; pergunta do ML antes da resposta deixa" do
+      MlOrder.find_by(order_id: 10).update!(buyer_id: 99)
+      stub_request(:get, %r{#{ml}/messages/unread}).to_return(status: 200, body: { results: [] }.to_json)
+      ml_question = ml_message("a", 7777, 430, "Qual resposta você pode oferecer?", "2026-11-12T00:02:00Z")
+      stub_pack(10, [ ml_question ])
+      described_class.call(client, account)
+      expect(account.ml_conversations.sole.last_from).to eq("buyer") # o ML pede resposta: aguardando o vendedor
+
+      MlOrder.find_by(order_id: 10).update!(messages_checked_at: nil)
+      stub_pack(10, [ ml_question, ml_message("b", 430, 7777, "Acione a garantia.", "2026-11-12T09:11:00Z"),
+                      ml_message("c", 7777, 430, "Resposta enviada ao comprador.", "2026-11-12T09:12:00Z") ])
+      described_class.call(client, account)
+      conv = account.ml_conversations.sole
+      expect(conv.reload.last_from).to eq("seller")
+      expect(conv.awaiting_seller?).to be(false)
+
+      conv.update_columns(last_from: "buyer") # guardada pela regra antiga
+      described_class.recompute_last_from(account)
+      expect(conv.reload.last_from).to eq("seller")
+    end
   end
 
   it "lista primeiro as que aguardam o vendedor e envia a mensagem (admin, confirmação, até 350 caracteres)" do
