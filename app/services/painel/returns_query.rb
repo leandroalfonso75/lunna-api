@@ -140,7 +140,14 @@ module Painel
       return { state: "sem_dados", label: "sem dados da venda" } if order.nil?
 
       full = logistic == "fulfillment"
+      declared = c.return_invoice_declared_at
+      # "Ok, nota de retorno emitida": fora de SEM NOTA até a próxima rodada de conferência depois do clique
+      if declared && (c.return_invoice_confirmed_check_at.nil? || c.return_invoice_confirmed_check_at < declared)
+        return { state: "emitida", label: "nota de retorno emitida", declared_at: declared }
+      end
+
       { state: "sem_nota", label: "SEM NOTA", checked_at: c.return_invoice_checked_at,
+        not_found_after_declared: declared.present?, declared_at: declared,
         emit_link: full && order ? "https://www.mercadolivre.com.br/vendas/#{order[:order_id]}/detalhe" : nil }
     end
 

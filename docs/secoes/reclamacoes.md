@@ -214,3 +214,9 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   dois. A janela de meses vai da abertura da reclamação até 3 meses depois do fechamento (a nota pode sair antes do
   fechamento da devolução). Conferido também: retorno de mercadoria não entregue e retornos de depósito não trazem
   notas dessas devoluções.
+
+- **"Ok, nota de retorno emitida"** (13/11/2026): botão ao lado de SEM NOTA. Tira a devolução da lista na hora
+  (`POST /api/claims/:id/return_invoice_declared`, `ml_claims.return_invoice_declared_at`; `DELETE` desfaz). A leitura de 5
+  em 5 minutos já confere de novo; a rodada diária (5h) confere pelo envio, pelo Olist e pelo lote e marca
+  `return_invoice_confirmed_check_at`. Se a nota não for achada nela, volta para SEM NOTA com o aviso "marcada como
+  emitida, mas não encontrada". Não envia nada ao ML.

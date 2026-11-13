@@ -37,6 +37,26 @@ class ClaimsController < ApplicationController
     render json: Painel::ClaimsQuery.list(Current.account, params)
   end
 
+  # "Ok, nota de retorno emitida" (pedido do usuário em 13/11/2026): a devolução sai de SEM NOTA até a próxima rodada de
+  # conferência (a diária, Ml::ReturnInvoicesArchiveJob); a leitura de 5 em 5 minutos também confere logo. Achada a nota,
+  # ela aparece; se não, volta para SEM NOTA. Não envia nada ao ML. DELETE desfaz.
+  def declare_return_invoice
+    claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)
+    claim.update_columns(return_invoice_declared_at: Time.current, return_invoice_declared_by_id: Current.user&.id,
+                         return_invoice_checked_at: nil)
+    render json: { ok: true, declared_at: claim.return_invoice_declared_at }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  end
+
+  def undeclare_return_invoice
+    claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)
+    claim.update_columns(return_invoice_declared_at: nil, return_invoice_declared_by_id: nil)
+    head :no_content
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  end
+
   # Resolver pelo Lunna (escrita no ML, não se desfaz): action = allow_return | refund | partial_refund | open_dispute,
   # percentage (reembolso parcial) e confirm=true.
   def resolve

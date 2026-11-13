@@ -12,9 +12,11 @@ module Ml
       OLIST_PAGES = 10
       Result = Struct.new(:found, :checked, :notes, keyword_init: true)
 
-      def self.call(client, account, olist: nil)
+      def self.call(client, account, olist: nil, only: nil)
         notes = []
-        claims = pending(account).limit(BATCH).to_a
+        scope = pending(account)
+        scope = scope.where(id: only) if only
+        claims = scope.limit(only ? only.size : BATCH).to_a
         return Result.new(found: 0, checked: 0, notes: notes) if claims.empty?
 
         orders = orders_for(account, claims)

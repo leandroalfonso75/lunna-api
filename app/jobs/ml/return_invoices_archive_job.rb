@@ -13,6 +13,29 @@ module Ml
     end
 
     def self.run(account, sleeper: ->(s) { sleep(s) })
+      result = run_archive(account, sleeper: sleeper)
+      confirm_declared(account)
+      result
+    end
+
+    # "Ok, nota de retorno emitida": nesta rodada, confere de novo pelo envio no ML e no Olist (além do lote acima). Achada,
+    # a nota aparece; senão a devolução volta para SEM NOTA (return_invoice_confirmed_check_at depois do clique).
+    def self.confirm_declared(account)
+      declared = account.ml_claims.where.not(return_invoice_declared_at: nil).where(return_invoice: nil)
+      return if declared.none?
+
+      declared.update_all(return_invoice_checked_at: nil)
+      Ml::OAuth.refresh!(account)
+      client = Ml::Client.new(access_token: account.access_token)
+      Ml::Sync::ReturnInvoices.call(client, account, only: declared.pluck(:id))
+    rescue StandardError => e
+      Rails.logger.warn("[notas de devolução declaradas] #{account.id}: #{e.message}")
+    ensure
+      account.ml_claims.where.not(return_invoice_declared_at: nil).where(return_invoice: nil)
+             .update_all(return_invoice_confirmed_check_at: Time.current)
+    end
+
+    def self.run_archive(account, sleeper:)
       pending = pending_full(account)
       return { months: [], found: 0 } if pending.empty?
 

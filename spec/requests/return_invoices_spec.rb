@@ -59,4 +59,33 @@ RSpec.describe Ml::Sync::ReturnInvoices, type: :request do
     expect(rows[3]["logistic"]).to eq("Agência")
     expect(json["tabs"]["sem_nota"].map { |r| r["claim_id"] }).to match_array([ 2, 4 ])
   end
+
+  it "Ok, nota de retorno emitida: sai de SEM NOTA até a rodada diária; sem nota achada nela, volta" do
+    admin = create(:user, :admin, company: company)
+    order(20, "xd_drop_off", doc: "111")
+    claim(30, 20)
+    MlClaim.find_by(claim_id: 30).update_columns(return_invoice_checked_at: 1.hour.ago)
+
+    post "/api/claims/30/return_invoice_declared", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:ok)
+    expect(MlClaim.find_by(claim_id: 30).return_invoice_checked_at).to be_nil # a leitura de 5 em 5 min confere logo
+
+    get "/api/claims/returns", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["tabs"]["sem_nota"]).to eq([])
+    row = json["tabs"].except("sem_nota").values.flatten.find { |r| r["claim_id"] == 30 }
+    expect(row["return_invoice"]).to include("state" => "emitida", "label" => "nota de retorno emitida")
+
+    # rodada diária sem achar a nota (Olist sem a nota de entrada): volta para SEM NOTA
+    allow(Ml::OAuth).to receive(:refresh!)
+    allow(Ml::Sync::ReturnInvoices).to receive(:olist_client).and_return(olist)
+    allow(olist).to receive(:entry_notes).and_return("itens" => [])
+    travel 1.minute
+    Ml::ReturnInvoicesArchiveJob.run(account, sleeper: ->(_) { })
+    get "/api/claims/returns", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(json["tabs"]["sem_nota"].map { |r| r["claim_id"] }).to eq([ 30 ])
+    expect(json["tabs"]["sem_nota"].first["return_invoice"]).to include("state" => "sem_nota", "not_found_after_declared" => true)
+
+    delete "/api/claims/30/return_invoice_declared", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(response).to have_http_status(:no_content)
+  end
 end
