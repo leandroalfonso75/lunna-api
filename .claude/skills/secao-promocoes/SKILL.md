@@ -10,3 +10,4 @@ description: Use ao alterar a página Promoções do Lunna (Central de Promoçõ
 5. Mudou regra ou arquivo? Atualize `docs/secoes/promocoes.md` no mesmo commit e rode os testes com `RAILS_ENV=test` (ver CLAUDE.md).
 - Rotina: oferta cabível de anúncio "para revisar" é aplicada sozinha (na hora, ou programada para o fim da promoção atual quando só fere a regra de aumento; nunca fura a trava de lucro). Relatório mostra "Em vigor"/"Programada" e o período de cada promoção (`ml_promotion_actions.from_*/to_*/effective_at`).
 6. Recusa "preço não crível": rotina manda para revisar até a trava de 30 dias sair (`PromotionRoutine#credibility_block`), para todos os anúncios.
+- Desde 12/11/2026: Para revisar mostra a rodada em que o anúncio entrou (`attach_review_rounds!`, `sort=review_round`, padrão decrescente).
