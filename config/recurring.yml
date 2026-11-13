@@ -11,6 +11,10 @@ production: &default
   cleanup:
     class: CleanupJob
     schedule: every day at 4am
+  # Notas de devolução do Full em lote (vendas antigas que a consulta por envio não acha), uma vez por dia
+  return_invoices_archive:
+    class: Ml::ReturnInvoicesArchiveJob
+    schedule: every day at 5am
   # Promoções: a cada hora cheia; cada empresa roda no horário e nos dias que escolheu na tela de Promoções
   promotions_routine:
     class: Ml::PromotionsRoutineJob

@@ -201,3 +201,10 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   - Sem nota: "SEM NOTA" e, no Full, o link "emitir nota" (abre o Detalhe da venda no ML). Antes de voltar: "aguardando a
     chegada"; expirada: "—"; venda fora do Lunna: "sem dados da venda".
 - Aba **Sem nota de devolução**: só as efetivadas com SEM NOTA.
+
+- **Notas antigas do Full** (correção de 13/11/2026): em vendas mais antigas o ML não liga a nota de devolução ao envio
+  (a consulta por envio só devolve a nota de venda; ex.: venda 2000016228169414, nota 011298-1 de 16/06). Uma vez por dia
+  (`Ml::ReturnInvoicesArchiveJob`, 5h) o Lunna pede o "download em lote de documentos fiscais" do ML (`POST /archives`,
+  invoice-bra, só notas de devolução autorizadas) dos meses das devoluções do Full sem nota (do fechamento até 3 meses
+  depois, até 17 meses atrás) e lê os XMLs (o nome do arquivo traz o número da venda; `ZipReader`, sem gem). Meses
+  passados já lidos ficam em `ml_accounts.return_invoice_months`. É pedido de exportação: não altera nada na conta.

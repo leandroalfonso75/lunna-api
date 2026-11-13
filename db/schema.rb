@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_13_020001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_13_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -167,6 +167,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_020001) do
     t.datetime "questions_synced_at"
     t.boolean "ads_roas_target_enabled", default: false, null: false
     t.decimal "ads_roas_target", precision: 6, scale: 2
+    t.jsonb "return_invoice_months", default: [], null: false
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
