@@ -193,6 +193,12 @@ module Ml
       # Seção Reclamações: lista de todas as reclamações e os detalhes de 30 por rodada (Ml::Sync::ClaimsCenter).
       def sync_claims_center(client)
         @notes.concat(Ml::Sync::ClaimsCenter.call(client, @account).notes)
+        # nota fiscal de devolução das devoluções efetivadas (ML no Full, Olist nas demais); falha aqui não derruba a rodada
+        begin
+          @notes.concat(Ml::Sync::ReturnInvoices.call(client, @account).notes)
+        rescue StandardError => e
+          @notes << "Notas de devolução: #{e.message.truncate(160)}"
+        end
       end
 
       # Seção Perguntas: as sem resposta e as mais recentes (todas 1x por dia).

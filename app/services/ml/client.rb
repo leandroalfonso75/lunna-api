@@ -120,6 +120,11 @@ module Ml
       write(:put, "/items/#{item_id}", {}, { pictures: picture_ids.map { |id| { id: id } } })
     end
 
+    # Última nota fiscal do envio (venda ou, depois que o produto volta no Full, a de "Devolução de mercadorias").
+    def invoice_by_shipment(seller_id, shipping_id)
+      get("/users/#{seller_id}/invoices/shipments/#{shipping_id}")
+    end
+
     # Anúncio completo (título, family_name, user_product_id, vendas, atributos) para editar título e ficha técnica.
     def item_full(item_id)
       get("/items/#{item_id}")

@@ -39,6 +39,11 @@ module Olist
 
     # Listagem de produtos (GET /produtos). `params`: nome, codigo, gtin,
     # situacao (A/I/E), dataCriacao, dataAlteracao, limit, offset.
+    # Notas fiscais de entrada (GET /notas?tipo=E): Reclamações › Devoluções procura a nota de devolução da venda.
+    def entry_notes(params = {})
+      get("/notas", params.merge(tipo: "E"))
+    end
+
     def products(params = {})
       get("/produtos", params)
     end

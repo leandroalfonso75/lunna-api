@@ -187,3 +187,17 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
 - **"Já respondi no Mercado Livre":** `POST /api/claims/:id/refresh` relê a reclamação na hora (sai do A atender assim
   que o ML registrar).
 - Aviso quando o envio ainda não foi liberado pelo ML.
+
+## Tipo de envio e nota de devolução (13/11/2026)
+
+- Cada reclamação mostra o tipo de envio da venda (Full, Agência, Flex, Coleta) na lista e no card A atender.
+- **Nota de Devolução** (última coluna do card Devoluções): `ml_claims.return_invoice`, lida na rodada de sincronização
+  (`Ml::Sync::ReturnInvoices`, 40 por rodada, cada devolução sem nota reconferida a cada 6 h). Só para devoluções
+  efetivadas (produto voltou):
+  - Full: a última nota do envio da venda no ML (`/users/{id}/invoices/shipments/{shipping_id}`) quando é
+    "Devolução de mercadorias" (`fiscal_data.transaction_type = devolution`), ex.: 022615-1;
+  - Agência/Flex: nota de entrada no Olist (`GET /notas?tipo=E`) do mesmo comprador (CPF/CNPJ ou, sem documento, nome),
+    emitida a partir da abertura da reclamação, de preferência com o SKU da venda, ex.: 001215-2.
+  - Sem nota: "SEM NOTA" e, no Full, o link "emitir nota" (abre o Detalhe da venda no ML). Antes de voltar: "aguardando a
+    chegada"; expirada: "—"; venda fora do Lunna: "sem dados da venda".
+- Aba **Sem nota de devolução**: só as efetivadas com SEM NOTA.

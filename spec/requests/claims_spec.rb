@@ -13,7 +13,7 @@ RSpec.describe "/api/claims", type: :request do
 
   it "lista as reclamações com a venda ligada (pelo pedido ou pelo envio) e o andamento da importação" do
     MlOrder.create!(order_id: 10, ml_account: account, status: "paid", date_created: 2.days.ago, total_amount: 50, shipping_id: 700,
-                    buyer_nickname: "COMPRA1", buyer_name: "Maria")
+                    buyer_nickname: "COMPRA1", buyer_name: "Maria", shipment: { "logistic_type" => "fulfillment" })
     MlOrderItem.create!(order_id: 10, item_id: "MLB1", sku: "SKU-1", title: "Batom", quantity: 1, unit_price: 50, sale_fee: 5)
     claim(1, resource: "order", resource_id: 10, order_id: 10, details_synced_at: Time.current, affects_reputation: true, action_responsible: "seller")
     claim(2, resource: "shipment", resource_id: 700, status: "closed", claim_type: "cancel_purchase", date_created: 2.days.ago)
@@ -27,7 +27,7 @@ RSpec.describe "/api/claims", type: :request do
     first = json["claims"].first
     expect(first).to include("type_label" => "Reclamação", "stage_label" => "Mediação", "status_label" => "Aberta",
                              "action_responsible_label" => "Você", "affects_reputation" => true, "detailed" => true)
-    expect(first["order"]).to include("order_id" => 10, "buyer_name" => "Maria")
+    expect(first["order"]).to include("order_id" => 10, "buyer_name" => "Maria", "logistic" => "Full")
     expect(first["order"]["item"]).to include("sku" => "SKU-1")
     expect(json["claims"][1]["order"]).to include("order_id" => 10) # pelo envio
     expect(json["claims"][2]["order"]).to be_nil # venda fora do Lunna

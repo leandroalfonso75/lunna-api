@@ -15,6 +15,8 @@
 module Painel
   class ReturnsQuery
     TABS = %w[expiradas sem_custo com_custos em_andamento].freeze
+    # Aba extra (pedido do usuário em 13/11/2026): devoluções efetivadas (o produto voltou) ainda sem nota de devolução.
+    NO_INVOICE_TAB = "sem_nota"
     FINISHED = %w[delivered].freeze
     EXPIRED = %w[expired cancelled failed not_delivered].freeze
     # Categoria de uma linha do extrato pelo código do ML (C = cobrança, B = bonificação/cancelamento do mesmo código):
@@ -46,8 +48,9 @@ module Painel
       charges = charges_for(orders.values.compact.map { |o| o[:order_id] }, extra, claims)
       rows = claims.map { |c| row(c, orders[c.claim_id], extra, charges) }
       tabs = rows.group_by { |r| r[:tab] }
+      sort = ->(list) { list.sort_by { |r| -(r[:closed_at] || r[:opened_at]).to_i } }
       {
-        tabs: TABS.to_h { |t| [ t, (tabs[t] || []).sort_by { |r| -(r[:closed_at] || r[:opened_at]).to_i } ] },
+        tabs: TABS.to_h { |t| [ t, sort.(tabs[t] || []) ] }.merge(NO_INVOICE_TAB => sort.(rows.select { |r| r.dig(:return_invoice, :state) == "sem_nota" })),
         summary: summary(rows),
         billing: { synced_at: @account.billing_synced_at, periods: @account.ml_billing_charges.distinct.pluck(:period_key).sort },
         period: period_payload
@@ -118,12 +121,27 @@ module Painel
         reason: Painel::ClaimContest::REASON_LABELS[c.reason_name.to_s] || c.reason_detail.presence || c.reason_name || c.reason_id,
         reason_code: c.reason_name,
         buyer: order && (order[:buyer_name].presence || order[:buyer_nickname]),
-        item: order&.dig(:item), order_total: order&.dig(:total), logistic: Painel::ClaimContest::LOGISTICS[logistic] || logistic,
+        item: order&.dig(:item), order_total: order&.dig(:total), logistic: ClaimsQuery.new(@account, {}).send(:logistic_label, logistic),
         refund: refund, tracking: shipment["tracking_number"], money: dev["status_money"],
         affects_reputation: c.affects_reputation, coverage: c.resolution&.dig("applied_coverage"),
-        costs: costs, tab: tab,
+        costs: costs, tab: tab, return_invoice: invoice_info(c, status, logistic, order),
         link: order ? "https://www.mercadolivre.com.br/vendas/#{order[:order_id]}/detalhe" : nil
       }
+    end
+
+    # Nota de devolução: só faz sentido quando o produto voltou (devolução efetivada). Com nota: "022615-1"; sem: "SEM NOTA"
+    # e, no Full, o link para emitir no ML (Detalhe da venda › Ver detalhes da NF-e). Antes de voltar: aguardando a chegada.
+    def invoice_info(c, status, logistic, order)
+      inv = c.return_invoice
+      return { state: "com_nota", label: inv["label"], source: inv["source"], issued_at: inv["issued_at"] } if inv.present?
+      return { state: "nao_se_aplica", label: "—" } if EXPIRED.include?(status) || (status.blank? && c.status == "closed")
+      return { state: "aguardando", label: "aguardando a chegada" } unless FINISHED.include?(status)
+      # reclamação de venda que não está no Lunna (anterior à importação): não há como conferir a nota
+      return { state: "sem_dados", label: "sem dados da venda" } if order.nil?
+
+      full = logistic == "fulfillment"
+      { state: "sem_nota", label: "SEM NOTA", checked_at: c.return_invoice_checked_at,
+        emit_link: full && order ? "https://www.mercadolivre.com.br/vendas/#{order[:order_id]}/detalhe" : nil }
     end
 
     def tab_for(c, dev, status, costs)
@@ -201,7 +219,7 @@ module Painel
       costly = by_tab["com_custos"] || []
       items = costly.flat_map { |r| r[:costs][:items] }
       {
-        counts: TABS.to_h { |t| [ t, (by_tab[t] || []).size ] },
+        counts: TABS.to_h { |t| [ t, (by_tab[t] || []).size ] }.merge(NO_INVOICE_TAB => rows.count { |r| r.dig(:return_invoice, :state) == "sem_nota" }),
         total_cost: costly.sum { |r| r[:costs][:total] }.round(2),
         by_kind: items.group_by { |i| i[:key] }.transform_values { |v| v.sum { |i| i[:amount] }.round(2) },
         by_reason: costly.group_by { |r| r[:reason] }.map { |reason, rs| { reason: reason, count: rs.size, cost: rs.sum { |r| r[:costs][:total] }.round(2) } }

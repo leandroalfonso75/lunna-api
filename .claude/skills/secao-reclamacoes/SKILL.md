@@ -11,3 +11,4 @@ description: Use ao alterar a seção Reclamações do Lunna (importação das r
 6. Mudou regra ou arquivo? Atualize `docs/secoes/reclamacoes.md` no mesmo commit e rode os testes com `RAILS_ENV=test` (ver CLAUDE.md).
 6. A atender só com ação liberada ao vendedor; última mensagem inteira com rolagem; 401 "Claims 1.0" não trava a releitura.
 7. Desde 09–10/11/2026: A atender pelo `action_responsible` (não exige ações); sem ação na API → aviso `ml_only` para responder no ML; releitura na hora/+10 s/+60 s após responder e botão "Já respondi no Mercado Livre" (`POST /api/claims/:id/refresh`).
+8. Desde 13/11/2026: tipo de envio em cada reclamação; nota de devolução por devolução efetivada (`Ml::Sync::ReturnInvoices`: ML no Full, Olist nas demais), aba "Sem nota de devolução". Somente leitura.

@@ -204,7 +204,7 @@ module Painel
       by_ship = claims.select { |c| c.resource == "shipment" }.map(&:resource_id)
       orders = @account.ml_orders.where(order_id: by_order).or(@account.ml_orders.where(shipping_id: by_ship))
         .select(:order_id, :shipping_id, :buyer_nickname, :buyer_name, :total_amount, :paid_amount, :date_created, :status,
-                Arel.sql("payload->'payments' AS payments")).to_a
+                Arel.sql("payload->'payments' AS payments"), Arel.sql("shipment->>'logistic_type' AS logistic_type")).to_a
       items = MlOrderItem.where(order_id: orders.map(&:order_id)).group_by(&:order_id)
       thumbs = @account.ml_items.where(item_id: items.values.flatten.map(&:item_id).uniq).pluck(:item_id, :thumbnail).to_h
       by_id = orders.index_by(&:order_id)
@@ -214,11 +214,18 @@ module Painel
         line = o && items[o.order_id]&.first
         [ c.claim_id, o && { order_id: o.order_id, buyer_nickname: o.buyer_nickname, buyer_name: o.buyer_name,
                              total: o.total_amount&.to_f, date_created: o.date_created, status: o.status,
+                             # tipo de envio da venda (Full, Agência, Flex, Coleta), pedido do usuário em 13/11/2026
+                             logistic_type: o.attributes["logistic_type"], logistic: logistic_label(o.attributes["logistic_type"]),
                              payments: Array(o.attributes["payments"]).map { |p| p.slice("status", "transaction_amount", "total_paid_amount", "transaction_amount_refunded", "shipping_cost") },
                              item: line && { item_id: line.item_id, title: line.title, sku: line.sku, quantity: line.quantity,
                                              thumbnail: thumbs[line.item_id] } } ]
       end
     end
+
+    LOGISTIC_LABELS = { "fulfillment" => "Full", "xd_drop_off" => "Agência", "drop_off" => "Agência", "self_service" => "Flex",
+                        "cross_docking" => "Coleta" }.freeze
+
+    def logistic_label(type) = type.present? ? LOGISTIC_LABELS.fetch(type, type) : nil
 
     def row(c, order)
       status, tone = STATUSES.fetch(c.status, [ c.status.to_s, "neutral" ])

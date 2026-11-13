@@ -50,7 +50,7 @@ RSpec.describe "/api/claims/returns (card Devoluções)", type: :request do
     expect(response).to have_http_status(:ok)
     tabs = json["tabs"]
     expect(tabs.transform_values { |rows| rows.map { |r| r["claim_id"] }.sort }).to eq(
-      "expiradas" => [ 3, 5 ], "sem_custo" => [ 2 ], "com_custos" => [ 1 ], "em_andamento" => [ 4 ]
+      "expiradas" => [ 3, 5 ], "sem_custo" => [ 2 ], "com_custos" => [ 1 ], "em_andamento" => [ 4 ], "sem_nota" => [ 1, 2 ] # sem_nota: efetivadas ainda sem nota de devolução
     )
     costly = tabs["com_custos"].first
     expect(costly["costs"]["items"].map { |i| [ i["key"], i["amount"] ] }).to eq([ [ "frete_envio", 21.75 ], [ "frete_devolucao", 43.5 ] ])
@@ -60,7 +60,7 @@ RSpec.describe "/api/claims/returns (card Devoluções)", type: :request do
     expect(costly["costs"]["statement"].size).to eq(3)
     expect(tabs["sem_custo"].first["costs"]).to include("items" => [], "total" => 0.0)
     expect(tabs["expiradas"].first["costs"]["items"]).to eq([]) # etiqueta não usada: o custo de devolução não conta
-    expect(json["summary"]).to include("total_cost" => 65.25, "counts" => { "expiradas" => 2, "sem_custo" => 1, "com_custos" => 1, "em_andamento" => 1 })
+    expect(json["summary"]).to include("total_cost" => 65.25, "counts" => { "expiradas" => 2, "sem_custo" => 1, "com_custos" => 1, "em_andamento" => 1, "sem_nota" => 2 })
     expect(json["summary"]["by_kind"]).to eq("frete_envio" => 21.75, "frete_devolucao" => 43.5)
 
     get "/api/claims/returns", params: { account_id: account.id }, headers: auth_headers(member)
