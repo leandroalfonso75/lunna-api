@@ -32,7 +32,14 @@ RSpec.describe Ml::ReturnInvoicesArchiveJob, type: :job do
       claim = MlClaim.create!(ml_account: account, claim_id: 1, claim_type: "mediations", stage: "dispute", status: "closed",
                               order_id: 2000016228169414, date_created: 50.days.ago,
                               devolution: { "status" => "delivered", "date_closed" => "2026-05-11T10:29:24-04:00" })
-      body = zip("xml/2000016228169414 - NFE - 6310468356.xml" => xml(11298), "xml/2000099 - NFE - 1.xml" => xml(5, fin: "1"))
+      # venda de carrinho: o arquivo vem com o número do carrinho (pack_id)
+      MlOrder.create!(order_id: 2000017293755838, pack_id: 2000013891689379, ml_account: account, status: "paid", date_created: 2.months.ago,
+                      total_amount: 100, shipment: { "logistic_type" => "fulfillment" })
+      packed = MlClaim.create!(ml_account: account, claim_id: 2, claim_type: "mediations", stage: "dispute", status: "closed",
+                               order_id: 2000017293755838, date_created: 50.days.ago,
+                               devolution: { "status" => "delivered", "date_closed" => "2026-05-20T10:00:00-04:00" })
+      body = zip("xml/2000016228169414 - NFE - 6310468356.xml" => xml(11298), "xml/2000013891689379 - NFE - 6499547953.xml" => xml(14073),
+                 "xml/2000099 - NFE - 1.xml" => xml(5, fin: "1"))
       create = stub_request(:post, "#{ml}/archives").to_return(status: 201, body: { archive_id: "A1", status: "PROCESSING" }.to_json)
       stub_request(:get, "#{ml}/archives/A1").with(query: hash_including(process_name: "invoice-bra"))
         .to_return(status: 200, body: { archive_id: "A1", status: "READY", zip_ids: [ 9 ] }.to_json)
@@ -42,6 +49,7 @@ RSpec.describe Ml::ReturnInvoicesArchiveJob, type: :job do
 
       expect(result[:months]).to eq(%w[2026-05 2026-06 2026-07]) # do fechamento da devolução até hoje (máx. 3 meses depois)
       expect(claim.reload.return_invoice).to include("label" => "011298-1", "source" => "ml")
+      expect(packed.reload.return_invoice).to include("label" => "014073-1")
       expect(account.reload.return_invoice_months).to eq(%w[2026-05 2026-06]) # o mês corrente é relido no dia seguinte
       expect(create).to have_been_requested.times(3)
       expect(described_class.run(account, sleeper: ->(_) { })[:months]).to eq([]) # já tem nota: nada a buscar

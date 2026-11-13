@@ -21,10 +21,12 @@ module Ml
       months = Ml::ReturnInvoiceArchive.months_for(account, pending, done)
       current = ActiveSupport::TimeZone["America/Sao_Paulo"].today.beginning_of_month
       found = 0
+      # venda de carrinho: o arquivo do lote vem com o número do carrinho (pack_id), não o do pedido (correção de 13/11/2026)
+      packs = account.ml_orders.where(order_id: pending.map(&:order_id)).pluck(:order_id, :pack_id).to_h
       months.each do |m|
         map = Ml::ReturnInvoiceArchive.month(account, m, sleeper: sleeper)
         pending.each do |claim|
-          inv = map[claim.order_id.to_i]
+          inv = map[claim.order_id.to_i] || (packs[claim.order_id] && map[packs[claim.order_id].to_i])
           next unless inv && claim.return_invoice.nil?
 
           claim.update_columns(return_invoice: inv, return_invoice_checked_at: Time.current)

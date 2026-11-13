@@ -58,16 +58,24 @@ module Ml
       Ml::Sync::ReturnInvoices.build(tag.("nNF"), tag.("serie"), "ml", tag.("dhEmi"), key)
     end
 
-    # Meses a buscar: os das devoluções do Full ainda sem nota (do fechamento da devolução até 3 meses depois, porque a
-    # nota pode sair semanas depois), dentro do limite de idade do ML; meses passados já lidos não são lidos de novo.
+    # Meses a buscar: os das devoluções do Full ainda sem nota, da abertura da reclamação até 3 meses depois do fechamento
+    # da devolução (a nota pode sair antes do fechamento, quando o produto chega ao Full, ou semanas depois), dentro do
+    # limite de idade do ML; meses passados já lidos não são lidos de novo.
     def self.months_for(account, claims, done)
       zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
       oldest = zone.today.beginning_of_month << MAX_AGE_MONTHS
       current = zone.today.beginning_of_month
       claims.flat_map do |c|
         closed = (c.devolution.to_h["date_closed"].presence || c.devolution.to_h["last_updated"].presence || c.date_created.iso8601)
-        start = Time.zone.parse(closed.to_s).in_time_zone(zone).to_date.beginning_of_month
-        (0..3).map { |i| start >> i }
+        last = Time.zone.parse(closed.to_s).in_time_zone(zone).to_date.beginning_of_month >> 3
+        first = [ c.date_created.in_time_zone(zone).to_date.beginning_of_month, last << 3 ].min
+        list = []
+        m = first
+        while m <= last
+          list << m
+          m >>= 1
+        end
+        list
       end.uniq.select { |m| m >= oldest && m <= current }
              .reject { |m| m < current && done.include?(m.strftime("%Y-%m")) }.sort
     end

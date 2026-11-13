@@ -208,3 +208,9 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   invoice-bra, só notas de devolução autorizadas) dos meses das devoluções do Full sem nota (do fechamento até 3 meses
   depois, até 17 meses atrás) e lê os XMLs (o nome do arquivo traz o número da venda; `ZipReader`, sem gem). Meses
   passados já lidos ficam em `ml_accounts.return_invoice_months`. É pedido de exportação: não altera nada na conta.
+
+- **Carrinho e janela** (correção de 13/11/2026): em venda de carrinho o arquivo do lote vem com o número do carrinho
+  (`pack_id`), não o do pedido (vendas 2000018015909876 e 2000017293755838, notas 017681-1 e 014073-1); a busca casa pelos
+  dois. A janela de meses vai da abertura da reclamação até 3 meses depois do fechamento (a nota pode sair antes do
+  fechamento da devolução). Conferido também: retorno de mercadoria não entregue e retornos de depósito não trazem
+  notas dessas devoluções.
