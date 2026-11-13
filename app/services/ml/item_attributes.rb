@@ -32,6 +32,7 @@ module Ml
         catalog_product_id: @body["catalog_product_id"],
         user_product_id: @body["user_product_id"],
         family_name: @body["family_name"],
+        family_id: @body["family_id"]&.to_s,
         item_relations: Array(@body["item_relations"]).map { |r| r.slice("id", "variation_id", "stock_relation") },
         permalink: @body["permalink"],
         thumbnail: @body["thumbnail"],

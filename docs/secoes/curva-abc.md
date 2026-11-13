@@ -108,3 +108,15 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   (`per_variation: "same"`, mesmo valor para todas), e o GTIN tem um campo por variação (`"each"`). O PUT manda todas
   as variações (a que fica de fora o ML apaga), com os atributos que já tinham.
 - Recusa do ML mostra só as mensagens de `cause` (`ItemSpecs.ml_reason`); o erro completo fica em `ml_item_edits.error`.
+
+## Aplicar às variações do mesmo anúncio pai (13/11/2026)
+
+- Variações = anúncios da mesma família do ML (`ml_items.family_id`, lido no multiget), mesmo tipo (Clássico/Premium) e
+  fora do catálogo (`Ml::ItemVariations`). Outro anúncio do mesmo produto não entra. `GET /api/items/:id/variations`.
+- **Ciente** (inclusive "Não aplicar nenhum preço sugerido"): com variações, a tela pergunta "Sim, em todas as variações" ou
+  "Só neste anúncio" (`apply_to_variations`).
+- **Ficha técnica:** opção "Aplicar também às outras variações": em cada uma publica só os campos comuns que faltam nela
+  (`ItemSpecs.publish_shared`); atributos de variação (cor, tom, voltagem, GTIN, SKU; tags `allow_variations`,
+  `variation_attribute`, `defines_picture`) nunca são copiados.
+- **Preço sugerido:** opção "e nas outras N variações": o mesmo preço (e frete grátis) em cada uma, com a mesma trava de
+  60% e os 15 dias de maturação; a que já está no preço conta como feita. Cada escrita fica em `ml_item_edits`.

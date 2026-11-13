@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_11_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_13_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -569,6 +569,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_010001) do
     t.string "family_name"
     t.jsonb "ship_cost_tiers", default: {}, null: false
     t.boolean "has_clip"
+    t.string "family_id"
+    t.index ["ml_account_id", "family_id"], name: "index_ml_items_on_ml_account_id_and_family_id"
     t.index ["ml_account_id", "status"], name: "index_ml_items_on_ml_account_id_and_status"
     t.index ["ml_account_id"], name: "index_ml_items_on_ml_account_id"
     t.index ["user_product_id"], name: "index_ml_items_on_user_product_id"

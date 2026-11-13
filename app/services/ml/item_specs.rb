@@ -9,6 +9,22 @@ module Ml
     def self.info(client, account, item_id) = new(client, account, item_id).info
     def self.publish(client, account, item_id, values, user:) = new(client, account, item_id).publish(values, user)
 
+    # Atributos que mudam de uma variação para outra (cor, tom, voltagem, GTIN, SKU): nunca são copiados para as outras
+    # variações do anúncio pai.
+    VARIANT_TAGS = %w[allow_variations variation_attribute defines_picture].freeze
+    VARIANT_IDS = %w[GTIN SELLER_SKU COLOR MAIN_COLOR].freeze
+
+    # "Aplicar a todas as variações" (pedido do usuário em 13/11/2026): publica nesta variação só os valores comuns
+    # (sem os atributos de variação) dos campos que ainda faltam nela. Sem nada a publicar, não chama o ML.
+    def self.publish_shared(client, account, item_id, values, user:)
+      specs = new(client, account, item_id)
+      fields = specs.info[:fields].reject { |f| f[:variant] }.map { |f| f[:id] }.to_set
+      shared = values.to_h.select { |id, _| fields.include?(id.to_s) }
+      return Result.new(ok: true, published: 0, message: "nada a completar") if shared.empty?
+
+      specs.publish(shared, user)
+    end
+
     def initialize(client, account, item_id)
       @client = client
       @account = account
@@ -120,6 +136,7 @@ module Ml
       per_variation = variations.any? && tags["variation_attribute"] ? (EACH_VARIATION.include?(a["id"]) ? "each" : "same") : nil
       { id: a["id"], name: a["name"], value_type: a["value_type"], required: required?(a), hint: a["hint"].presence || a["tooltip"].presence,
         per_variation: per_variation,
+        variant: VARIANT_IDS.include?(a["id"]) || VARIANT_TAGS.any? { |t| tags[t] },
         values: Array(a["values"]).first(MAX_VALUES).map { |v| { id: v["id"], name: v["name"] } },
         free_text: !tags["fixed_values"] && a["value_type"] != "boolean",
         units: Array(a["allowed_units"]).map { |u| { id: u["id"], name: u["name"] } }, default_unit: a["default_unit"],

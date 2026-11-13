@@ -164,6 +164,71 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
     expect(response).to have_http_status(:unprocessable_content)
   end
 
+  describe "variações do mesmo anúncio pai" do
+    before do
+      account.ml_items.find_by(item_id: "MLB1").update!(family_id: "F1", listing_type_id: "gold_special", sku: "BR01")
+      create(:ml_item, ml_account: account, item_id: "MLB2", family_id: "F1", listing_type_id: "gold_special", sku: "BR02", price: 74.9)
+      create(:ml_item, ml_account: account, item_id: "MLB3", family_id: "F1", listing_type_id: "gold_special", sku: "BR03", price: 74.9)
+      create(:ml_item, ml_account: account, item_id: "MLB4", family_id: "F1", listing_type_id: "gold_pro", sku: "BR01")          # outro tipo: fora
+      create(:ml_item, ml_account: account, item_id: "MLB5", family_id: "F1", listing_type_id: "gold_special", catalog_listing: true) # catálogo: fora
+      create(:ml_item, ml_account: account, item_id: "MLB6", family_id: "F9", listing_type_id: "gold_special", sku: "BR01")        # outra família: fora
+    end
+
+    it "lista só as variações do mesmo pai e o Ciente vale para elas quando pedido" do
+      get "/api/items/MLB1/variations", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json).to include("count" => 2)
+      expect(json["items"].map { |i| i["item_id"] }).to eq(%w[MLB2 MLB3])
+
+      post "/api/items/MLB1/suggestion_acks", params: { account_id: account.id, key: "vídeo:Adicionar vídeo", kind: "aguardar" }, headers: auth_headers(member)
+      expect(account.abc_suggestion_acks.pluck(:item_id)).to eq([ "MLB1" ])
+
+      post "/api/items/MLB1/suggestion_acks", params: { account_id: account.id, key: "vídeo:Adicionar vídeo", kind: "aguardar", apply_to_variations: true }, headers: auth_headers(member)
+      expect(json).to include("applied" => 3)
+      expect(json["message"]).to include("outras 2 variação")
+      expect(account.abc_suggestion_acks.pluck(:item_id)).to match_array(%w[MLB1 MLB2 MLB3])
+    end
+
+    it "preço sugerido para todas as variações: publica em cada uma; a que já está no preço conta como feita" do
+      stub_request(:get, "#{ml}/items/MLB1").to_return(status: 200, body: item.merge("price" => 74.9).to_json)
+      stub_request(:get, "#{ml}/items/MLB2").to_return(status: 200, body: { id: "MLB2", price: 74.9 }.to_json)
+      stub_request(:get, "#{ml}/items/MLB3").to_return(status: 200, body: { id: "MLB3", price: 81.57 }.to_json)
+      put1 = stub_request(:put, "#{ml}/items/MLB1").to_return(status: 200, body: "{}")
+      put2 = stub_request(:put, "#{ml}/items/MLB2").with(body: { price: 81.57 }.to_json).to_return(status: 200, body: "{}")
+      put3 = stub_request(:put, "#{ml}/items/MLB3").to_return(status: 200, body: "{}")
+
+      post "/api/items/MLB1/price", params: { account_id: account.id, price: 81.57, confirm: true, apply_to_variations: true }, headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+      expect(put1).to have_been_requested.once
+      expect(put2).to have_been_requested.once
+      expect(put3).not_to have_been_requested # já estava em 81,57
+      expect(json["variations"].map { |v| [ v["item_id"], v["ok"] ] }).to eq([ [ "MLB2", true ], [ "MLB3", true ] ])
+      expect(json["message"]).to include("preço aplicado em 2 de 2")
+      expect(account.abc_suggestion_acks.where(key: AbcSuggestionAck::PRICE_KEY).pluck(:item_id)).to match_array(%w[MLB1 MLB2])
+    end
+
+    it "ficha técnica para todas as variações: copia só o que é comum e só o que falta em cada uma" do
+      stub_request(:get, "#{ml}/categories/MLB29888/attributes").to_return(status: 200, body: [
+        { id: "SKIN_TYPE", name: "Tipo de pele", value_type: "string", tags: {}, relevance: 1 },
+        { id: "COLOR", name: "Cor", value_type: "string", tags: { allow_variations: true }, relevance: 1 }
+      ].to_json)
+      stub_request(:get, "#{ml}/items/MLB2").to_return(status: 200, body: { id: "MLB2", category_id: "MLB29888", attributes: [] }.to_json)
+      stub_request(:get, "#{ml}/items/MLB3").to_return(status: 200, body: { id: "MLB3", category_id: "MLB29888", attributes: [ { id: "SKIN_TYPE", value_name: "Oleosa" } ] }.to_json)
+      put1 = stub_request(:put, "#{ml}/items/MLB1").with(body: { attributes: [ { id: "SKIN_TYPE", value_name: "Todos" }, { id: "COLOR", value_name: "Bege" } ] }.to_json).to_return(status: 200, body: "{}")
+      put2 = stub_request(:put, "#{ml}/items/MLB2").with(body: { attributes: [ { id: "SKIN_TYPE", value_name: "Todos" } ] }.to_json).to_return(status: 200, body: "{}")
+      put3 = stub_request(:put, "#{ml}/items/MLB3").to_return(status: 200, body: "{}")
+
+      post "/api/items/MLB1/specs", params: { account_id: account.id, confirm: true, apply_to_variations: true,
+                                              values: { SKIN_TYPE: { value_name: "Todos" }, COLOR: { value_name: "Bege" } } }, headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(put1).to have_been_requested.once
+      expect(put2).to have_been_requested.once # a cor (atributo de variação) não é copiada
+      expect(put3).not_to have_been_requested  # já tinha tipo de pele
+      expect(json["variations"].map { |v| [ v["item_id"], v["ok"], v["published"] ] }).to eq([ [ "MLB2", true, 1 ], [ "MLB3", true, 0 ] ])
+    end
+  end
+
   describe "preço" do
     before { stub_request(:get, "#{ml}/items/MLB1").to_return(status: 200, body: item.merge("price" => 74.9).to_json) }
 

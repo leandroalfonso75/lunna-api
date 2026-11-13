@@ -28,7 +28,7 @@ module Ml
       id title status sub_status price original_price available_quantity sold_quantity
       listing_type_id category_id shipping catalog_listing permalink thumbnail
       seller_custom_field inventory_id attributes variations pictures video_id health date_created last_updated
-      catalog_product_id item_relations user_product_id family_name
+      catalog_product_id item_relations user_product_id family_name family_id
     ].join(",")
 
     def initialize(access_token:, sleeper: ->(seconds) { sleep(seconds) })
