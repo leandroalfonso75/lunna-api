@@ -397,7 +397,10 @@ module Painel
       cid = family[:campaigns].first
       camp = @account.ml_ad_campaigns.find_by(campaign_id: cid)
       current = camp&.roas_target&.to_f
-      base = [ current.to_f, m[:roas].to_f ].max
+      # degraus contados a partir do ROAS Objetivo configurado na campanha (é ele que o ML usa para dar os lances), não do
+      # ROAS praticado: com objetivo 16 e ROAS da semana 21,6, o passo é 16 → 20, nunca 16 → 25 (correção de 13/11/2026).
+      # Sem objetivo na campanha, parte do ROAS praticado.
+      base = current.to_f.positive? ? current.to_f : m[:roas].to_f
       path = []
       step = base
       while step < @goal && path.size < 8

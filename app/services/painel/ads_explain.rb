@@ -55,8 +55,13 @@ module Painel
                      "separe-o numa campanha própria primeiro (veja Estrutura de campanhas)."
           end
           Array(p[:levers]).each { |l| steps << "Subir a conversão: #{l[:detail]}. Converter mais aumenta o ROAS sem perder exibições." }
-          steps << "Esta semana: #{ML_PATH} › #{p[:campaign] || camp || 'campanha'} › Editar › ROAS objetivo de #{p[:current] || '—'} para #{p[:next]}. " \
-                   "Não pule direto para #{goal}: o ML reaprende os lances a cada mudança, e um salto grande corta as exibições de uma vez."
+          steps << if Array(p[:path]).size > 1
+            "Esta semana: #{ML_PATH} › #{p[:campaign] || camp || 'campanha'} › Editar › ROAS objetivo de #{p[:current] || '—'} para #{p[:next]}. " \
+              "Não pule direto para #{goal}: o ML reaprende os lances a cada mudança, e um salto grande corta as exibições de uma vez."
+          else
+            "Esta semana: #{ML_PATH} › #{p[:campaign] || camp || 'campanha'} › Editar › ROAS objetivo de #{p[:current] || '—'} para #{p[:next]}. " \
+              "É um degrau só (até 25% acima do objetivo atual), então já dá para ir direto ao seu alvo."
+          end
           if Array(p[:path]).size > 1
             steps << "Nas semanas seguintes, um degrau por semana: #{Array(p[:path]).drop(1).join(' → ')} (cerca de #{p[:weeks]} semanas até #{goal}). O Lunna mostra o próximo degrau aqui."
           end

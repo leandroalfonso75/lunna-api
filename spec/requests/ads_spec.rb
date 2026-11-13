@@ -228,6 +228,22 @@ RSpec.describe "/api/ads", type: :request do
       expect(entry["steps"].join).to include("degrau")
       expect(entry["value"]).to eq(30.0) # 50 − 500/25
 
+      # objetivo da campanha 16 com ROAS praticado de 21,6: os degraus partem do objetivo (16 → 20 → 25), nunca 16 → 25 direto
+      MlAdCampaign.where(campaign_id: 1).update_all(roas_target: 16)
+      item_day("MLB31", 1, yesterday - 1, cost: 50, amount: 580, clicks: 100, prints: 5000, units: 8)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      entry = (json["queue"] + json["next_round"]).find { |q| q["signal"] == "abaixo_do_roas_objetivo" }
+      expect(entry["plan"]).to include("current" => "16", "next" => "20", "path" => [ "20", "25" ])
+      expect(entry["steps"].join).to include("de 16 para 20").and include("Não pule direto para 25")
+
+      # a um degrau do alvo (objetivo 22): vai direto para 25 e o texto não diz "não pule direto"
+      MlAdCampaign.where(campaign_id: 1).update_all(roas_target: 22)
+      get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)
+      entry = (json["queue"] + json["next_round"]).find { |q| q["signal"] == "abaixo_do_roas_objetivo" }
+      expect(entry["plan"]).to include("next" => "25", "path" => [ "25" ])
+      expect(entry["steps"].join).to include("degrau só")
+      expect(entry["steps"].join).not_to include("Não pule direto")
+
       # já com o ROAS Objetivo da campanha no alvo: não manda subir de novo; vira acompanhamento com a trava de vendas
       MlAdCampaign.where(campaign_id: 1).update_all(roas_target: 25)
       get "/api/ads/analysis", params: { account_id: account.id }, headers: auth_headers(member)

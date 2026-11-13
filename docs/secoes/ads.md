@@ -184,3 +184,7 @@ abaixo dele (`campaign_rank_entry`) e as campanhas novas da Estrutura partem del
 - **Explicações "?"** (`components/ui/HelpTip.vue`) em Próxima rodada (fila de espera do "O que mexer agora", sem data
   marcada), Observar (sinais sem valor estimável) e Intocáveis (em maturação: anúncios com menos de 30 dias; amostra
   insuficiente: menos de 30 cliques e 500 impressões em 7 dias).
+
+- **Degraus a partir do objetivo da campanha** (13/11/2026): o plano conta os degraus de até 25% a partir do ROAS Objetivo
+  configurado na campanha (é o que o ML usa nos lances), não do ROAS praticado. Antes, objetivo 16 com ROAS da semana
+  21,6 dava "de 16 para 25" (salto de 56%). O texto "não pule direto" só aparece quando há mais de um degrau.
