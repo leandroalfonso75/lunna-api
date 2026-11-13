@@ -21,3 +21,9 @@ Perguntas dos compradores nos anúncios do Mercado Livre, com resposta pelo Lunn
   para desfazer (admin, `confirm: true`). Perguntas `DELETED` saem das listas.
 - **Ponto vermelho no menu** (`GET /api/attention`): perguntas sem resposta.
 - **Regra:** nunca enviar resposta real para testar.
+
+## Quem perguntou (13/11/2026)
+
+- Cada pergunta mostra quem perguntou: se a pessoa já comprou da loja, o nome e o apelido da venda e o selo "já
+  comprou"; senão, o apelido público do ML (`GET /users/{id}`). `ml_questions.from_nickname` / `from_name`, preenchidos
+  na sincronização (`Ml::Sync::Questions.fill_askers`, até 60 por rodada, sem resposta primeiro).

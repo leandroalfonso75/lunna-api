@@ -125,6 +125,11 @@ module Ml
       get("/users/#{seller_id}/invoices/shipments/#{shipping_id}")
     end
 
+    # Dados públicos de um usuário do ML (apelido de quem perguntou).
+    def user(user_id)
+      get("/users/#{user_id}")
+    end
+
     # Anúncio completo (título, family_name, user_product_id, vendas, atributos) para editar título e ficha técnica.
     def item_full(item_id)
       get("/items/#{item_id}")

@@ -129,11 +129,28 @@ RSpec.describe "Perguntas (/api/questions)", type: :request do
       body = { total: 1, questions: [ { id: 5, item_id: "MLB1", status: "ANSWERED", text: "É original?", date_created: "2026-10-29T16:40:44-04:00",
                                         from: { id: 7 }, answer: { text: "Sim!", status: "ACTIVE", date_created: "2026-10-29T17:02:18-04:00" } } ] }
       stub_request(:get, %r{#{ml}/questions/search}).to_return(status: 200, body: body.to_json)
+      stub_request(:get, "#{ml}/users/7").to_return(status: 200, body: { id: 7, nickname: "COMPRADOR7" }.to_json)
 
       described_class.call(client, account)
 
       expect(account.ml_questions.sole).to have_attributes(question_id: 5, status: "ANSWERED", answer_text: "Sim!", from_id: 7)
       expect(account.reload.questions_synced_at).to be_present
+    end
+
+    it "guarda quem perguntou: nome e apelido da venda se já comprou; senão o apelido público do ML" do
+      client = Ml::Client.new(access_token: "tok", sleeper: ->(_) { })
+      body = { total: 2, questions: [ { id: 5, item_id: "MLB1", status: "UNANSWERED", text: "Veio sem difusor", date_created: "2026-11-13T14:04:00-03:00", from: { id: 7 } },
+                                      { id: 6, item_id: "MLB1", status: "UNANSWERED", text: "Serve 220V?", date_created: "2026-11-13T13:57:00-03:00", from: { id: 8 } } ] }
+      stub_request(:get, %r{#{ml}/questions/search}).to_return(status: 200, body: body.to_json)
+      MlOrder.create!(order_id: 99, ml_account: account, status: "paid", date_created: 3.days.ago, total_amount: 10, buyer_id: 7,
+                      buyer_nickname: "MORAESBENEDITO", buyer_name: "Benedito Moraes")
+      user = stub_request(:get, "#{ml}/users/8").to_return(status: 200, body: { id: 8, nickname: "CLIENTE.NOVO" }.to_json)
+
+      described_class.call(client, account)
+
+      expect(account.ml_questions.find_by(question_id: 5)).to have_attributes(from_nickname: "MORAESBENEDITO", from_name: "Benedito Moraes")
+      expect(account.ml_questions.find_by(question_id: 6)).to have_attributes(from_nickname: "CLIENTE.NOVO", from_name: nil)
+      expect(user).to have_been_requested.once
     end
   end
 end

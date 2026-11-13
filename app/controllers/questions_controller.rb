@@ -159,6 +159,7 @@ class QuestionsController < ApplicationController
   def question_json(r, item)
     lbl, tone = MlQuestion::STATUS_LABELS.fetch(r.status, [ r.status, "neutral" ])
     { id: r.question_id, item_id: r.item_id, text: r.text, date_created: r.date_created, from_id: r.from_id,
+      from_nickname: r.from_nickname.presence, from_name: r.from_name,
       status: r.status, status_label: lbl, status_tone: tone, answerable: r.answerable?, hold: r.hold,
       answer: r.answer_text.present? ? { text: r.answer_text, date: r.answer_date, status: r.answer_status } : nil,
       item: item && { title: item.title, thumbnail: item.thumbnail, permalink: item.permalink, price: item.price&.to_f,
