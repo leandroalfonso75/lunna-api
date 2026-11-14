@@ -1,8 +1,8 @@
 {
   "inventory_id": "ABCD1234",
   "total": 12,
-  "available_units": 9,
-  "not_available_units": 3,
+  "available_quantity": 9,
+  "not_available_quantity": 3,
   "not_available_detail": [
     { "status": "damaged", "quantity": 1 },
     { "status": "transfer", "quantity": 2 }

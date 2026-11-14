@@ -43,8 +43,9 @@ module Ml
       private_class_method :inventory_ids
 
       def self.row_for(account, inventory_id, body)
-        available = body["available_units"].to_i
-        not_available = body["not_available_units"].to_i
+        # a API responde available_quantity / not_available_quantity (correção de 14/11/2026: lia *_units e gravava 0)
+        available = (body["available_quantity"] || body["available_units"]).to_i
+        not_available = (body["not_available_quantity"] || body["not_available_units"]).to_i
         {
           ml_account_id: account.id,
           inventory_id: inventory_id,

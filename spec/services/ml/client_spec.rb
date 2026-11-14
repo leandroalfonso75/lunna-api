@@ -189,7 +189,7 @@ RSpec.describe Ml::Client do
 
       result = client.fulfillment_stock("ABCD1234")
 
-      expect(result).to include("available_units" => 9, "not_available_units" => 3)
+      expect(result).to include("available_quantity" => 9, "not_available_quantity" => 3)
       expect(stub).to have_been_requested
     end
   end

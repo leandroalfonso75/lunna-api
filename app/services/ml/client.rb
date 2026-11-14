@@ -125,6 +125,11 @@ module Ml
       get("/users/#{seller_id}/invoices/shipments/#{shipping_id}")
     end
 
+    # Planejamento de reposição do Full (seção Estoque): recomendações por User Product, 20 por página.
+    def full_replenishment(seller_id, offset: 0)
+      get("/marketplace/fbm/sellers/#{seller_id}/user-products/replenishment", country: "BR", offset: offset)
+    end
+
     # Dados públicos de um usuário do ML (apelido de quem perguntou).
     def user(user_id)
       get("/users/#{user_id}")

@@ -11,6 +11,10 @@ production: &default
   cleanup:
     class: CleanupJob
     schedule: every day at 4am
+  # Recomendações de reposição do Full (seção Estoque)
+  full_replenishment:
+    class: Ml::FullReplenishmentJob
+    schedule: every 6 hours
   # Notas de devolução do Full em lote (vendas antigas que a consulta por envio não acha), uma vez por dia
   return_invoices_archive:
     class: Ml::ReturnInvoicesArchiveJob

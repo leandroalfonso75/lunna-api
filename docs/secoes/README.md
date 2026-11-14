@@ -8,6 +8,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 |---|---|---|
 | Visão geral | [visao-geral.md](visao-geral.md) | Números do dia, alertas e vendas recentes da conta do Mercado Livre |
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
+| Estoque | [estoque.md](estoque.md) | Depósito (Olist) com valor, vendas e cobertura; Full com as recomendações de reposição do ML (urgência, quantidade, prazo, dias sem estoque, enviar já x comprar) |
 | Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro antes Ads por unidade; aba Catálogo (sincronizado com tradicional, ganhando/perdendo) |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |
 | Reclamações | [reclamacoes.md](reclamacoes.md) | Todas as reclamações do Mercado Livre (cancelamentos, mediações, devoluções) com devolução, reembolso, frete e reputação; "A atender" com resposta e resolução no ML (devolução, reembolso total/parcial, mediação); assistente de contestação (A contestar / Contestadas); card Devoluções (expiradas, sem custo, com custos itemizados pelo extrato do ML, nota de devolução e aba Sem nota de devolução); tipo de envio em cada reclamação |

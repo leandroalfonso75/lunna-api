@@ -1,4 +1,5 @@
 class MlAccount < ApplicationRecord
+  has_many :ml_full_replenishments, dependent: :delete_all
   STATUSES = %w[active reauth_required].freeze
 
   belongs_to :company

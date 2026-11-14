@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_13_050001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_010001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -168,6 +168,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_050001) do
     t.boolean "ads_roas_target_enabled", default: false, null: false
     t.decimal "ads_roas_target", precision: 6, scale: 2
     t.jsonb "return_invoice_months", default: [], null: false
+    t.datetime "full_replenishment_synced_at"
     t.index ["company_id"], name: "index_ml_accounts_on_company_id"
     t.index ["connected_by_user_id"], name: "index_ml_accounts_on_connected_by_user_id"
     t.index ["seller_id"], name: "index_ml_accounts_on_seller_id", unique: true
@@ -465,6 +466,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_050001) do
     t.datetime "updated_at", null: false
     t.index ["company_id", "sku"], name: "index_ml_costs_on_company_id_and_sku", unique: true
     t.index ["company_id"], name: "index_ml_costs_on_company_id"
+  end
+
+  create_table "ml_full_replenishments", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "user_product_id", null: false
+    t.string "inventory_id"
+    t.string "seller_sku"
+    t.jsonb "tags", default: [], null: false
+    t.integer "total_stock"
+    t.string "shipping_urgency"
+    t.integer "minimum_distributable_stock"
+    t.integer "units_30d"
+    t.decimal "gmv_30d", precision: 14, scale: 2
+    t.jsonb "sales_history", default: [], null: false
+    t.string "recommendation_type"
+    t.integer "suggested_quantity"
+    t.string "replenishment_deadline"
+    t.integer "replenishment_frequency"
+    t.jsonb "benefits", default: [], null: false
+    t.datetime "synced_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "seller_sku"], name: "index_ml_full_replenishments_on_ml_account_id_and_seller_sku"
+    t.index ["ml_account_id", "user_product_id"], name: "idx_on_ml_account_id_user_product_id_faa63bdb73", unique: true
+    t.index ["ml_account_id"], name: "index_ml_full_replenishments_on_ml_account_id"
   end
 
   create_table "ml_full_stocks", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1261,6 +1287,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_050001) do
   add_foreign_key "ml_claim_replies", "users", on_delete: :nullify
   add_foreign_key "ml_claims", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_costs", "companies", on_delete: :cascade
+  add_foreign_key "ml_full_replenishments", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_full_stocks", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_generated_photos", "ml_photo_jobs", on_delete: :cascade
   add_foreign_key "ml_item_visits", "ml_accounts", on_delete: :cascade
