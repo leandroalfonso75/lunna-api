@@ -155,3 +155,7 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   reclamação (ex.: difusor de outra marca que a do secador, não é bivolt, o que não vem na embalagem, limitações de uso).
   Eles ficam numa seção "INFORMAÇÕES IMPORTANTES" e a tela lista os avisos mantidos para conferência. Caixa de texto 4x
   mais alta.
+- Mesmo produto em outros anúncios (14/11/2026, pedido do usuário): ao confirmar a publicação de Modelo ou descrição, se
+  houver outros anúncios com o mesmo SKU (fora do catálogo e não encerrados, ex.: Clássico e Premium), o Lunna pergunta
+  se a alteração vale também para eles (`AbcSameSkuChoice.vue`, nenhum marcado). `GET /api/items/:id/variations` devolve
+  `same_sku`; a publicação aceita `also_item_ids[]` (só ids do mesmo SKU; `Ml::ItemVariations.same_sku`).

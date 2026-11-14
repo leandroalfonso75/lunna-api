@@ -14,6 +14,7 @@
 # GET  /api/items/:item_id/description?account_id=      → descrição atual
 # POST /api/items/:item_id/description/suggest?...      → descrição mais chamativa (IA; não publica)
 # POST /api/items/:item_id/description?account_id=      → publica no ML (admin; text, confirm: true)
+# Modelo e descrição aceitam also_item_ids[]: outros anúncios do mesmo SKU escolhidos na confirmação (14/11/2026).
 # Ciente, ficha técnica, preço, modelo e descrição aceitam apply_to_variations=true: valem também para as outras variações do anúncio pai.
 class ItemEditsController < ApplicationController
   include CurrentAccount
@@ -107,8 +108,9 @@ class ItemEditsController < ApplicationController
     publish = ->(id) { Ml::ItemModelKeywords.publish(client, Current.account, id, model: params[:model], detailed_model: params[:detailed_model], user: Current.user) }
     result = publish.(item_id)
     others = result.ok && apply_to_variations? ? each_variation { |id| publish.(id) } : nil
-    render json: { ok: result.ok, message: [ result.message, variations_message(others, "modelo alterado") ].compact.join(" "),
-                   model: result.model, detailed_model: result.detailed_model, variations: others, errors: result.ok ? nil : [ result.message ] },
+    same = result.ok ? each_same_sku(others) { |id| publish.(id) } : nil
+    render json: { ok: result.ok, message: [ result.message, variations_message(others, "modelo alterado"), same_sku_message(same, "modelo alterado") ].compact.join(" "),
+                   model: result.model, detailed_model: result.detailed_model, variations: others, same_sku: same, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e
     ml_error(e)
@@ -132,8 +134,9 @@ class ItemEditsController < ApplicationController
   def publish_description
     result = Ml::ItemDescription.publish(client, Current.account, item_id, params[:text], user: Current.user)
     others = result.ok && apply_to_variations? ? each_variation { |id| Ml::ItemDescription.publish(client, Current.account, id, params[:text], user: Current.user) } : nil
-    render json: { ok: result.ok, message: [ result.message, variations_message(others, "descrição alterada") ].compact.join(" "),
-                   length: result.length, variations: others, errors: result.ok ? nil : [ result.message ] },
+    same = result.ok ? each_same_sku(others) { |id| Ml::ItemDescription.publish(client, Current.account, id, params[:text], user: Current.user) } : nil
+    render json: { ok: result.ok, message: [ result.message, variations_message(others, "descrição alterada"), same_sku_message(same, "descrição alterada") ].compact.join(" "),
+                   length: result.length, variations: others, same_sku: same, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e
     ml_error(e)
@@ -174,6 +177,27 @@ class ItemEditsController < ApplicationController
     rescue Ml::Client::Error => e
       { item_id: id, sku: sku, ok: false, message: e.message.to_s.first(200) }
     end
+  end
+
+  # Outros anúncios do mesmo SKU escolhidos pelo usuário (also_item_ids[]); só os que são mesmo do mesmo SKU, sem repetir
+  # os que já foram como variação. nil quando nenhum foi escolhido.
+  def each_same_sku(done)
+    wanted = Array(params[:also_item_ids]).map(&:to_s) - Array(done).map { |v| v[:item_id] }
+    return nil if wanted.empty?
+
+    Ml::ItemVariations.same_sku(Current.account, item_id).where(item_id: wanted).order(:item_id).pluck(:item_id, :sku).map do |id, sku|
+      r = yield(id)
+      { item_id: id, sku: sku, ok: r.ok, message: r.message }
+    rescue Ml::Client::Error => e
+      { item_id: id, sku: sku, ok: false, message: e.message.to_s.first(200) }
+    end
+  end
+
+  def same_sku_message(list, what)
+    return nil if list.nil?
+
+    ok = list.count { |v| v[:ok] }
+    "Outros anúncios do mesmo produto: #{what} em #{ok} de #{list.size}#{ok < list.size ? ' (veja os erros)' : ''}."
   end
 
   def variations_message(list, what)

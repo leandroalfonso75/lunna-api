@@ -12,9 +12,22 @@ module Ml
              .where.not(item_id: item_id)
     end
 
+    # Outros anúncios do mesmo produto (mesmo SKU; ex.: Clássico e Premium), fora do catálogo e não encerrados. Antes de
+    # publicar modelo ou descrição, o Lunna pergunta se a alteração vale também para eles (pedido do usuário em 14/11/2026).
+    def self.same_sku(account, item_id)
+      item = account.ml_items.find_by(item_id: item_id)
+      return account.ml_items.none if item.nil? || item.sku.blank?
+
+      account.ml_items.where(sku: item.sku, catalog_listing: [ false, nil ]).where.not(item_id: item_id)
+             .where.not(status: "closed")
+    end
+
     def self.payload(account, item_id)
       list = siblings(account, item_id).order(:sku).pluck(:item_id, :sku, :title, :status)
-      { count: list.size, items: list.map { |id, sku, title, status| { item_id: id, sku: sku, title: title, status: status } } }
+      same = same_sku(account, item_id).where.not(item_id: list.map(&:first)).order(:item_id)
+                                       .pluck(:item_id, :sku, :title, :status, :listing_type_id)
+      { count: list.size, items: list.map { |id, sku, title, status| { item_id: id, sku: sku, title: title, status: status } },
+        same_sku: same.map { |id, sku, title, status, type| { item_id: id, sku: sku, title: title, status: status, listing_type_id: type } } }
     end
   end
 end

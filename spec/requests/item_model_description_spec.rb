@@ -91,6 +91,31 @@ RSpec.describe "Curva ABC: Modelo com palavras-chave e descrição mais chamativ
     end
   end
 
+  describe "outros anúncios do mesmo SKU (14/11/2026)" do
+    it "lista os do mesmo SKU (fora catálogo e encerrados) e publica neles só quando escolhidos" do
+      account.ml_items.find_by(item_id: "MLB1").update!(sku: "SC13-110")
+      create(:ml_item, ml_account: account, item_id: "MLB2", sku: "SC13-110", listing_type_id: "gold_pro", status: "active")
+      create(:ml_item, ml_account: account, item_id: "MLB3", sku: "SC13-110", catalog_listing: true)
+      create(:ml_item, ml_account: account, item_id: "MLB4", sku: "SC13-110", status: "closed")
+      create(:ml_item, ml_account: account, item_id: "MLB5", sku: "OUTRO")
+
+      get "/api/items/MLB1/variations", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["same_sku"].map { |i| i["item_id"] }).to eq([ "MLB2" ])
+
+      stub_request(:get, "#{ml}/items/MLB2").to_return(status: 200, body: item.merge("id" => "MLB2").to_json)
+      put1 = stub_request(:put, "#{ml}/items/MLB1").to_return(status: 200, body: "{}")
+      put2 = stub_request(:put, "#{ml}/items/MLB2").to_return(status: 200, body: "{}")
+      post "/api/items/MLB1/model", params: { account_id: account.id, model: "secador mondial", confirm: true, also_item_ids: [ "MLB2", "MLB5" ] },
+                                    headers: auth_headers(admin)
+
+      expect(response).to have_http_status(:ok)
+      expect(put1).to have_been_requested.once
+      expect(put2).to have_been_requested.once # MLB5 (outro SKU) é ignorado
+      expect(json["same_sku"]).to eq([ { "item_id" => "MLB2", "sku" => "SC13-110", "ok" => true, "message" => json["same_sku"][0]["message"] } ])
+      expect(json["message"]).to include("mesmo produto: modelo alterado em 1 de 1")
+    end
+  end
+
   describe "descrição" do
     it "a IA sugere uma descrição em texto puro (sem HTML nem emoji), com as perguntas dos compradores" do
       MlQuestion.create!(ml_account: account, question_id: 1, item_id: "MLB1", text: "Serve para cabelo cacheado?", date_created: 1.day.ago)
