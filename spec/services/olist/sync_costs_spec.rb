@@ -37,6 +37,24 @@ RSpec.describe Olist::SyncCosts do
     expect(connection.reload.costs_status).to eq("ok")
   end
 
+  it "o Full de um kit conta como estoque do componente: o PEPS não pula a entrada que ainda tem saldo" do
+    account = create(:ml_account, company: company)
+    comp = product(1, sku: "SEC-110", stock_balance: 930)
+    create(:olist_product, company: company, olist_id: 50, sku: "KIT-110", kind: "K", status: "A", variation_kind: "N",
+                           kit_components: [ { "id" => 1, "sku" => "SEC-110", "quantity" => 1 } ])
+    # o anúncio do kit tem outro SKU no ML; a ligação vem da lista de reposição do Full
+    MlFullReplenishment.create!(ml_account: account, user_product_id: "INV:OZ1", inventory_id: "OZ1", seller_sku: "KIT-110", source: "legacy", synced_at: Time.current)
+    MlFullStock.create!(ml_account: account, inventory_id: "OZ1", available_units: 333, total_units: 333, synced_at: Time.current)
+    stub_movements(1, [ movement(1, "E", 480, preco: 78, data: "2026-08-04 10:00:00"), movement(2, "E", 330, preco: 85.75, data: "2026-10-22 10:00:00"),
+                        movement(3, "E", 600, preco: 79.46, data: "2026-11-13 10:00:00"), movement(4, "S", 900, data: "2026-11-01 10:00:00") ])
+    stub_movements(50, [])
+
+    described_class.new(connection).call
+
+    # 930 no depósito + 333 no Full (dentro do kit) = 1.263: 600 + 330 + 333 da entrada de 04/08 => próxima a sair: R$ 78,00
+    expect(comp.reload.fifo_unit_cost.to_f).to eq(78.0)
+  end
+
   it "entrada sem custo ainda em estoque marca o aviso; consumida, não" do
     with_warning = product(1)
     without_warning = product(2)

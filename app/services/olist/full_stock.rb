@@ -54,6 +54,12 @@ module Olist
           end
         end
 
+      # Também pelo SKU da lista de reposição do Full (Estoque › Full): cobre anúncio cujo SKU no ML é outro (ex.:
+      # MONDSC13-DIF no ML, LS-SC13-DIF-110/220 no Olist, uma por variação). Correção de 14/11/2026.
+      MlFullReplenishment.joins(:ml_account).where(ml_accounts: { company_id: @company.id }, seller_sku: skus)
+                         .where.not(inventory_id: nil).pluck(:ml_account_id, :seller_sku, :inventory_id)
+                         .each { |account_id, sku, inv| by_sku[sku] << [ account_id, inv ] }
+
       by_sku.transform_values(&:uniq)
     end
   end

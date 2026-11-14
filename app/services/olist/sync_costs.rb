@@ -78,10 +78,21 @@ module Olist
 
     # Estoque real da empresa: saldo do Olist + Full do Mercado Livre (mesma soma da tela Produtos).
     # => [estoque, completo?]. Completo quando o Full foi lido ou o produto não tem movimento no depósito do Full.
+    # O Full de um kit (ex.: secador + difusor) também é estoque dos componentes, na quantidade do kit (correção de
+    # 14/11/2026: o LS-SC13-110 tinha 333 unidades no Full dentro do kit LS-SC13-DIF-110 fora da conta, e o PEPS pulava
+    # a entrada de 04/08 a R$ 78,00).
     def current_stock(product, movements, ledger)
-      full = Olist::FullStock.for_skus(@connection.company, [ product.sku ])[product.sku]
+      company = @connection.company
+      kits = company.olist_products.where(kind: "K").where.not(sku: [ nil, "" ])
+                    .where("kit_components @> ?", [ { id: product.olist_id } ].to_json).pluck(:sku, :kit_components)
+      fulls = Olist::FullStock.for_skus(company, [ product.sku ] + kits.map(&:first))
+      full = fulls[product.sku]
+      in_kits = kits.sum do |sku, comps|
+        qty = Array(comps).find { |c| c["id"].to_i == product.olist_id }&.dig("quantity").to_f
+        fulls[sku]&.total.to_f * qty
+      end
       uses_full = movements.any? { |m| ledger.include?(m[:deposit_id]) }
-      [ product.stock_balance.to_f + full&.total.to_f, full.present? || !uses_full ]
+      [ product.stock_balance.to_f + full&.total.to_f + in_kits, full.present? || in_kits.positive? || !uses_full ]
     end
 
     def row_for(product, item, now)

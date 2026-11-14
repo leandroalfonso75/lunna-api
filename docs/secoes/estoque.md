@@ -51,3 +51,8 @@ Seção criada em 14/11/2026 a pedido do usuário, logo abaixo de Produtos no me
   `INV:<inventory_id>`), com o anúncio, a variação (`GET /items/{id}`), o SKU da variação (o vendido nela ou SELLER_SKU),
   o estoque Full, as vendas de 30 dias e a cobertura em dias; sem recomendação do ML ("sem recomendação do ML · cobre N
   dias"). Hoje são 4 estoques (MLB2729901870 127V/220V e MLB1858068900 127V/220V).
+
+- **Custo PEPS com o Full dos kits** (14/11/2026): o estoque Full de um kit conta como estoque dos componentes no PEPS
+  (`Olist::SyncCosts#current_stock`), e o Full de um SKU também é achado pela lista de reposição (`Olist::FullStock`, SKU
+  do Olist diferente do SKU do anúncio). Ex.: LS-SC13-110 = 911 no depósito + 343 no Full dentro do kit LS-SC13-DIF-110;
+  o custo passou de R$ 85,75 para R$ 78,00 (ainda há saldo da entrada de 04/08/2026).
