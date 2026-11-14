@@ -45,6 +45,7 @@ module Painel
         end
       end
       sold_raw.each { |sku, units| (parts[sku] || [ [ sku, 1.0 ] ]).each { |s, q| sold[s] += units.to_f * q } }
+      @listings = listings_by_sku(skus, parts)
       asks = @account.ml_full_replenishments.where(seller_sku: skus, recommendation_type: "REPLENISH").group(:seller_sku).sum(:suggested_quantity)
       thumbs = thumbnails(skus)
       rows = products.map do |p|
@@ -59,7 +60,7 @@ module Painel
           olist: olist, reserved: p.stock_reserved.to_f, full: info ? full_units : nil, full_unavailable: info && info[:not_available],
           total: total, unit_cost: cost.positive? ? cost.round(2) : nil, value_olist: (olist * cost).round(2), value_full: (full_units * cost).round(2),
           sold_30d: sold[p.sku].round, coverage_days: coverage, full_asks: asks[p.sku],
-          state: state_for(total, coverage, sold[p.sku].round) }
+          state: state_for(total, coverage, sold[p.sku].round), listings: @listings[p.sku] || [] }
       end
       filtered = filter_depot(rows)
       sorted = sort_depot(filtered)
@@ -152,9 +153,17 @@ module Painel
       "ok"
     end
 
+    # Busca (pedido do usuário em 14/11/2026): SKU, número do anúncio (MLB), título do anúncio ou palavra do nome do produto.
+    # Anúncio de kit também acha os componentes. Várias palavras: todas precisam aparecer.
     def filter_depot(rows)
-      q = @params[:q].to_s.strip.downcase.presence
-      rows = rows.select { |r| [ r[:sku], r[:description] ].compact.any? { |v| v.downcase.include?(q) } } if q
+      q = I18n.transliterate(@params[:q].to_s).downcase.squish.presence
+      if q
+        words = q.split
+        rows = rows.select do |r|
+          text = I18n.transliterate([ r[:sku], r[:description], *r[:listings].flat_map { |l| [ l[:item_id], l[:title], l[:sku] ] } ].compact.join(" ")).downcase
+          words.all? { |w| text.include?(w) }
+        end
+      end
       case @params[:view].to_s
       when "sem_estoque", "baixo", "parado", "ok" then rows.select { |r| r[:state] == @params[:view].to_s }
       when "com_estoque" then rows.select { |r| r[:olist].positive? }
@@ -186,6 +195,28 @@ module Painel
       MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
                  .where(o: { ml_account_id: @company.ml_accounts.select(:id) }).where.not(o: { status: %w[cancelled invalid] })
                  .where("o.date_created >= ?", 30.days.ago).where(sku: skus).group(:sku).sum(:quantity)
+    end
+
+    # SKU => anúncios do ML (todas as contas) com esse SKU ou com um kit que o contém: [{ item_id, title, sku, kit }].
+    def listings_by_sku(skus, parts)
+      kit_of = Hash.new { |h, k| h[k] = [] }
+      parts.each { |kit, comps| comps.each { |s, _| kit_of[s] << kit } }
+      # SKU de cada anúncio: o do anúncio, os das variações e os vendidos nele (o anúncio do kit costuma ter outro SKU)
+      accounts = @company.ml_accounts.select(:id)
+      titles = {}
+      items = Hash.new { |h, k| h[k] = [] }
+      MlItem.where(ml_account_id: accounts).pluck(:item_id, :title, :sku, :inventory_refs).each do |id, title, sku, refs|
+        titles[id] = title
+        ([ sku ] + Array(refs).map { |r| r["sku"] }).compact_blank.uniq.each { |k| items[k] << id }
+      end
+      MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id").where(o: { ml_account_id: accounts })
+                 .where("o.date_created >= ?", 95.days.ago).distinct.pluck(:item_id, :sku).each { |id, k| items[k] << id if k.present? }
+      entry = ->(id, sku, kit) { { item_id: id, title: titles[id], sku: sku, kit: kit } }
+      skus.to_h do |s|
+        own = items[s].uniq.map { |id| entry.(id, s, false) }
+        via = kit_of[s].flat_map { |k| items[k].uniq.map { |id| entry.(id, k, true) } }
+        [ s, (own + via).uniq { |l| l[:item_id] } ]
+      end
     end
 
     def thumbnails(skus)

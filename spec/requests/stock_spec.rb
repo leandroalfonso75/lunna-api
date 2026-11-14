@@ -49,5 +49,12 @@ RSpec.describe "/api/stock (seção Estoque)", type: :request do
     row = json["rows"].sole # o kit não aparece: não tem estoque próprio
     expect(row).to include("sku" => "SEC-1", "olist" => 30.0, "unit_cost" => 40.0, "value_olist" => 1200.0, "sold_30d" => 3, "coverage_days" => 300, "state" => "ok")
     expect(json["summary"]).to include("skus" => 1, "value_olist" => 1200.0)
+
+    # filtro: SKU, número do anúncio (o do kit acha o componente), título do anúncio ou palavra do nome
+    create(:ml_item, ml_account: account, item_id: "MLB777", sku: "KIT-1", title: "Kit Secador Turbo com Difusor")
+    { "SEC-1" => 1, "MLB777" => 1, "turbo" => 1, "secador" => 1, "nada" => 0 }.each do |q, n|
+      get "/api/stock/depot", params: { account_id: account.id, q: q }, headers: auth_headers(member)
+      expect(json["total"]).to eq(n), "busca #{q}"
+    end
   end
 end

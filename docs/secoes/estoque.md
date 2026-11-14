@@ -37,3 +37,9 @@ Seção criada em 14/11/2026 a pedido do usuário, logo abaixo de Produtos no me
 - API: `app/services/painel/stock_query.rb`, `app/controllers/stock_controller.rb`, `app/services/ml/sync/full_replenishment.rb`,
   `app/jobs/ml/full_replenishment_job.rb`, `app/models/ml_full_replenishment.rb`, `spec/requests/stock_spec.rb`.
 - Front: `app/pages/estoque.vue`, `app/types/stock.ts`, menu em `app/layouts/default.vue`.
+
+## Filtro do Depósito (14/11/2026)
+
+- Campo acima da lista: SKU, número do anúncio (MLB), título do anúncio ou palavra do nome do produto (várias palavras:
+  todas precisam aparecer; sem acento). O anúncio de um kit acha os componentes. Os anúncios de cada SKU vêm do SKU do
+  anúncio, das variações e das vendas dos últimos 95 dias (`listings_by_sku`).
