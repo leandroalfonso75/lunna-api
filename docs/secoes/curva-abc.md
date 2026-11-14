@@ -162,3 +162,7 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
 - Depois de publicar (14/11/2026, pedido do usuário): Modelo ou descrição publicados pelo Lunna não voltam a ser sugeridos
   naquele anúncio (ack `feita`, sem prazo; também nos anúncios do mesmo SKU/variações onde foi publicado). Botão
   **Ignorar** ao lado de "Alterar modelo/descrição AGORA": nada muda e a sugestão some por 30 dias (ack `ignorar`).
+- Descrição feita pela IA (14/11/2026, pedido do usuário): anúncios publicados pela página "Fichas de Anúncio LUNNA"
+  (descrição feita com o Claude) não recebem sugestões de descrição. Marcação com
+  `bin/rails "abc:descricao_ia[MLBs,SKUs]"` (MLBs dos anúncios e SKUs das variações da ficha; inclui as variações da mesma
+  família com SKU da ficha). Rodado em 14/11 para as 7 fichas com MLB: 296 anúncios. Rodar de novo a cada ficha publicada.
