@@ -152,5 +152,20 @@ RSpec.describe "Perguntas (/api/questions)", type: :request do
       expect(account.ml_questions.find_by(question_id: 6)).to have_attributes(from_nickname: "CLIENTE.NOVO", from_name: nil)
       expect(user).to have_been_requested.once
     end
+
+    it "pergunta respondida ou apagada direto no ML sai da lista de sem resposta" do
+      client = Ml::Client.new(access_token: "tok", sleeper: ->(_) { })
+      account.ml_questions.create!(question_id: 11, item_id: "MLB1", status: "UNANSWERED", text: "Veio sem difusor", date_created: 1.day.ago, from_nickname: "X")
+      account.ml_questions.create!(question_id: 12, item_id: "MLB1", status: "UNANSWERED", text: "Serve 220V?", date_created: 1.day.ago, from_nickname: "Y")
+      stub_request(:get, %r{#{ml}/questions/search}).to_return(status: 200, body: { total: 0, questions: [] }.to_json)
+      stub_request(:get, %r{#{ml}/questions/11\?}).to_return(status: 404, body: { message: "Question not found" }.to_json)
+      stub_request(:get, %r{#{ml}/questions/12\?}).to_return(status: 200, body: { id: 12, item_id: "MLB1", status: "ANSWERED", text: "Serve 220V?",
+                                                                                      answer: { text: "Sim", status: "ACTIVE" } }.to_json)
+
+      described_class.call(client, account)
+
+      expect(account.ml_questions.find_by(question_id: 11).status).to eq("DELETED")
+      expect(account.ml_questions.find_by(question_id: 12)).to have_attributes(status: "ANSWERED", answer_text: "Sim")
+    end
   end
 end

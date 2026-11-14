@@ -27,3 +27,7 @@ Perguntas dos compradores nos anúncios do Mercado Livre, com resposta pelo Lunn
 - Cada pergunta mostra quem perguntou: se a pessoa já comprou da loja, o nome e o apelido da venda e o selo "já
   comprou"; senão, o apelido público do ML (`GET /users/{id}`). `ml_questions.from_nickname` / `from_name`, preenchidos
   na sincronização (`Ml::Sync::Questions.fill_askers`, até 60 por rodada, sem resposta primeiro).
+
+- **Respondida ou apagada direto no ML** (14/11/2026): pergunta sem resposta no Lunna que não vem mais na busca de sem
+  resposta do ML é relida (`GET /questions/{id}`): 404 = apagada (fica DELETED e sai da lista); senão grava o estado
+  atual. Só roda quando a busca de sem resposta veio inteira (`Ml::Sync::Questions.reconcile_unanswered`).

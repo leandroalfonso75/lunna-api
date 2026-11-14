@@ -14,11 +14,27 @@ module Ml
         full = account.questions_synced_at.nil? || account.questions_synced_at < now - FULL_EVERY
         notes = []
         count = 0
-        count += read(client, account, status: "UNANSWERED", stop_when_known: false, notes: notes)
+        unanswered = []
+        count += read(client, account, status: "UNANSWERED", stop_when_known: false, notes: notes, seen: unanswered)
+        reconcile_unanswered(client, account, unanswered, notes) if notes.empty?
         count += read(client, account, status: nil, stop_when_known: !full, notes: notes)
         account.update_columns(questions_synced_at: now) if full && notes.empty?
         fill_askers(client, account, notes)
         Result.new(count: count, notes: notes)
+      end
+
+      # Pergunta que o Lunna tem como sem resposta mas que não veio na busca de sem resposta do ML (pedido do usuário em
+      # 14/11/2026: respondida ou apagada direto no ML e presa no Lunna): relê uma a uma; 404 = apagada no ML (DELETED,
+      # some da lista); senão grava o estado atual (respondida etc.).
+      def self.reconcile_unanswered(client, account, seen_ids, notes)
+        account.ml_questions.where(status: "UNANSWERED").where.not(question_id: seen_ids).find_each do |row|
+          q = client.question(row.question_id)
+          upsert(account, q.merge("id" => row.question_id))
+        rescue Ml::Client::NotFound
+          row.update!(status: "DELETED")
+        rescue Ml::Client::Error => e
+          notes << "pergunta #{row.question_id}: #{e.message.to_s.truncate(100)}"
+        end
       end
 
       ASKERS_BATCH = 60
@@ -43,11 +59,12 @@ module Ml
         notes << "perguntas (quem perguntou): #{e.message.to_s.truncate(120)}"
       end
 
-      def self.read(client, account, status:, stop_when_known:, notes:)
+      def self.read(client, account, status:, stop_when_known:, notes:, seen: nil)
         count = 0
         MAX_PAGES.times do |page|
           data = client.questions_search(account.seller_id, offset: page * PAGE, limit: PAGE, status: status)
           rows = Array(data["questions"])
+          seen&.concat(rows.map { |q| q["id"] })
           changed = rows.count { |q| upsert(account, q) }
           count += rows.size
           break if rows.size < PAGE || (page + 1) * PAGE >= data["total"].to_i
