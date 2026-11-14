@@ -8,7 +8,13 @@
 # POST /api/items/:item_id/suggestion_acks?account_id=  → "Ciente" (key, kind: aplicada|aguardar)
 # POST /api/items/:item_id/price?account_id=            → muda o preço no ML (admin; price, confirm: true)
 # GET  /api/items/:item_id/variations?account_id=       → as outras variações do mesmo anúncio pai (Ml::ItemVariations)
-# Ciente, ficha técnica e preço aceitam apply_to_variations=true: valem também para as outras variações do anúncio pai.
+# GET  /api/items/:item_id/model?account_id=            → Modelo e Modelo detalhado atuais, limite e buscas da categoria (14/11/2026)
+# POST /api/items/:item_id/model/suggest?account_id=    → 3 opções de Modelo com palavras-chave + Modelo detalhado (IA; não publica)
+# POST /api/items/:item_id/model?account_id=            → publica no ML (admin; model, detailed_model, confirm: true)
+# GET  /api/items/:item_id/description?account_id=      → descrição atual
+# POST /api/items/:item_id/description/suggest?...      → descrição mais chamativa (IA; não publica)
+# POST /api/items/:item_id/description?account_id=      → publica no ML (admin; text, confirm: true)
+# Ciente, ficha técnica, preço, modelo e descrição aceitam apply_to_variations=true: valem também para as outras variações do anúncio pai.
 class ItemEditsController < ApplicationController
   include CurrentAccount
 
@@ -17,8 +23,8 @@ class ItemEditsController < ApplicationController
   end
 
   before_action :own_item!
-  before_action :require_admin!, only: [ :publish_title, :publish_specs, :publish_price ]
-  before_action :require_confirm!, only: [ :publish_title, :publish_specs, :publish_price ]
+  before_action :require_admin!, only: [ :publish_title, :publish_specs, :publish_price, :publish_model, :publish_description ]
+  before_action :require_confirm!, only: [ :publish_title, :publish_specs, :publish_price, :publish_model, :publish_description ]
 
   def variations
     render json: Ml::ItemVariations.payload(Current.account, item_id)
@@ -77,6 +83,57 @@ class ItemEditsController < ApplicationController
     others = result.ok && apply_to_variations? ? each_variation { |id| Ml::ItemPrice.publish(client, Current.account, id, params[:price], user: Current.user, free_shipping: free) } : nil
     render json: { ok: result.ok, message: [ result.message, variations_message(others, "preço aplicado") ].compact.join(" "),
                    price: result.price, variations: others, errors: result.ok ? nil : [ result.message ] },
+           status: result.ok ? :ok : :unprocessable_content
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def model
+    render json: Ml::ItemModelKeywords.info(client, Current.account, item_id)
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def suggest_model
+    info = Ml::ItemModelKeywords.info(client, Current.account, item_id)
+    render json: Ai::ModelKeywordSuggestions.call(Current.account.company, info, description: description)
+  rescue Ai::JsonChat::Error => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def publish_model
+    publish = ->(id) { Ml::ItemModelKeywords.publish(client, Current.account, id, model: params[:model], detailed_model: params[:detailed_model], user: Current.user) }
+    result = publish.(item_id)
+    others = result.ok && apply_to_variations? ? each_variation { |id| publish.(id) } : nil
+    render json: { ok: result.ok, message: [ result.message, variations_message(others, "modelo alterado") ].compact.join(" "),
+                   model: result.model, detailed_model: result.detailed_model, variations: others, errors: result.ok ? nil : [ result.message ] },
+           status: result.ok ? :ok : :unprocessable_content
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def item_description
+    render json: Ml::ItemDescription.info(client, Current.account, item_id)
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def suggest_description
+    info = Ml::ItemDescription.info(client, Current.account, item_id)
+    render json: Ai::DescriptionSuggestion.call(Current.account.company, info, current: info[:current], questions: info[:questions])
+  rescue Ai::JsonChat::Error => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  rescue Ml::Client::Error => e
+    ml_error(e)
+  end
+
+  def publish_description
+    result = Ml::ItemDescription.publish(client, Current.account, item_id, params[:text], user: Current.user)
+    others = result.ok && apply_to_variations? ? each_variation { |id| Ml::ItemDescription.publish(client, Current.account, id, params[:text], user: Current.user) } : nil
+    render json: { ok: result.ok, message: [ result.message, variations_message(others, "descrição alterada") ].compact.join(" "),
+                   length: result.length, variations: others, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e
     ml_error(e)

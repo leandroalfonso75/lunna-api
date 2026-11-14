@@ -267,20 +267,28 @@ RSpec.describe Abc::SuggestionEngine do
     expect(find(result, "Adicionar mais fotos")).to be_nil
   end
 
-  # 19 — sem vídeo, curva A ou B
-  it "sem vídeo, curva A -> prioridade 3" do
-    result = call(item: build_item(has_video: false, has_clip: false), curve: "A")
-    expect(find(result, "Adicionar vídeo")[:priority]).to eq(3)
+  # Fora desde 14/11/2026 (o ML já sugere): vídeo, Premium e recomendações de qualidade
+  it "não sugere mais vídeo, anúncio Premium nem as recomendações de qualidade do ML" do
+    item = build_item(has_video: false, has_clip: false, listing_type_id: "gold_special", quality_score: 50,
+                      quality_pending: [ { "key" => "INSTALLMENTS_RECOMMENDATION", "title" => "Parcelamento sem juros" },
+                                         { "key" => "VIDEO", "title" => "Adicionar vídeo" } ])
+    result = call(item: item, metric: build_metric(price: 150), curve: "A")
+    expect(result.map { |s| s[:title] }).not_to include("Adicionar vídeo", "Testar anúncio Premium", "Parcelamento sem juros")
+    expect(result.map { |s| s[:area] }).not_to include("qualidade", "vídeo", "tipo de anúncio")
   end
 
-  it "vídeo no formato clip (sem video_id) ou ainda não lido -> não sugere vídeo" do
-    expect(find(call(item: build_item(has_video: false, has_clip: true), curve: "A"), "Adicionar vídeo")).to be_nil
-    expect(find(call(item: build_item(has_video: false, has_clip: nil), curve: "A"), "Adicionar vídeo")).to be_nil
+  # Modelo com palavras-chave (até 110 caracteres; o modelo real vai em Modelo detalhado)
+  it "Modelo vazio ou curto -> sugere usar o campo com palavras-chave (prioridade 2, botão alterar_modelo)" do
+    s = find(call(item: build_item(model: "SC13")), "Usar o campo Modelo com palavras-chave")
+    expect(s).to include(priority: 2, area: "busca", action: { kind: "alterar_modelo" })
+    expect(s[:why]).to include("SC13", "110", "Modelo detalhado")
+    expect(find(call(item: build_item(model: nil)), "Usar o campo Modelo com palavras-chave")[:why]).to include("vazio")
   end
 
-  it "sem vídeo, curva C -> não sugere" do
-    result = call(item: build_item(has_video: false), curve: "C")
-    expect(find(result, "Adicionar vídeo")).to be_nil
+  it "Modelo já longo, catálogo ou detalhes não carregados -> não sugere" do
+    expect(find(call(item: build_item(model: "x" * 60)), "Usar o campo Modelo com palavras-chave")).to be_nil
+    expect(find(call(item: build_item(model: nil, catalog_listing: true)), "Usar o campo Modelo com palavras-chave")).to be_nil
+    expect(find(call(item: build_item(model: nil, details_checked_at: nil)), "Usar o campo Modelo com palavras-chave")).to be_nil
   end
 
   # 20/21 — descrição
@@ -302,17 +310,12 @@ RSpec.describe Abc::SuggestionEngine do
     expect(find(result, "Ampliar descrição")).to be_nil
   end
 
-  # 22 — Clássico, preço >= 120, curva A/B, ML recomenda parcelamento
-  it "clássico caro em curva A com recomendação de parcelamento -> prioridade 3" do
-    item = build_item(listing_type_id: "gold_special", quality_pending: [ { "key" => "INSTALLMENTS_RECOMMENDATION", "title" => "Parcelamento" } ])
-    result = call(item: item, metric: build_metric(price: 150), curve: "A")
-    expect(find(result, "Testar anúncio Premium")[:priority]).to eq(3)
-  end
-
-  it "clássico caro sem recomendação de parcelamento -> não sugere Premium" do
-    item = build_item(listing_type_id: "gold_special", quality_pending: [])
-    result = call(item: item, metric: build_metric(price: 150), curve: "A")
-    expect(find(result, "Testar anúncio Premium")).to be_nil
+  it "descrição boa em curva A/B -> sugere deixar mais chamativa (prioridade 3); todas as de descrição têm o botão" do
+    item = build_item(description_len: 800, details_checked_at: Time.current)
+    expect(find(call(item: item, curve: "B"), "Deixar a descrição mais chamativa")).to include(priority: 3, action: { kind: "alterar_descricao" })
+    expect(find(call(item: item, curve: "C"), "Deixar a descrição mais chamativa")).to be_nil
+    expect(find(call(item: build_item(description_len: 0)), "Escrever descrição")[:action]).to eq(kind: "alterar_descricao")
+    expect(find(call(item: build_item(description_len: 100)), "Ampliar descrição")[:action]).to eq(kind: "alterar_descricao")
   end
 
   # 23 — sem frete grátis, 60 <= preço < 79
@@ -345,30 +348,6 @@ RSpec.describe Abc::SuggestionEngine do
   it "30 vendas fora do Full em curva A -> prioridade 2" do
     result = call(metric: build_metric(full: false, units_30d: 30), curve: "A")
     expect(find(result, "Avaliar Full")[:priority]).to eq(2)
-  end
-
-  # 25 — recomendações pendentes do ML (sem repetir key)
-  it "nota < 70 -> prioridade 2" do
-    item = build_item(quality_score: 69, quality_pending: [ { "key" => "K1", "title" => "Melhorar título", "label" => "Título curto" } ])
-    result = call(item: item)
-    suggestion = find(result, "Melhorar título")
-    expect(suggestion[:priority]).to eq(2)
-    expect(suggestion[:why]).to eq("Título curto")
-  end
-
-  it "nota >= 70 -> prioridade 3" do
-    item = build_item(quality_score: 70, quality_pending: [ { "key" => "K1", "title" => "Melhorar título", "label" => "Título curto" } ])
-    result = call(item: item)
-    expect(find(result, "Melhorar título")[:priority]).to eq(3)
-  end
-
-  it "não repete a mesma key" do
-    item = build_item(quality_score: 50, quality_pending: [
-      { "key" => "K1", "title" => "Melhorar título", "label" => "x" },
-      { "key" => "K1", "title" => "Melhorar título de novo", "label" => "y" }
-    ])
-    result = call(item: item)
-    expect(result.count { |s| s[:area] == "qualidade" }).to eq(1)
   end
 
   # 26 — curva C, ativo, sem venda no mês, >= 60 visitas

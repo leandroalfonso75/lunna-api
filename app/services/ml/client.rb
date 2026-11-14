@@ -281,6 +281,16 @@ module Ml
       get("/items/#{item_id}/description")
     end
 
+    # Curva ABC > Alterar descrição (admin, com confirmação, registrado em ml_item_edits). Só texto puro (plain_text).
+    def update_description(item_id, text)
+      write(:put, "/items/#{item_id}/description", { api_version: 2 }, { plain_text: text })
+    end
+
+    # Palavras mais buscadas da categoria no Mercado Livre (Curva ABC > Modelo com palavras-chave).
+    def trends(category_id)
+      get("/trends/MLB/#{category_id}")
+    end
+
     # Produto do catálogo (anúncio de catálogo usa a descrição do produto: `short_description.content`).
     def catalog_product(product_id)
       get("/products/#{product_id}")

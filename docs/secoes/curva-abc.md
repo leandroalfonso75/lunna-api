@@ -120,3 +120,25 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   `variation_attribute`, `defines_picture`) nunca são copiados.
 - **Preço sugerido:** opção "e nas outras N variações": o mesmo preço (e frete grátis) em cada uma, com a mesma trava de
   60% e os 15 dias de maturação; a que já está no preço conta como feita. Cada escrita fica em `ml_item_edits`.
+
+## Sugestões revistas (14/11/2026)
+
+- **Saíram** (o próprio Mercado Livre já sugere): "Testar anúncio Premium", "Adicionar vídeo" e as recomendações de
+  qualidade do ML (vídeo, parcelamento sem juros etc.). Regras removidas do motor (`Abc::SuggestionEngine`).
+- **Modelo com palavras-chave** (`rule_model_keywords`, prioridade 2, área "busca"): fora do catálogo, com detalhes
+  carregados, quando o campo Modelo tem menos de 60 caracteres. O ML aceita até 110 caracteres no Modelo e usa o texto na
+  busca: em vez do código do produto vão as palavras mais buscadas (ML e Google), de preferência as que não estão no
+  título; o modelo real vai em "Modelo detalhado" (DETAILED_MODEL). Botão "Alterar modelo AGORA" (`AbcModelEditor.vue`):
+  mostra as mais buscadas da categoria (`GET /trends/MLB/{categoria}`), "Sugerir palavras-chave" (IA, 3 opções, sem marcas
+  de terceiros nem termos promocionais, cortadas sem quebrar palavra) e publica MODEL no anúncio e DETAILED_MODEL no
+  anúncio ou em cada variação (atributo de variação). Serviços: `Ml::ItemModelKeywords`, `Ai::ModelKeywordSuggestions`.
+  Rotas: `GET/POST /api/items/:id/model`, `POST /api/items/:id/model/suggest`.
+- **Descrição mais chamativa** (`rule_description_boost`, prioridade 3): curvas A/B com descrição de 400+ caracteres. As
+  regras "Escrever descrição" e "Ampliar descrição" também ganharam o botão "Alterar descrição AGORA"
+  (`AbcDescriptionEditor.vue`): a IA reescreve (benefício na abertura, diferenciais em tópicos, uso, especificações, o que
+  vem na embalagem e perguntas frequentes a partir das perguntas reais do anúncio), em texto puro; valores em conflito
+  entre ficha e descrição viram aviso "Conferir:". Publica com `PUT /items/{id}/description` (recusa links, e-mail e
+  telefone) e marca "Deixar a descrição mais chamativa" como aplicada por 30 dias. Serviços: `Ml::ItemDescription`,
+  `Ai::DescriptionSuggestion`. Rotas: `GET/POST /api/items/:id/description`, `POST /api/items/:id/description/suggest`.
+- As duas escritas: só admin, com confirmação, registradas em `ml_item_edits` (kinds "modelo" e "descricao"), e aceitam
+  "aplicar também às outras variações do anúncio pai".

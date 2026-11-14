@@ -1,6 +1,6 @@
 require "set"
 
-# SPEC 8.6 — as 27 regras do motor de sugestões, na ordem da tabela (usada
+# SPEC 8.6 — as regras do motor de sugestões, na ordem da tabela (usada
 # como desempate estável quando duas regras caem na mesma prioridade).
 # `ctx` é um Abc::SuggestionEngine::Context: item (ml_item), metric
 # (item_metrics), curve/group (da classificação — nil fora do universo),
@@ -20,10 +20,12 @@ module Abc
       rule_price_reduce rule_price_increase rule_exposure_drop rule_conversion_drop
       rule_conversion_low_median rule_exposure_low rule_title_short rule_title_brand
       rule_title_model rule_policy_terms rule_attrs_required rule_attrs_main
-      rule_photos_few rule_photos_low rule_video_missing rule_description_missing
-      rule_description_short rule_listing_type_premium rule_free_shipping_range
-      rule_logistic_full rule_quality_pending rule_strategy_liquidate rule_details_pending
+      rule_model_keywords rule_photos_few rule_photos_low rule_description_missing
+      rule_description_short rule_description_boost rule_free_shipping_range
+      rule_logistic_full rule_strategy_liquidate rule_details_pending
     ].freeze
+    # Fora desde 14/11/2026 (pedido do usuário: o próprio ML já sugere): Testar anúncio Premium, Adicionar vídeo e as
+    # recomendações de qualidade do ML (vídeo, parcelamento sem juros etc.).
 
     def self.call(ctx) = new(ctx).call
 
@@ -235,6 +237,22 @@ module Abc
                    action: { kind: "alterar_ficha" }) ]
     end
 
+    # Campo Modelo da ficha técnica (até 110 caracteres no ML): preencher com as palavras mais buscadas da categoria/produto
+    # (ML e Google) ajuda o anúncio a aparecer em mais buscas; o modelo de verdade vai em "Modelo detalhado".
+    # Pedido do usuário em 14/11/2026. Fora do catálogo (a ficha é a do produto do catálogo).
+    def rule_model_keywords
+      return [] if catalog? || !details_loaded?
+
+      model = @item&.model.to_s.strip
+      return [] if model.length >= MODEL_KEYWORDS_MIN
+
+      why = model.present? ? "O Modelo tem só #{model.length} caracteres (\"#{model}\"); o Mercado Livre aceita até 110." : "O campo Modelo está vazio; o Mercado Livre aceita até 110 caracteres."
+      [ suggestion(2, "busca", "Usar o campo Modelo com palavras-chave",
+                   "#{why} Preencha com as palavras mais buscadas para o produto e coloque o modelo real em \"Modelo detalhado\".",
+                   action: { kind: "alterar_modelo" }) ]
+    end
+    MODEL_KEYWORDS_MIN = 60
+
     # 17 — Menos de 3 fotos.
     def rule_photos_few
       return [] if catalog?
@@ -257,16 +275,6 @@ module Abc
                    action: { kind: "gerar_fotos", suggested_count: [ 6 - pictures, 1 ].max }) ]
     end
 
-    # 19 — Sem vídeo em curva A ou B.
-    def rule_video_missing
-      return [] if @item&.has_video
-      # vídeo no formato atual do ML (clip) não vem em video_id: vale a regra de qualidade (has_clip); sem leitura, não sugere
-      return [] unless @item.respond_to?(:has_clip) && @item.has_clip == false
-      return [] unless %w[A B].include?(@curve)
-
-      [ suggestion(3, "vídeo", "Adicionar vídeo", "Sem vídeo no anúncio — ajuda a converter mais nas curvas A e B.", action: ciente_action) ]
-    end
-
     # 20 — Sem descrição (detalhes carregados).
     def rule_description_missing
       return [] if catalog?
@@ -276,7 +284,7 @@ module Abc
       len = @item&.description_len.to_i
       return [] unless len.zero?
 
-      [ suggestion(1, "descrição", "Escrever descrição", "Anúncio sem descrição.") ]
+      [ suggestion(1, "descrição", "Escrever descrição", "Anúncio sem descrição.", action: description_action) ]
     end
 
     # 21 — Descrição < 400 caracteres (e não vazia — coberta pela regra 20).
@@ -288,24 +296,18 @@ module Abc
       len = @item&.description_len.to_i
       return [] unless len.positive? && len < 400
 
-      [ suggestion(2, "descrição", "Ampliar descrição", "Descrição com #{len} caracteres — a meta é pelo menos 400.") ]
+      [ suggestion(2, "descrição", "Ampliar descrição", "Descrição com #{len} caracteres — a meta é pelo menos 400.", action: description_action) ]
     end
 
-    # 22 — Clássico, preço ≥ 120, curva A/B e o ML recomenda parcelamento.
-    def rule_listing_type_premium
-      return [] unless @item&.listing_type_id == "gold_special"
-      return [] unless @metric.price.to_f >= 120
-      return [] unless %w[A B].include?(@curve)
-      return [] unless installment_recommended?
+    # Descrição já com tamanho bom, mas em curva A/B: reescrever de forma mais persuasiva (benefícios, uso, dúvidas dos
+    # compradores) ajuda a converter. Pedido do usuário em 14/11/2026.
+    def rule_description_boost
+      return [] if catalog? || !details_loaded?
+      return [] unless %w[A B].include?(@curve) && @item&.description_len.to_i >= 400
 
-      [ suggestion(3, "tipo de anúncio", "Testar anúncio Premium", "Preço alto e o Mercado Livre recomenda parcelamento — o tipo Premium pode ajudar.",
-                   action: ciente_action) ]
-    end
-
-    def installment_recommended?
-      Array(@item&.quality_pending).any? do |entry|
-        entry["key"].to_s.match?(/installment|parcel/i) || entry["title"].to_s.match?(/installment|parcel/i)
-      end
+      [ suggestion(3, "descrição", "Deixar a descrição mais chamativa",
+                   "Uma descrição que fala dos benefícios, do uso e das dúvidas dos compradores converte mais visitas em vendas.",
+                   action: description_action) ]
     end
 
     # 23 — Sem frete grátis, preço entre R$ 60 (incl.) e R$ 79 (excl.).
@@ -325,21 +327,6 @@ module Abc
       return [] unless @curve == "A" && @metric.units_30d.to_i >= 30
 
       [ suggestion(2, "logística", "Avaliar Full", "Curva A com #{@metric.units_30d.to_i} vendas em 30 dias fora do Full.") ]
-    end
-
-    # 25 — Cada recomendação pendente do ML (sem repetir "key").
-    def rule_quality_pending
-      score = @item&.quality_score.to_i
-      seen = Set.new
-
-      Array(@item&.quality_pending).filter_map do |entry|
-        key = entry["key"]
-        next nil if key.present? && !seen.add?(key)
-
-        priority = score < 70 ? 2 : 3
-        suggestion(priority, "qualidade", entry["title"].presence || "Ajustar qualidade do anúncio", entry["label"].presence || entry["title"].to_s,
-                   action: ciente_action, key: "qualidade:#{key.presence || entry['title']}")
-      end
     end
 
     # 26 — Curva C, ativo, sem venda no mês, ≥ 60 visitas.
@@ -364,6 +351,7 @@ module Abc
 
     # Vídeo, Tipo de anúncio e Qualidade: o Lunna não faz por você; "Ciente, aplicada" ou "Ciente, aguardar" (volta em 15 dias).
     def ciente_action = { kind: "ciente" }
+    def description_action = { kind: "alterar_descricao" }
 
     # --- Exposição: medidas concretas, conforme o que o anúncio já tem (pedido do usuário em 04/11/2026) ---
     def exposure_steps
