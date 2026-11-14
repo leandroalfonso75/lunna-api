@@ -138,3 +138,9 @@ cobrado fica em `shipping.seller_cost_billed`, só para conferência (Financeiro
 
 - O percentual de despesas operacionais da venda é o do **mês da venda**: lançado em Financeiro › Despesas › Incluir Despesas
   (mês fechado) ou o padrão da empresa (`economics.fixed_expenses_pct`). Ver `docs/secoes/financeiro.md`.
+
+## Forma de envio como figura em todo o Lunna (14/11/2026)
+
+- Componente `components/ui/LogisticBadge.vue` (front): Full e Agência pelas imagens de `public/logistica/`, Flex por
+  `flex.svg` (letras azuis #3483FA). Usado em Vendas (coluna Envio e detalhe), Reclamações (lista, A atender, Devoluções,
+  Contestar), Anúncios, Curva ABC e Financeiro (Por logística). Coleta e outras formas seguem em texto.
