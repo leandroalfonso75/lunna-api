@@ -35,15 +35,24 @@ RSpec.describe "Curva ABC: Modelo com palavras-chave e descrição mais chamativ
       expect(json).to include("model" => "SC13", "max_length" => 110, "editable" => true, "detailed_per_variation" => false,
                               "trends" => [ "secador profissional", "secador com difusor" ])
 
-      long = ([ "secador" ] + %w[profissional difusor salao cabelo cacheado escova ionico potente leve viagem frio quente bivolt turbo]).join(" ") * 2
-      ai_reply(options: [ { model: long, why: "buscas" }, { model: "secador profissional difusor", why: "x" }, { model: "secador ionico", why: "y" } ],
-               detailed_model: "SC13")
+      # buscas da categoria (stub): "secador profissional", "secador com difusor"; a IA escolhe e marca outras marcas
+      stub_request(:get, "#{ml}/trends/MLB/MLB1234").to_return(status: 200, body: %w[secador\ gama secador\ taiff secador\ de\ cabelo\ com\ difusor
+        secador\ mondial secador\ de\ cabelo\ bivolt secador\ de\ cabelos dyson\ airwrap].map { |k| { keyword: k } }.to_json)
+      ai_reply(keywords: [ { keyword: "Secador Taiff", other_brand: true }, { keyword: "secador de cabelo com difusor", other_brand: false },
+                           { keyword: "secador mondial", other_brand: true }, { keyword: "secador gama", other_brand: true },
+                           { keyword: "secador de cabelo bivolt", other_brand: false }, { keyword: "secador inventado", other_brand: false },
+                           { keyword: "secador de cabelos", other_brand: false } ],
+               detailed_model: "SC13 2000W Íon com Difusor")
       post "/api/items/MLB1/model/suggest", params: { account_id: account.id }, headers: auth_headers(member)
 
-      expect(json["options"].size).to eq(3)
-      expect(json["options"].first["model"].length).to be <= 110
-      expect(long).to include(json["options"].first["model"]) # cortou num espaço
-      expect(json["detailed_model"]).to eq("SC13")
+      models = json["options"].map { |o| o["model"] }
+      # termos exatos das buscas; as duas primeiras sem outra marca (Mondial é a marca do anúncio); termo inventado fica de fora
+      expect(models[0]).to eq("secador de cabelo com difusor secador mondial secador taiff secador gama secador de cabelo bivolt")
+      expect(models[0].length).to be <= 110
+      expect(models[1]).to start_with("secador de cabelo com difusor secador mondial secador gama secador taiff")
+      expect(models[2]).to eq("secador de cabelo com difusor secador mondial secador de cabelo bivolt secador de cabelos")
+      expect(models.join).not_to include("inventado", "dyson")
+      expect(json["detailed_model"]).to eq("SC13 2000W Íon com Difusor")
     end
 
     it "publica MODEL e DETAILED_MODEL no anúncio (sem variações), só com admin e confirmação, e registra" do

@@ -142,3 +142,12 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   `Ai::DescriptionSuggestion`. Rotas: `GET/POST /api/items/:id/description`, `POST /api/items/:id/description/suggest`.
 - As duas escritas: só admin, com confirmação, registradas em `ml_item_edits` (kinds "modelo" e "descricao"), e aceitam
   "aplicar também às outras variações do anúncio pai".
+
+### Ajuste do Modelo com palavras-chave (14/11/2026, pedido do usuário)
+- O Modelo recebe as buscas mais feitas da categoria no ML **exatamente como aparecem** (`/trends/MLB/{categoria}`, até 50),
+  uma depois da outra, até 110 caracteres. A IA só escolhe quais buscas servem para o produto e marca as que citam outra
+  marca; a montagem é feita no código com o texto exato (termo inventado ou alterado pela IA fica de fora).
+- Regra: as **duas primeiras** buscas não podem ter marca diferente da do anúncio (num secador Mondial, Gama, Philco e Taiff
+  só a partir da terceira). Buscas com a marca do próprio anúncio contam como dele.
+- Até 3 montagens: mais ligadas ao produto primeiro, ordem das mais buscadas e só sem outras marcas (iguais são juntadas).
+- Modelo detalhado: o modelo real seguido de outros detalhes relevantes do produto (potência, tecnologia, acessórios...).

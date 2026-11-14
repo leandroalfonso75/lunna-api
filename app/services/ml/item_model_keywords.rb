@@ -88,7 +88,7 @@ module Ml
     def trends(category_id)
       return [] if category_id.blank?
 
-      Array(@client.trends(category_id)).filter_map { |t| t["keyword"].to_s.squish.presence }.uniq.first(30)
+      Array(@client.trends(category_id)).filter_map { |t| t["keyword"].to_s.squish.presence }.uniq.first(50)
     rescue Ml::Client::Error
       []
     end

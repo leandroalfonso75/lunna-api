@@ -237,8 +237,8 @@ module Abc
                    action: { kind: "alterar_ficha" }) ]
     end
 
-    # Campo Modelo da ficha técnica (até 110 caracteres no ML): preencher com as palavras mais buscadas da categoria/produto
-    # (ML e Google) ajuda o anúncio a aparecer em mais buscas; o modelo de verdade vai em "Modelo detalhado".
+    # Campo Modelo da ficha técnica (até 110 caracteres no ML): preencher com as buscas mais feitas da categoria no ML,
+    # exatamente como aparecem, ajuda o anúncio a aparecer em mais buscas; o modelo de verdade vai em "Modelo detalhado".
     # Pedido do usuário em 14/11/2026. Fora do catálogo (a ficha é a do produto do catálogo).
     def rule_model_keywords
       return [] if catalog? || !details_loaded?
@@ -248,7 +248,7 @@ module Abc
 
       why = model.present? ? "O Modelo tem só #{model.length} caracteres (\"#{model}\"); o Mercado Livre aceita até 110." : "O campo Modelo está vazio; o Mercado Livre aceita até 110 caracteres."
       [ suggestion(2, "busca", "Usar o campo Modelo com palavras-chave",
-                   "#{why} Preencha com as palavras mais buscadas para o produto e coloque o modelo real em \"Modelo detalhado\".",
+                   "#{why} Preencha com as buscas mais feitas no Mercado Livre para o produto e coloque o modelo real (e outros detalhes) em \"Modelo detalhado\".",
                    action: { kind: "alterar_modelo" }) ]
     end
     MODEL_KEYWORDS_MIN = 60
