@@ -18,8 +18,14 @@ module Ai
       Se a ficha técnica e a descrição atual discordarem (ex.: potência), use o valor da ficha técnica, NÃO comente a
       diferença no texto e avise em "highlights" começando com "Conferir:". Nas perguntas frequentes, responda só o que
       os dados confirmam (nada de "geralmente" ou suposições); sem confirmação, deixe a pergunta de fora.
+      REGRA MAIS IMPORTANTE: leia a descrição atual inteira e NUNCA elimine avisos e informações que evitam reclamação ou
+      devolução, mesmo que pareçam negativos: acessório de marca diferente da do produto (ex.: "o difusor é de outra
+      marca"), o que NÃO vem na embalagem, compatibilidade e restrições, voltagem (não é bivolt), cuidados e limitações de
+      uso, produto genérico/similar, cor ou detalhe que pode variar, prazos e condições informadas pelo vendedor. Mantenha
+      cada um com o mesmo sentido, numa seção "INFORMAÇÕES IMPORTANTES" logo antes das perguntas frequentes, e liste-os em
+      "kept" (um por item, em frase curta).
       Títulos de seção em MAIÚSCULAS numa linha própria, linhas em branco entre as seções; entre 1.200 e 3.500 caracteres.
-      Responda só com JSON: {"text": "a descrição completa", "highlights": ["o que melhorou, em frases curtas"]}.
+      Responda só com JSON: {"text": "a descrição completa", "highlights": ["o que melhorou, em frases curtas"], "kept": ["aviso mantido"]}.
     TXT
 
     MAX = 50_000
@@ -30,14 +36,14 @@ module Ai
         Marca: #{info[:brand].presence || '—'} · Modelo: #{info[:model].presence || '—'}
         Ficha técnica: #{Array(info[:attributes]).join('; ')}
         Perguntas dos compradores: #{Array(questions).first(15).join(' | ').presence || '—'}
-        Descrição atual:
-        #{current.to_s.strip.first(6000).presence || '(sem descrição)'}
+        Descrição atual (leia inteira; os avisos dela precisam continuar na nova):
+        #{current.to_s.strip.first(15_000).presence || '(sem descrição)'}
       TXT
       data = Ai::JsonChat.call(company, system: SYSTEM, user: user, http: http, max_tokens: 4000)
       text = clean(data["text"].to_s)
       raise Ai::JsonChat::Error, "A IA não devolveu uma descrição. Tente de novo." if text.blank?
 
-      { text: text, highlights: Array(data["highlights"]).map(&:to_s).first(6), length: text.length }
+      { text: text, highlights: Array(data["highlights"]).map(&:to_s).first(6), kept: Array(data["kept"]).map(&:to_s).first(12), length: text.length }
     end
 
     # tira HTML, emojis e excesso de linhas em branco (o ML recusa ou mostra mal)

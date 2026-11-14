@@ -151,3 +151,7 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   só a partir da terceira). Buscas com a marca do próprio anúncio contam como dele.
 - Até 3 montagens: mais ligadas ao produto primeiro, ordem das mais buscadas e só sem outras marcas (iguais são juntadas).
 - Modelo detalhado: o modelo real seguido de outros detalhes relevantes do produto (potência, tecnologia, acessórios...).
+- Descrição (ajuste de 14/11/2026, regra do usuário): a sugestão NUNCA elimina avisos da descrição atual que evitam
+  reclamação (ex.: difusor de outra marca que a do secador, não é bivolt, o que não vem na embalagem, limitações de uso).
+  Eles ficam numa seção "INFORMAÇÕES IMPORTANTES" e a tela lista os avisos mantidos para conferência. Caixa de texto 4x
+  mais alta.
