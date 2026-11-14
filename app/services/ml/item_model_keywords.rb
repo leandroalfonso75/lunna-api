@@ -7,6 +7,7 @@ module Ml
   class ItemModelKeywords
     Result = Struct.new(:ok, :message, :model, :detailed_model, keyword_init: true)
     DEFAULT_MAX = 110
+    SUGGESTION_KEY = "busca:Usar o campo Modelo com palavras-chave"
 
     def self.info(client, account, item_id) = new(client, account, item_id).info
     def self.publish(client, account, item_id, model:, detailed_model:, user:) = new(client, account, item_id).publish(model, detailed_model, user)
@@ -72,6 +73,7 @@ module Ml
       @client.update_item(@item_id, body)
       edit.update!(ok: true)
       @account.ml_items.where(item_id: @item_id).update_all(model: model)
+      AbcSuggestionAck.done!(@account, @item_id, SUGGESTION_KEY, user: user) # não sugere mais neste anúncio
       msg = "Modelo alterado no Mercado Livre: \"#{model}\"."
       msg += " Modelo detalhado: \"#{detailed}\"." if detailed.present? && data[:detailed_available]
       Result.new(ok: true, model: model, detailed_model: detailed.presence, message: msg)

@@ -73,6 +73,14 @@ RSpec.describe "Curva ABC: Modelo com palavras-chave e descrição mais chamativ
       expect(put).to have_been_requested.once
       expect(account.ml_item_edits.sole).to have_attributes(kind: "modelo", ok: true)
       expect(account.ml_items.find_by(item_id: "MLB1").model).to eq("secador profissional com difusor salao")
+      expect(account.abc_suggestion_acks.sole).to have_attributes(key: "busca:Usar o campo Modelo com palavras-chave", kind: "feita")
+
+      # Ignorar: some por 30 dias sem mudar nada
+      post "/api/items/MLB1/suggestion_acks", params: { account_id: account.id, key: "descrição:Deixar a descrição mais chamativa", kind: "ignorar" }, headers: auth_headers(member)
+      expect(json["message"]).to include("ignorada")
+      expect(account.abc_suggestion_acks.find_by(kind: "ignorar").until_at.to_date).to eq(30.days.from_now.to_date)
+      post "/api/items/MLB1/suggestion_acks", params: { account_id: account.id, key: "x", kind: "feita" }, headers: auth_headers(member)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     context "com variações" do
@@ -141,7 +149,9 @@ RSpec.describe "Curva ABC: Modelo com palavras-chave e descrição mais chamativ
       expect(response).to have_http_status(:ok)
       expect(put).to have_been_requested.once
       expect(account.ml_item_edits.sole).to have_attributes(kind: "descricao", ok: true)
-      expect(account.abc_suggestion_acks.sole).to have_attributes(key: "descrição:Deixar a descrição mais chamativa", kind: "aplicada")
+      expect(account.abc_suggestion_acks.pluck(:key, :kind)).to contain_exactly(
+        [ "descrição:Deixar a descrição mais chamativa", "feita" ], [ "descrição:Escrever descrição", "feita" ], [ "descrição:Ampliar descrição", "feita" ])
+      expect(account.abc_suggestion_acks.first.until_at).to be > 50.years.from_now
     end
   end
 end

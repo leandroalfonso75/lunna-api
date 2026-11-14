@@ -159,3 +159,6 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   houver outros anúncios com o mesmo SKU (fora do catálogo e não encerrados, ex.: Clássico e Premium), o Lunna pergunta
   se a alteração vale também para eles (`AbcSameSkuChoice.vue`, nenhum marcado). `GET /api/items/:id/variations` devolve
   `same_sku`; a publicação aceita `also_item_ids[]` (só ids do mesmo SKU; `Ml::ItemVariations.same_sku`).
+- Depois de publicar (14/11/2026, pedido do usuário): Modelo ou descrição publicados pelo Lunna não voltam a ser sugeridos
+  naquele anúncio (ack `feita`, sem prazo; também nos anúncios do mesmo SKU/variações onde foi publicado). Botão
+  **Ignorar** ao lado de "Alterar modelo/descrição AGORA": nada muda e a sugestão some por 30 dias (ack `ignorar`).

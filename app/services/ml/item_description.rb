@@ -1,11 +1,12 @@
 # Curva ABC > "Alterar descrição AGORA" (pedido do usuário em 14/11/2026): lê a descrição atual do anúncio, sugere uma
 # versão mais chamativa (Ai::DescriptionSuggestion, com as perguntas dos compradores) e publica no ML
 # (PUT /items/{id}/description, texto puro). Escrita: só admin, com confirmação, registrada em ml_item_edits ("descricao").
-# Depois de publicar, "Deixar a descrição mais chamativa" fica como aplicada por 30 dias.
+# Depois de publicar, as sugestões de descrição não voltam mais para o anúncio (pedido do usuário em 14/11/2026).
 module Ml
   class ItemDescription
     Result = Struct.new(:ok, :message, :length, keyword_init: true)
     BOOST_KEY = "descrição:Deixar a descrição mais chamativa"
+    KEYS = [ BOOST_KEY, "descrição:Escrever descrição", "descrição:Ampliar descrição" ].freeze
     MIN = 50
     MAX = 50_000
 
@@ -46,8 +47,7 @@ module Ml
       @client.update_description(@item_id, text)
       edit.update!(ok: true)
       @account.ml_items.where(item_id: @item_id).update_all(description_len: text.length)
-      ack = @account.abc_suggestion_acks.find_or_initialize_by(item_id: @item_id, key: BOOST_KEY)
-      ack.update!(kind: "aplicada", until_at: AbcSuggestionAck::KINDS["aplicada"].from_now, user: user)
+      AbcSuggestionAck.done!(@account, @item_id, KEYS, user: user) # descrição feita pelo Lunna: não sugere mais
       Result.new(ok: true, length: text.length, message: "Descrição alterada no Mercado Livre (#{text.length} caracteres).")
     rescue Ml::Client::Error => e
       edit&.update!(ok: false, error: e.message.to_s.first(2000))

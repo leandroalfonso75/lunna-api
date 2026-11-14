@@ -144,7 +144,7 @@ class ItemEditsController < ApplicationController
 
   def ack
     kind = params[:kind].to_s
-    return render_errors([ "Escolha: aplicada ou aguardar." ], status: :unprocessable_content) unless AbcSuggestionAck::KINDS.key?(kind)
+    return render_errors([ "Escolha: aplicada, aguardar ou ignorar." ], status: :unprocessable_content) unless AbcSuggestionAck::KINDS.key?(kind) && kind != "feita"
     return render_errors([ "Sugestão não informada." ], status: :unprocessable_content) if params[:key].blank?
 
     ids = [ item_id ] + (apply_to_variations? ? Ml::ItemVariations.siblings(Current.account, item_id).pluck(:item_id) : [])
@@ -154,9 +154,11 @@ class ItemEditsController < ApplicationController
       a.update!(kind: kind, until_at: AbcSuggestionAck::KINDS[kind].from_now, user: Current.user)
       ack ||= a
     end
-    message = kind == "aguardar" ?
-      "A sugestão deixa de aparecer. Se nada mudar em 15 dias (#{I18n.l(ack.until_at.to_date, format: '%d/%m')}), ela volta." :
-      "Marcada como aplicada no Mercado Livre. Quando os dados do anúncio forem relidos ela some; se ainda valer em 30 dias, volta."
+    message = case kind
+    when "aguardar" then "A sugestão deixa de aparecer. Se nada mudar em 15 dias (#{I18n.l(ack.until_at.to_date, format: '%d/%m')}), ela volta."
+    when "ignorar" then "Sugestão ignorada: nada muda no anúncio e ela não aparece até #{I18n.l(ack.until_at.to_date, format: '%d/%m')} (30 dias)."
+    else "Marcada como aplicada no Mercado Livre. Quando os dados do anúncio forem relidos ela some; se ainda valer em 30 dias, volta."
+    end
     message += " Vale também para as outras #{ids.size - 1} variação(ões) do anúncio." if ids.size > 1
     render json: { ok: true, message: message, until_at: ack.until_at, applied: ids.size }
   end
