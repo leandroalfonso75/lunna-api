@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_14_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_020001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -488,6 +488,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_14_010001) do
     t.datetime "synced_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "item_id"
+    t.string "variation_label"
+    t.string "source", default: "ml", null: false
     t.index ["ml_account_id", "seller_sku"], name: "index_ml_full_replenishments_on_ml_account_id_and_seller_sku"
     t.index ["ml_account_id", "user_product_id"], name: "idx_on_ml_account_id_user_product_id_faa63bdb73", unique: true
     t.index ["ml_account_id"], name: "index_ml_full_replenishments_on_ml_account_id"

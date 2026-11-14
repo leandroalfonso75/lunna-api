@@ -36,6 +36,27 @@ RSpec.describe "/api/stock (seção Estoque)", type: :request do
     expect(json["summary"]).to include("replenish" => 1, "urgent" => 1, "suggested_units" => 24, "can_send_units" => 10, "to_buy_units" => 14)
   end
 
+  it "estoque Full de anúncio antigo (com variações, sem User Product) entra mesmo sem vir na API de reposição" do
+    stub_request(:get, "#{ml}/marketplace/fbm/sellers/430/user-products/replenishment").with(query: hash_including(country: "BR"))
+      .to_return(status: 200, body: { results: [ rec("MLBU1", "SEC-1", suggest: 5) ], paging: { total: 1 } }.to_json)
+    create(:ml_item, ml_account: account, item_id: "MLB9", sku: "MOND-DIF", title: "Secador com difusor", price: 229.9,
+                     inventory_refs: [ { "sku" => "MOND-DIF", "inventory_id" => "OZSN1" }, { "sku" => "MOND-DIF", "inventory_id" => "HXGF1" } ])
+    MlFullStock.create!(ml_account: account, inventory_id: "OZSN1", available_units: 333, total_units: 333, synced_at: Time.current)
+    MlFullStock.create!(ml_account: account, inventory_id: "HXGF1", available_units: 327, total_units: 327, synced_at: Time.current)
+    stub_request(:get, "#{ml}/items/MLB9").to_return(status: 200, body: { id: "MLB9", variations: [
+      { id: 11, inventory_id: "OZSN1", attribute_combinations: [ { id: "VOLTAGE", value_name: "127V" } ] },
+      { id: 12, inventory_id: "HXGF1", attribute_combinations: [ { id: "VOLTAGE", value_name: "220V" } ] } ] }.to_json)
+    MlOrder.create!(order_id: 5, ml_account: account, status: "paid", date_created: 3.days.ago, total_amount: 229.9)
+    MlOrderItem.create!(order_id: 5, item_id: "MLB9", sku: "SC13-DIF-110", variation_id: 11, title: "Secador", quantity: 3, unit_price: 229.9, sale_fee: 20)
+
+    Ml::Sync::FullReplenishment.call(Ml::Client.new(access_token: "tok", sleeper: ->(_) { }), account)
+
+    get "/api/stock/full", params: { account_id: account.id, view: "todos", q: "SC13-DIF-110" }, headers: auth_headers(member)
+    row = json["rows"].sole
+    expect(row).to include("legacy" => true, "item_id" => "MLB9", "variation_label" => "127V", "stock" => 333, "units_30d" => 3, "replenish" => false)
+    expect(account.ml_full_replenishments.where(source: "legacy").count).to eq(2)
+  end
+
   it "depósito: estoque do Olist com valor, vendas (inclusive pelos kits) e cobertura" do
     comp = create(:olist_product, company: company, sku: "SEC-1", description: "Secador", stock_available: 30, cost_price: 40, status: "A", kind: "S")
     create(:olist_product, company: company, sku: "KIT-1", description: "Secador + difusor", kind: "K", status: "A",

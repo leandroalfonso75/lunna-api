@@ -43,3 +43,11 @@ Seção criada em 14/11/2026 a pedido do usuário, logo abaixo de Produtos no me
 - Campo acima da lista: SKU, número do anúncio (MLB), título do anúncio ou palavra do nome do produto (várias palavras:
   todas precisam aparecer; sem acento). O anúncio de um kit acha os componentes. Os anúncios de cada SKU vêm do SKU do
   anúncio, das variações e das vendas dos últimos 95 dias (`listings_by_sku`).
+
+## Anúncios do formato antigo no Full (14/11/2026)
+
+- A API de reposição só lista User Products. Anúncio antigo com variações (ex.: MLB2729901870, SKUs LS-SC13-DIF-110/220)
+  ficava fora. Agora cada estoque Full que não veio na lista vira uma linha (`source: "legacy"`, `user_product_id` =
+  `INV:<inventory_id>`), com o anúncio, a variação (`GET /items/{id}`), o SKU da variação (o vendido nela ou SELLER_SKU),
+  o estoque Full, as vendas de 30 dias e a cobertura em dias; sem recomendação do ML ("sem recomendação do ML · cobre N
+  dias"). Hoje são 4 estoques (MLB2729901870 127V/220V e MLB1858068900 127V/220V).

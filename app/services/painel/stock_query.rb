@@ -90,7 +90,9 @@ module Painel
         qty = p.kind == "K" ? kits[p.olist_id]&.available : p.stock_available
         [ p.sku, { available: qty.to_f, description: p.description, kit: p.kind == "K" } ]
       end
-      rows = recs.map { |r| full_row(r, items[r.user_product_id] || {}, olist[r.seller_sku]) }
+      legacy_items = @account.ml_items.where(item_id: recs.map(&:item_id).compact).pluck(:item_id, :title, :thumbnail, :price, :status)
+                             .to_h { |id, title, thumb, price, status| [ id, { item_id: id, title: title, thumbnail: thumb, price: price&.to_f, status: status } ] }
+      rows = recs.map { |r| full_row(r, (r.item_id && legacy_items[r.item_id]) || items[r.user_product_id] || {}, olist[r.seller_sku]) }
       filtered = filter_full(rows)
       sorted = filtered.sort_by { |r| [ r[:replenish] ? 0 : 1, MlFullReplenishment::URGENCY_ORDER.index(r[:urgency]) || 9, -(r[:suggested] || 0), -(r[:lost_revenue] || 0) ] }
       page, per = paging
@@ -121,6 +123,8 @@ module Painel
       {
         user_product_id: r.user_product_id, inventory_id: r.inventory_id, sku: r.seller_sku,
         title: item[:title] || olist&.dig(:description), thumbnail: item[:thumbnail], item_id: item[:item_id], price: price&.round(2),
+        legacy: r.source == "legacy", variation_label: r.variation_label,
+        coverage_days: r.units_30d.to_i.positive? && r.total_stock ? (r.total_stock.to_f / (r.units_30d / 30.0)).round : nil,
         in_full: r.inventory_id.present?, restricted: Array(r.tags).include?("is_restricted"), star: Array(r.tags).include?("star_product"),
         stock: r.total_stock, urgency: r.shipping_urgency, urgency_label: MlFullReplenishment::URGENCY_LABELS[r.shipping_urgency] || r.shipping_urgency,
         replenish: r.replenish?, suggested: suggested, deadline: r.replenishment_deadline,
@@ -134,7 +138,7 @@ module Painel
 
     def filter_full(rows)
       q = @params[:q].to_s.strip.downcase.presence
-      rows = rows.select { |r| [ r[:sku], r[:title], r[:item_id] ].compact.any? { |v| v.downcase.include?(q) } } if q
+      rows = rows.select { |r| [ r[:sku], r[:title], r[:item_id], r[:variation_label] ].compact.any? { |v| v.downcase.include?(q) } } if q
       case @params[:view].to_s
       when "repor" then rows.select { |r| r[:replenish] }
       when "urgente" then rows.select { |r| r[:urgency] == "URGENT" }
