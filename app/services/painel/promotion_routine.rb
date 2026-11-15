@@ -93,6 +93,7 @@ module Painel
 
         return skip(run, ev, "revisar", row.dig(:review, :label) || "nenhuma oferta cabe nas regras", kind: "revisar")
       end
+      return unreachable(run, ev, setting) if status == "minima_inalcancavel"
       return "sem_mudanca" unless ACT_ON.include?(status) && ev[:best] && !ev[:best][:as_is]
       return skip(run, ev, "regra_propria", "regra própria do anúncio: #{setting.rules_note.truncate(120)}") if setting&.rules_note.present?
 
@@ -167,6 +168,33 @@ module Painel
     end
 
     INCREASE_PREFIX = "aumentaria o preço".freeze
+
+    # Mínima inalcançável (pedido do usuário em 15/11/2026): nem o preço cheio atinge a margem mínima. Fica na oferta mais
+    # perto da mínima (a de maior margem); se ela só subiria o preço com a promoção atual valendo, programa para o fim da
+    # atual. Prejuízo em qualquer oferta (margem <= 0): fica como está.
+    def unreachable(run, ev, setting)
+      return skip(run, ev, "regra_propria", "regra própria do anúncio: #{setting.rules_note.truncate(120)}") if setting&.rules_note.present?
+
+      closest = ev[:evaluator]&.closest_to_min((ev[:evaluated] || []).map { |e| e[:offer] })
+      return skip(run, ev, "inalcancavel", "mínima inalcançável e nenhuma oferta disponível") if closest.nil?
+
+      margin = ev[:evaluator].rule_margin(closest).to_f
+      if margin <= 0
+        return skip(run, ev, "inalcancavel", format("mínima inalcançável e prejuízo em qualquer oferta (melhor: %.1f%%): fica como está", margin).tr(".", ","))
+      end
+      cur = ev[:current]
+      if cur && cur[:margin_pct] && ev[:evaluator].rule_margin(cur).to_f >= margin - 0.005
+        return skip(run, ev, "inalcancavel", "mínima inalcançável: já está na oferta mais perto da mínima")
+      end
+
+      ev = ev.merge(best: closest)
+      if (block = credibility_block(ev))
+        return skip(run, ev, "revisar", block, kind: "revisar", to: true)
+      end
+      return fitting(run, ev, closest) if closest[:soft_reason].present?
+
+      @mode == "apply" ? apply(run, ev, price: closest[:offer].flexible? ? closest[:price] : nil, force: true) : simulate(run, ev)
+    end
 
     # Aplica a cabível: na hora (sem regra ferida) ou programada para o fim da promoção atual (só a regra de aumento
     # ferida). A trava de lucro não é furada pela rotina.

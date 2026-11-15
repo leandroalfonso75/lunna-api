@@ -14,7 +14,9 @@ module Painel
       "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ],
       # nenhuma oferta cabe hoje, mas a automação já programou a troca para quando a promoção atual acabar: não precisa de
       # revisão (pedido do usuário em 15/11/2026)
-      "programado" => [ "Programado", "ok" ]
+      "programado" => [ "Programado", "ok" ],
+      # nem o preço cheio atinge a margem mínima: a automação deixa na oferta mais perto da mínima (15/11/2026)
+      "minima_inalcancavel" => [ "Mínima inalcançável", "warn" ]
     }.freeze
     GAIN_EPSILON = 0.01
 
@@ -343,6 +345,7 @@ module Painel
         },
         status: status_label(status_key(cost, current, best, evaluator, ctx[:scheduled]&.dig(item.item_id))),
         scheduled: ctx[:scheduled]&.dig(item.item_id),
+        unreachable: unreachable_info(cost, current, best, evaluated, evaluator),
         review: review_for(cost, current, best, evaluated, evaluator),
         notes: setting&.rules_note.presence,
         # "não automatizar promoções neste anúncio": a rotina e o lote não mexem; a melhor oferta segue sugerida
@@ -353,7 +356,12 @@ module Painel
 
     def status_key(cost, current, best, evaluator, scheduled = nil)
       return "sem_custo" if cost.nil?
-      return (scheduled ? "programado" : "para_revisar") if needs_review?(current, best, evaluator)
+      if needs_review?(current, best, evaluator)
+        return "programado" if scheduled
+        return "minima_inalcancavel" if evaluator.min_unreachable?
+
+        return "para_revisar"
+      end
       return "sem_promocao" if current.nil?
       return "acima_maxima" if current[:reason] == "acima da margem máxima"
       return "abaixo_minima" unless current[:valid]
@@ -369,6 +377,15 @@ module Painel
       return !current[:valid] if current
 
       !evaluator.baseline_valid?
+    end
+
+    # Mínima inalcançável: a margem do preço cheio e a oferta mais perto da mínima (a que a automação usa).
+    def unreachable_info(cost, current, best, evaluated, evaluator)
+      return nil unless cost && needs_review?(current, best, evaluator) && evaluator.min_unreachable?
+
+      closest = evaluator.closest_to_min(evaluated.map { |e| e[:offer] })
+      { min_pct: evaluator.rules.min_pct, full_price_margin: evaluator.full_price_margin,
+        closest: closest && short(closest), loss: closest.nil? || evaluator.rule_margin(closest).to_f <= 0 }
     end
 
     # A melhor oferta muda algo (outra promoção ou outro preço) em relação à atual.
@@ -503,6 +520,7 @@ module Painel
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
         to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !r[:manual] },
         scheduled: rows.count { |r| r[:status][:key] == "programado" },
+        unreachable: rows.count { |r| r[:status][:key] == "minima_inalcancavel" },
         without_cost: rows.count { |r| r[:status][:key] == "sem_custo" }
       }
     end
@@ -520,7 +538,7 @@ module Painel
 
     # --- agrupamento por produto (variações) ---
 
-    STATUS_PRIORITY = %w[para_revisar abaixo_minima trocar acima_maxima sem_promocao sem_custo programado ok].freeze
+    STATUS_PRIORITY = %w[para_revisar abaixo_minima minima_inalcancavel trocar acima_maxima sem_promocao sem_custo programado ok].freeze
 
     def group_rows(rows)
       skus = rows.map { |r| r[:sku] }.compact_blank.uniq

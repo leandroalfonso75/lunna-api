@@ -151,6 +151,39 @@ RSpec.describe Painel::PromotionRoutine do
     expect(list[:summary]).to include(scheduled: 1, to_review: 0)
   end
 
+  describe "mínima inalcançável (15/11/2026)" do
+    # preço cheio R$ 100: 100 − 10 tarifa − 10 imposto − 5 desp. oper. − 10 frete − 40 custo = 25% de margem; mínima 30%
+    before do
+      MlPromotionOffer.where(item_id: item.item_id, promotion_type: "SELLER_CAMPAIGN").delete_all
+      MlPromotionSetting.create!(ml_account: account, item_id: item.item_id, min_margin_pct: 30, max_margin_pct: 40)
+    end
+
+    it "sai de Para revisar e a rotina deixa na oferta de maior margem (a mais perto da mínima)" do
+      list = Painel::PromotionsQuery.call(account, {})
+      row = list[:items].flat_map { |r| r[:group] ? r[:children] : [ r ] }.find { |r| r[:item_id] == item.item_id }
+      expect(row[:status]).to include(key: "minima_inalcancavel", label: "Mínima inalcançável")
+      expect(row[:unreachable]).to include(min_pct: 30.0, full_price_margin: 25.0, loss: false)
+      expect(row[:unreachable][:closest]).to include(type: "DEAL", price: 95.0)
+      expect(list[:summary]).to include(unreachable: 1, to_review: 0)
+
+      allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+      run = described_class.call(account, mode: "apply", trigger: "agendada")
+      expect(Painel::PromotionActions).to have_received(:apply)
+        .with(account, item.item_id, source: "rotina", run: run, target: hash_including(promotion_id: "P-2", promotion_type: "DEAL", price: 95.0, force: true))
+    end
+
+    it "prejuízo em qualquer oferta: fica como está, sem ir para revisar" do
+      OlistProduct.find_by(sku: "SKU-A").update!(cost_price: 200)
+      allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: true, message: "ok"))
+      run = described_class.call(account, mode: "apply", trigger: "agendada")
+
+      expect(Painel::PromotionActions).not_to have_received(:apply).with(account, item.item_id, anything)
+      expect(run.actions.find_by(item_id: item.item_id)).to have_attributes(kind: "pular", error: a_string_including("prejuízo em qualquer oferta"))
+      expect(run.totals).to include("inalcancavel" => 1)
+      expect(run.totals["revisar"].to_i).to eq(0)
+    end
+  end
+
   it "simulação não conta como programada: a rodada real programa a cabível mesmo depois de uma simulação" do
     include ActiveJob::TestHelper
     finish = 3.days.from_now.change(sec: 0)

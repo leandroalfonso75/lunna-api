@@ -271,5 +271,15 @@ da última vez nesse preço). Vale para todos os anúncios (regra do usuário). 
   só os que precisam de decisão e diz quantos já estão programados.
 - A rotina trata "programado" como antes (`PromotionRoutine`: confere de novo a cabível; se a troca já está marcada, pula).
 - Em 15/11/2026: 101 anúncios antes em "Para revisar" → 28 para revisar e 73 programados (Black Friday até 01/12).
-- Próximas ideias aprovadas para avaliar depois: "Mínima inalcançável" (nem o preço cheio atinge a mínima), respeitar a
-  trava do "preço não crível" do ML e permitir aumento de preço só para voltar à margem mínima.
+- Próximas ideias para avaliar depois: respeitar a trava do "preço não crível" do ML e permitir aumento de preço só para
+  voltar à margem mínima.
+
+## Status "Mínima inalcançável" (15/11/2026, pedido do usuário)
+- Quando nenhuma oferta cabe e nem o preço cheio (sem promoção) atinge a margem mínima do anúncio
+  (`PromotionEvaluator#min_unreachable?`), o anúncio sai de "Para revisar" e vai para a guia **Mínima inalcançável**.
+- Regra (a de sempre: chegar o mais perto possível da mínima): a rotina deixa o anúncio na oferta de **maior margem**
+  (`closest_to_min`: campanhas do ML primeiro, depois o desconto próprio), com promoção ativa. Se ela subiria o preço com a
+  promoção atual valendo, fica programada para o fim da atual. Se a atual já é a mais perto, não mexe.
+- Prejuízo em qualquer oferta (margem ≤ 0, ex.: pincéis Boca Rosa): **fica como está** (decisão do usuário).
+- Na tela: mínima, margem do preço cheio e a oferta mais perto (`row[:unreachable]`); total da rotina `inalcancavel`.
+- Em 15/11/2026: "Para revisar" 28 → 14; 18 com mínima inalcançável (11 com prejuízo em qualquer oferta).

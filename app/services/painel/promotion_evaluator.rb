@@ -157,6 +157,31 @@ module Painel
       (ml.presence || evaluated).min_by { |e| [ sign * rule_margin(e).round(2), e[:soft_reason] ? 1 : 0, -e[:offer].finish_date.to_i ] }
     end
 
+    # Mínima inalcançável (pedido do usuário em 15/11/2026): nem o preço cheio, sem promoção, atinge a margem mínima. A regra
+    # continua sendo chegar o mais perto possível da mínima: vale a oferta de maior margem.
+    def min_unreachable?
+      return false if @cost.nil? || @rules.min_pct.nil?
+
+      full = base((@rules.price_cap || @rules.current_price).to_f)
+      !full.nil? && rule_margin(full) < @rules.min_pct - 0.0101
+    end
+
+    def full_price_margin
+      full = base((@rules.price_cap || @rules.current_price).to_f)
+      full && rule_margin(full)&.round(2)
+    end
+
+    # A oferta mais perto da mínima quando ela é inalcançável: a de maior margem entre as que só ferem a mínima (ou cabem),
+    # campanhas do ML primeiro e, sem nenhuma, o desconto próprio. :soft_reason = a regra de aumento, se ela subir o preço.
+    def closest_to_min(offers)
+      candidates = offers.uniq.select { |o| PRICE_TYPES.include?(o.promotion_type) && o.status != "pending" && o.promotion_type != "SELLER_CAMPAIGN" }
+      evaluated = candidates.map { |o| evaluate_offer(o, relaxed: true) }
+                            .select { |e| e[:margin_pct] && (e[:valid] || e[:reason] == "abaixo da margem mínima") }
+      ml = evaluated.reject { |e| e[:offer].promotion_type == "PRICE_DISCOUNT" }
+      pick = (ml.presence || evaluated).max_by { |e| [ rule_margin(e).to_f.round(2), -e[:offer].finish_date.to_i ] }
+      pick && pick.merge(soft_reason: increase_reason(pick[:price].to_f))
+    end
+
     private
 
     # A regra de limite que o resultado fere (margem, valor, preço cheio), ou nil.

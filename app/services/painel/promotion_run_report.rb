@@ -73,7 +73,7 @@ module Painel
       lines << "#{plural.(adjusted, sim ? 'ajustaria' : 'ajustou', sim ? 'ajustariam' : 'ajustaram')} o preço na promoção atual." if adjusted.positive?
       scheduled = ok.size - now.size
       lines << "#{plural.(scheduled, sim ? 'ficaria programado' : 'ficou programado', sim ? 'ficariam programados' : 'ficaram programados')} para entrar quando a promoção atual acabar." if scheduled.positive?
-      rest = [ [ "sem_mudanca", "sem mudança (já na melhor oferta)" ], [ "revisar", "para revisar" ],
+      rest = [ [ "sem_mudanca", "sem mudança (já na melhor oferta)" ], [ "revisar", "para revisar" ], [ "inalcancavel", "com mínima inalcançável (na oferta mais perto dela)" ],
                [ "automacao_desligada", "com automação desligada" ], [ "catalogo_fora", "de catálogo fora da automação" ],
                [ "regra_propria", "com regra própria" ] ]
         .filter_map { |k, label| t[k].to_i.positive? ? "#{t[k]} #{label}" : nil }

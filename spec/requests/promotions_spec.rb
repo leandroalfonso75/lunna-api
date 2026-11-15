@@ -139,7 +139,7 @@ RSpec.describe "/api/promotions", type: :request do
   end
 
   it "Para revisar mostra a rodada em que o anúncio entrou e ordena da mais recente para a mais antiga (ou ao contrário)" do
-    company.update!(min_margin_pct: 40)
+    company.update!(min_margin_pct: 24) # o preço cheio dá 25%: a mínima é alcançável, mas nenhuma oferta chega nela
     run = ->(at) { account.ml_promotion_runs.create!(mode: "apply", trigger: "agendada", started_at: at, finished_at: at + 2.minutes, status: "done") }
     revisar = ->(r, id) { account.ml_promotion_actions.create!(run: r, item_id: id, kind: "revisar", source: "rotina", ok: true) }
     r1 = run.(3.days.ago)
@@ -164,7 +164,7 @@ RSpec.describe "/api/promotions", type: :request do
   end
 
   it "anúncio em que nenhuma oferta cabe nas regras vai para revisar, com a regra que barrou" do
-    company.update!(min_margin_pct: 40)
+    company.update!(min_margin_pct: 24) # o preço cheio dá 25%: a mínima é alcançável, mas nenhuma oferta chega nela
 
     get "/api/promotions", params: { account_id: account.id, status: "para_revisar" }, headers: auth_headers(member)
 
@@ -172,7 +172,7 @@ RSpec.describe "/api/promotions", type: :request do
     expect(row["status"]["key"]).to eq("para_revisar")
     expect(row["review"]["label"]).to eq("abaixo da margem mínima")
     expect(row["review"]["blocked_best"]).to include("name" => "Evento", "reason" => "abaixo da margem mínima")
-    expect(row["review"]["blocked_best"]["shortfall"]).to include("mínima 40.0%")
+    expect(row["review"]["blocked_best"]["shortfall"]).to include("mínima 24.0%")
     expect(row["review"]["suggested"]).to include("field" => "min_margin_pct")
     expect(json["counts"]["para_revisar"]).to be >= 1
 
