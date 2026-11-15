@@ -263,3 +263,13 @@ da última vez nesse preço). Vale para todos os anúncios (regra do usuário). 
   de preço, custo, oferta ou regra depois da última rodada).
 - A guia abre ordenada por essa rodada, da mais recente para a mais antiga (`sort=review_round`, `dir=desc`); clicar em
   "Situação · rodada" inverte para crescente.
+
+## Status "Programado" (15/11/2026, pedido do usuário)
+- Anúncio em que nenhuma oferta cabe hoje, mas a automação já programou a troca para quando a promoção atual acabar (ação
+  `agendar` com `ok` e `effective_at` no futuro), sai de "Para revisar" e vai para a guia **Programado**, com a promoção,
+  o preço e a data da troca (`row[:scheduled]`, `Painel::PromotionsQuery#scheduled_by_item`). O card "Para revisar" conta
+  só os que precisam de decisão e diz quantos já estão programados.
+- A rotina trata "programado" como antes (`PromotionRoutine`: confere de novo a cabível; se a troca já está marcada, pula).
+- Em 15/11/2026: 101 anúncios antes em "Para revisar" → 28 para revisar e 73 programados (Black Friday até 01/12).
+- Próximas ideias aprovadas para avaliar depois: "Mínima inalcançável" (nem o preço cheio atinge a mínima), respeitar a
+  trava do "preço não crível" do ML e permitir aumento de preço só para voltar à margem mínima.

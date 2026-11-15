@@ -87,7 +87,7 @@ module Painel
       if ev[:current] && (ev[:evaluated] || []).any? { |e| e[:as_is] && e[:offer].status == "pending" }
         return skip(run, ev, "sem_mudanca", "já tem promoção programada para começar depois; a atual segue até lá")
       end
-      if status == "para_revisar"
+      if %w[para_revisar programado].include?(status) # programado: a troca já marcada é conferida de novo em fitting
         fit = fitting_for(ev)
         return fitting(run, ev, fit) if fit && setting&.rules_note.blank?
 

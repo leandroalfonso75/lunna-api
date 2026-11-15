@@ -11,7 +11,10 @@ module Painel
       "trocar" => [ "Trocar por melhor", "warn" ], "acima_maxima" => [ "Acima da máxima", "warn" ],
       "sem_promocao" => [ "Sem promoção", "warn" ],
       "ok" => [ "Na melhor", "ok" ], "abaixo_minima" => [ "Abaixo da mínima", "bad" ],
-      "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ]
+      "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ],
+      # nenhuma oferta cabe hoje, mas a automação já programou a troca para quando a promoção atual acabar: não precisa de
+      # revisão (pedido do usuário em 15/11/2026)
+      "programado" => [ "Programado", "ok" ]
     }.freeze
     GAIN_EPSILON = 0.01
 
@@ -170,8 +173,18 @@ module Painel
         ads: ads_per_unit(items.map(&:item_id)),
         offers: offers_by_item(items.map(&:item_id)),
         sales: ItemMetric.where(item_id: items.map(&:item_id)).pluck(:item_id, :units_30d).to_h,
-        synced_with_catalog: synced_with_catalog
+        synced_with_catalog: synced_with_catalog,
+        scheduled: scheduled_by_item(items.map(&:item_id))
       }
+    end
+
+    # Troca já programada pela automação (ação "agendar" que deu certo e ainda não chegou a hora), a mais recente por anúncio.
+    def scheduled_by_item(ids)
+      @account.ml_promotion_actions.where(item_id: ids, kind: "agendar", ok: true).where("effective_at > ?", Time.current)
+              .order(:created_at).each_with_object({}) do |a, h|
+        h[a.item_id] = { effective_at: a.effective_at, name: a.to_name, type: a.to_type, price: a.to_price&.to_f,
+                         margin_pct: a.to_margin_pct&.to_f, label: PromotionEvaluator::TYPE_LABELS.fetch(a.to_type, a.to_type) }
+      end
     end
 
     CATALOG_STATES = { "winning" => "ganhando", "sharing_first_place" => "compartilhando", "competing" => "perdendo",
@@ -328,7 +341,8 @@ module Painel
           effective_min_pct: (setting&.min_margin_pct || @company.min_margin_pct).to_f,
           effective_max_pct: (setting&.max_margin_pct || @company.max_margin_pct)&.to_f
         },
-        status: status_label(status_key(cost, current, best, evaluator)),
+        status: status_label(status_key(cost, current, best, evaluator, ctx[:scheduled]&.dig(item.item_id))),
+        scheduled: ctx[:scheduled]&.dig(item.item_id),
         review: review_for(cost, current, best, evaluated, evaluator),
         notes: setting&.rules_note.presence,
         # "não automatizar promoções neste anúncio": a rotina e o lote não mexem; a melhor oferta segue sugerida
@@ -337,9 +351,9 @@ module Painel
       [ row, evaluated ]
     end
 
-    def status_key(cost, current, best, evaluator)
+    def status_key(cost, current, best, evaluator, scheduled = nil)
       return "sem_custo" if cost.nil?
-      return "para_revisar" if needs_review?(current, best, evaluator)
+      return (scheduled ? "programado" : "para_revisar") if needs_review?(current, best, evaluator)
       return "sem_promocao" if current.nil?
       return "acima_maxima" if current[:reason] == "acima da margem máxima"
       return "abaixo_minima" unless current[:valid]
@@ -488,6 +502,7 @@ module Painel
         switch_gain: rows.sum { |r| r[:status][:key] == "trocar" ? r[:gain].to_f : 0.0 }.round(2),
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
         to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !r[:manual] },
+        scheduled: rows.count { |r| r[:status][:key] == "programado" },
         without_cost: rows.count { |r| r[:status][:key] == "sem_custo" }
       }
     end
@@ -505,7 +520,7 @@ module Painel
 
     # --- agrupamento por produto (variações) ---
 
-    STATUS_PRIORITY = %w[para_revisar abaixo_minima trocar acima_maxima sem_promocao sem_custo ok].freeze
+    STATUS_PRIORITY = %w[para_revisar abaixo_minima trocar acima_maxima sem_promocao sem_custo programado ok].freeze
 
     def group_rows(rows)
       skus = rows.map { |r| r[:sku] }.compact_blank.uniq

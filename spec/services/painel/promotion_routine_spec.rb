@@ -141,6 +141,14 @@ RSpec.describe Painel::PromotionRoutine do
 
     # a rodada seguinte não programa de novo
     expect { described_class.call(account, mode: "apply", trigger: "agendada") }.not_to have_enqueued_job(Ml::PromotionsApplyJob)
+
+    # na tela: sai de "Para revisar" e vai para "Programado", com a troca marcada (pedido do usuário em 15/11/2026)
+    list = Painel::PromotionsQuery.call(account, {})
+    row = list[:items].flat_map { |r| r[:group] ? r[:children] : [ r ] }.find { |r| r[:item_id] == item.item_id }
+    expect(row[:status]).to include(key: "programado", label: "Programado")
+    expect(row[:scheduled]).to include(type: "PRICE_DISCOUNT", effective_at: be_within(1.second).of(finish + 5.minutes))
+    expect(list[:counts]).to include("programado" => 1, "para_revisar" => 0)
+    expect(list[:summary]).to include(scheduled: 1, to_review: 0)
   end
 
   it "simulação não conta como programada: a rodada real programa a cabível mesmo depois de uma simulação" do
