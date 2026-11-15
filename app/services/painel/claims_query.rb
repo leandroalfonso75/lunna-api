@@ -27,7 +27,10 @@ module Painel
       "send_message_to_complainant" => "Mandar mensagem ao comprador", "send_message_to_mediator" => "Mandar mensagem ao mediador",
       "refund" => "Reembolsar o comprador", "open_dispute" => "Pedir mediação do Mercado Livre", "allow_return" => "Permitir devolução",
       "send_potential_shipping" => "Informar envio", "add_shipping_evidence" => "Enviar comprovante de envio",
-      "send_attachments" => "Enviar anexos", "partial_refund" => "Reembolso parcial"
+      "send_attachments" => "Enviar anexos", "partial_refund" => "Reembolso parcial",
+      # item em falta (o vendedor combinou enviar a peça que faltou): confirmar no ML depois de despachar (15/11/2026)
+      "confirm_shortage_shipment_shipped" => "Confirmar que enviou o item em falta",
+      "confirm_shortage_shipment_not_shipped" => "Informar que não vai enviar o item em falta"
     }.freeze
     SELLER_ROLES = %w[seller respondent].freeze
 
