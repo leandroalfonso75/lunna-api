@@ -209,6 +209,25 @@ RSpec.describe "/api/claims", type: :request do
       expect(account.ml_claims.find_by(claim_id: 1).action_responsible).to eq("complainant")
     end
 
+    it "Já respondi no Mercado Livre: sai de A atender mesmo com o ML ainda apontando o vendedor; volta com mensagem nova" do
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({}) # o ML continua com o vendedor como responsável
+      claim = account.ml_claims.find_by(claim_id: 1)
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(true)
+
+      post "/api/claims/1/refresh", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["to_attend"]).to be(false)
+      get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).not_to include(1)
+
+      # mensagem nova do mediador depois do clique: volta para A atender
+      claim.reload.update!(messages: [ { "sender_role" => "mediator", "date_created" => 1.minute.from_now.iso8601, "message" => "Nova" } ])
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(true)
+      # mensagem do próprio vendedor não traz de volta
+      claim.update!(attended_at: 2.minutes.from_now, messages: claim.messages + [ { "sender_role" => "respondent", "date_created" => 3.minutes.from_now.iso8601 } ])
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(false)
+    end
+
     it "resolve pelo Lunna só com as ações que o ML libera, com confirmação, e registra" do
       refund = stub_request(:post, "#{base}/1/expected-resolutions/refund").to_return(status: 200, body: [ { expected_resolution: "refund" } ].to_json)
       allow(Ml::OAuth).to receive(:refresh!)

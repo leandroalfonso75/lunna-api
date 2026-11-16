@@ -118,6 +118,8 @@ class ClaimsController < ApplicationController
     return render_errors([ "Reclamação não encontrada." ], status: :not_found) unless claim
 
     Ml::ClaimRefreshJob.schedule(Current.account, claim.claim_id)
+    # "Já respondi no Mercado Livre": sai de A atender na hora (volta se chegar mensagem nova do ML ou do comprador)
+    claim.update_columns(attended_at: Time.current)
     render json: { ok: true, to_attend: Painel::ClaimsQuery.to_attend?(claim), claim: Painel::ClaimsQuery.detail(Current.account, claim.claim_id) }
   end
 

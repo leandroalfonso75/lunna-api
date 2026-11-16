@@ -56,9 +56,21 @@ module Painel
     # passa o responsável para o comprador e ela sai de A atender; as abertas são relidas a cada 15 minutos.
     # 10/11/2026: até aqui também exigia ação liberada ao vendedor; reclamação recém-aberta (sem ações ainda na lista do
     # ML) ficava de fora (#2000015809880991).
+    # 16/11/2026: "Já respondi no Mercado Livre" marca attended_at e a reclamação sai daqui na hora; volta só se chegar
+    # mensagem nova do ML ou do comprador depois do clique (pedido do usuário).
     def self.to_attend?(claim)
       claim.status == "opened" &&
-        (SELLER_ROLES.include?(claim.action_responsible.to_s) || seller_actions(claim).any? { |a| a["mandatory"] })
+        (SELLER_ROLES.include?(claim.action_responsible.to_s) || seller_actions(claim).any? { |a| a["mandatory"] }) &&
+        !attended?(claim)
+    end
+
+    def self.attended?(claim)
+      at = claim.try(:attended_at)
+      return false if at.nil?
+
+      Array(claim.messages).none? do |m|
+        !SELLER_ROLES.include?(m["sender_role"].to_s) && (Time.zone.parse(m["date_created"].to_s) rescue nil).to_i > at.to_i
+      end
     end
 
     def self.list(account, params) = new(account, params).list

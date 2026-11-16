@@ -220,3 +220,10 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   em 5 minutos já confere de novo; a rodada diária (5h) confere pelo envio, pelo Olist e pelo lote e marca
   `return_invoice_confirmed_check_at`. Se a nota não for achada nela, volta para SEM NOTA com o aviso "marcada como
   emitida, mas não encontrada". Não envia nada ao ML.
+
+## "Já respondi no Mercado Livre" tira de A atender (16/11/2026)
+
+- O botão relê a reclamação e marca `ml_claims.attended_at`: ela sai de "A atender" na hora, mesmo que o ML ainda aponte o
+  vendedor como responsável (ex.: #5612146311, ação obrigatória de confirmar o envio do item em falta). Continua em
+  "Abertas". Volta para "A atender" só se chegar mensagem nova do ML ou do comprador depois do clique
+  (`Painel::ClaimsQuery.attended?`).
