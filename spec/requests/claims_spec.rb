@@ -219,6 +219,10 @@ RSpec.describe "/api/claims", type: :request do
       expect(json["to_attend"]).to be(false)
       get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
       expect(json["claims"].map { |c| c["claim_id"] }).not_to include(1)
+      before_count = json["attention"]["to_attend"]
+      expect(before_count).to eq(json["claims"].size) # o card conta o mesmo que a lista
+      get "/api/attention", params: { account_id: account.id }, headers: auth_headers(member)
+      expect(json["claims"]).to eq(before_count) # o ponto do menu também
 
       # mensagem nova do mediador depois do clique: volta para A atender
       claim.reload.update!(messages: [ { "sender_role" => "mediator", "date_created" => 1.minute.from_now.iso8601, "message" => "Nova" } ])

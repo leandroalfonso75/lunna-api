@@ -356,7 +356,7 @@ module Painel
 
     # Contadores para o botão "A atender" (sempre sobre todas as abertas, sem filtro de período).
     def attention_info
-      open = @account.ml_claims.where(status: "opened").select(:id, :status, :stage, :action_responsible, :players).to_a
+      open = @account.ml_claims.where(status: "opened").select(:id, :status, :stage, :action_responsible, :players, :attended_at, :messages).to_a
       { to_attend: open.count { |c| self.class.to_attend?(c) }, open: open.size,
         can_reply: open.count { |c| self.class.reply_targets(c).any? } }
     end
