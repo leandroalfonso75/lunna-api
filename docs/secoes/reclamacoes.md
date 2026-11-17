@@ -227,3 +227,17 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   vendedor como responsável (ex.: #5612146311, ação obrigatória de confirmar o envio do item em falta). Continua em
   "Abertas". Volta para "A atender" só se chegar mensagem nova do ML ou do comprador depois do clique
   (`Painel::ClaimsQuery.attended?`).
+
+## Contestação com IA lendo o caso inteiro (17/11/2026, pedido do usuário)
+
+- O texto-modelo por grupo era genérico (ex.: tratava "a ponta do secador derreteu no uso" como dano de transporte do
+  Full). Agora a IA (`Ai::ClaimContestDraft`, chave da OpenRouter da empresa) lê o caso inteiro (`ClaimContest#case_text`):
+  motivo, situação no ML, venda/produto/envio, soluções esperadas, provas do Lunna, todas as mensagens em ordem (o relato
+  do comprador vem no resumo do assistente do ML) e as contestações já aceitas pelo ML como referência.
+- Escolhe o argumento que combina com o relato (garantia do fabricante e solução rápida para defeito no uso; Full só
+  para dano na entrega, item trocado ou peça faltando; produto não devolvido; decisão do ML etc.), só com fatos dos
+  dados, e devolve também o argumento, o que anexar no ML e os pontos fracos (`ml_claim_contests.ai_*`).
+- Tela (Contestar): o texto da IA vira o sugerido, com "Refazer com IA" (`POST /api/claims/:id/contest/ai`); o texto
+  padrão continua em "Usar o texto padrão". Nada é enviado ao ML.
+- `Ml::ClaimContestDraftsJob` (a cada hora) escreve as pendentes que ainda não têm texto da IA ou cuja reclamação mudou.
+  Em 17/11/2026 as 12 pendentes foram reescritas.

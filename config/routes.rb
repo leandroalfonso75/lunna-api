@@ -108,6 +108,7 @@ Rails.application.routes.draw do
     get "claims/returns", to: "claims#returns"
     get "claims/contests", to: "claims#contests"
     patch "claims/:id/contest", to: "claims#contest"
+    post "claims/:id/contest/ai", to: "claims#contest_ai"
     get "claims/:id", to: "claims#show"
     post "claims/:id/resolve", to: "claims#resolve"
     get "claims/:id/partial_refund_offers", to: "claims#partial_refund_offers"

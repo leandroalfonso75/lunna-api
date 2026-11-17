@@ -15,6 +15,10 @@ production: &default
   full_replenishment:
     class: Ml::FullReplenishmentJob
     schedule: every 6 hours
+  # Contestações de reclamações escritas com IA a partir do caso inteiro (17/11/2026)
+  claim_contest_drafts:
+    class: Ml::ClaimContestDraftsJob
+    schedule: every hour
   # Notas de devolução do Full em lote (vendas antigas que a consulta por envio não acha), uma vez por dia
   return_invoices_archive:
     class: Ml::ReturnInvoicesArchiveJob

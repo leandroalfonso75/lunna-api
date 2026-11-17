@@ -17,6 +17,17 @@ class ClaimsController < ApplicationController
     render json: Painel::ClaimContest.list(Current.account)
   end
 
+  # POST /api/claims/:id/contest/ai → refaz a contestação com IA lendo o caso inteiro (17/11/2026). Não envia nada ao ML.
+  def contest_ai
+    Painel::ClaimContest.generate!(Current.account, params[:id].to_i)
+    row = Painel::ClaimContest.list(Current.account)[:claims].find { |r| r[:claim_id] == params[:id].to_i }
+    render json: { ok: true, claim: row }
+  rescue Ai::JsonChat::Error, Faraday::Error => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Reclamação não encontrada." ], status: :not_found)
+  end
+
   # Andamento da contestação (feita pelo vendedor no ML): status e o texto usado. Não envia nada ao ML.
   def contest
     claim = Current.account.ml_claims.find_by!(claim_id: params[:id].to_i)

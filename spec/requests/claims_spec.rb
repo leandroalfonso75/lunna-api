@@ -344,6 +344,33 @@ RSpec.describe "/api/claims", type: :request do
       expect(json["summary"]).to include("total" => 4, "due_7d" => 1)
     end
 
+    it "refaz a contestação com IA lendo o caso inteiro (relato e mensagens) e usa esse texto como sugerido" do
+      company.update!(openrouter_api_key: "sk-or")
+      account.ml_claims.find_by(claim_id: 1).update!(messages: [
+        { "sender_role" => "mediator", "date_created" => 9.days.ago.iso8601, "message" => "A compradora informou que, **no primeiro uso, a ponta derreteu**." },
+        { "sender_role" => "respondent", "date_created" => 8.days.ago.iso8601, "message" => "Devolução com reembolso total" } ])
+      ai = stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+        .with { |req| req.body.include?("ponta derreteu") && req.body.include?("Devolução com reembolso total") }
+        .to_return(status: 200, body: { choices: [ { message: { content: {
+          text: "Olá. Reclamação 1, venda #10: o relato aponta defeito de uso, resolvido no primeiro contato.",
+          argument: "Resolvido no primeiro contato", attach: [ "Foto do produto devolvido" ], weak_points: [ "Sem laudo" ] }.to_json } } ] }.to_json)
+
+      post "/api/claims/1/contest/ai", params: { account_id: account.id }, headers: auth_headers(member)
+
+      expect(response).to have_http_status(:ok)
+      expect(ai).to have_been_requested.once
+      row = json["claim"]
+      expect(row["draft"]).to start_with("Olá. Reclamação 1")
+      expect(row["generic_draft"]).to include("Solicito a revisão da reclamação 1") # o texto-modelo continua disponível
+      expect(row["ai"]).to include("argument" => "Resolvido no primeiro contato", "attach" => [ "Foto do produto devolvido" ], "weak_points" => [ "Sem laudo" ])
+      expect(account.ml_claim_contests.find_by(claim_id: 1)).to have_attributes(status: "pendente")
+
+      # a rotina escreve as que faltam (as outras 3 pendentes) e não refaz a que já tem texto
+      stub_request(:post, "https://openrouter.ai/api/v1/chat/completions")
+        .to_return(status: 200, body: { choices: [ { message: { content: { text: "Olá. Outra.", argument: "x" }.to_json } } ] }.to_json)
+      expect(Painel::ClaimContest.generate_missing!(account)).to eq(3)
+    end
+
     it "usa o texto de uma contestação aceita como modelo das pendentes do mesmo motivo" do
       claim(7, details_synced_at: Time.current, affects_reputation: true, status: "closed", date_created: 5.days.ago,
                reason: { "name" => "different_than_published" }, devolution: { "status" => "delivered" })

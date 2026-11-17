@@ -40,6 +40,18 @@ module Painel
     }.freeze
 
     def self.list(account) = new(account).list
+    def self.generate!(account, claim_id) = new(account).generate!(claim_id)
+
+    # Contestações pendentes sem texto da IA (ou com a reclamação mudada depois dele): gera até `limit` por vez.
+    def self.generate_missing!(account, limit: 8)
+      rows = list(account)[:claims].select { |r| r[:contest][:status] == "pendente" }
+      claims = account.ml_claims.where(claim_id: rows.map { |r| r[:claim_id] }).index_by(&:claim_id)
+      todo = rows.select do |r|
+        gen = r.dig(:ai, :generated_at)
+        gen.nil? || (claims[r[:claim_id]]&.last_updated && claims[r[:claim_id]].last_updated > gen)
+      end
+      todo.first(limit).count { |r| (generate!(account, r[:claim_id]) rescue nil).present? }
+    end
 
     def initialize(account)
       @account = account
@@ -66,7 +78,54 @@ module Painel
                    by_status: rows.group_by { |r| r[:contest][:status] }.transform_values(&:size) } }
     end
 
+    # Contestação com IA (pedido do usuário em 17/11/2026): lê o caso inteiro e guarda o texto em ml_claim_contests (ai_*).
+    def generate!(claim_id)
+      c = @account.ml_claims.find_by!(claim_id: claim_id)
+      order = load_orders([ c ])[c.claim_id]
+      items = order ? MlOrderItem.where(order_id: order.order_id).group_by(&:order_id) : {}
+      record = @account.ml_claim_contests.find_or_initialize_by(claim_id: c.claim_id)
+      row = build(c, order, items, nil)
+      result = Ai::ClaimContestDraft.call(@account.company, case_text(c, row))
+      record.update!(ai_text: result[:text], ai_notes: result.except(:text), ai_generated_at: Time.current, ai_error: nil)
+      result
+    rescue Ai::JsonChat::Error, Faraday::Error => e
+      record&.update!(ai_error: e.message.to_s.first(250)) if record&.persisted? || record&.valid?
+      raise
+    end
+
     private
+
+    # O caso inteiro, em texto, para a IA: dados da reclamação e da venda, provas, devolução, resolução, o relato e todas
+    # as mensagens em ordem, e contestações aceitas do mesmo grupo como referência do que funcionou.
+    def case_text(c, row)
+      clean = ->(t) { ActionView::Base.full_sanitizer.sanitize(t.to_s).gsub("**", "").squish }
+      msgs = Array(c.messages).sort_by { |m| m["date_created"].to_s }.map do |m|
+        files = Array(m["attachments"]).size
+        "[#{d(m['date_created'])} #{who(m['sender_role'])}] #{clean.(m['message']).first(1500)}#{files.positive? ? " (#{files} anexo(s))" : ''}"
+      end
+      transcript = msgs.join("
+")
+      transcript = transcript.last(9000) if transcript.length > 9000
+      examples = @account.ml_claim_contests.where(status: "aceita").where.not(text: [ nil, "" ]).order(contested_at: :desc).limit(2).pluck(:text)
+      <<~TXT
+        Reclamação #{c.claim_id} (#{c.claim_type} · etapa #{c.stage} · situação #{c.status}), aberta em #{d(c.date_created)}.
+        Afeta a reputação: #{c.affects_reputation ? 'sim' : 'não'}. Prazo para contestar: #{d(row[:deadline])}.
+        Motivo: #{reason_text(c)} (código #{c.reason&.dig('name') || c.reason_id}). Atenção: "#{c.reason_detail}" é só o nome do grupo de motivos do ML (ex.: "Chegou bem" = o produto foi entregue), não uma afirmação de que chegou sem problema.
+        Situação no ML: #{c.detail_title.presence || '—'} — #{clean.(c.detail_description).presence || '—'}#{c.detail_problem.present? ? " · problema: #{c.detail_problem}" : ''}.
+        Venda: #{row[:order_id] ? "##{row[:order_id]}" : '—'} · produto: #{row[:title] || '—'} · SKU #{row[:sku] || '—'} · envio: #{row[:logistic] || '—'}.
+        Soluções esperadas: #{Array(c.expected_resolutions).map { |e| [ e['expected_resolution'], e['status'], e['player_role'] ].compact.join('/') }.join('; ').presence || '—'}.
+        Grupo sugerido pelo Lunna: #{row[:group_label]} (argumento #{row[:strength]}).
+        Provas reunidas pelo Lunna:
+        #{row[:evidence].map { |e| "- #{e}" }.join("
+")}
+        Mensagens da reclamação (em ordem; o assistente do ML resume o relato do comprador):
+        #{transcript.presence || '(sem mensagens)'}
+        #{examples.any? ? "Contestações deste vendedor que o ML ACEITOU (referência de tom e argumento; não copie fatos):
+#{examples.map { |t| "---
+#{t.first(1200)}" }.join("
+")}" : ''}
+      TXT
+    end
 
     # Aprende com o que deu certo (pedido do usuário em 04/11/2026): o texto de uma contestação ACEITA pelo ML vira o
     # modelo das pendentes do MESMO grupo e motivo (outro grupo não: o texto traz fatos do caso, como "venda pelo Full"),
@@ -78,6 +137,7 @@ module Painel
 
       rows.each do |r|
         next unless r[:contest][:status] == "pendente"
+        next if r[:ai] # a contestação da IA já lê o caso inteiro e usa as aceitas como referência
 
         src = accepted.find { |a| a[:group] == r[:group] && a[:reason_code] == r[:reason_code] }
         next unless src
@@ -154,7 +214,11 @@ module Painel
         reason: reason_text(c), reason_code: c.reason&.dig("name"),
         order_id: order&.order_id, sku: line&.sku, title: line&.title, logistic: LOGISTICS[logistic] || logistic,
         open_with_mediator: c.status == "opened" && ClaimsQuery.reply_targets(c).include?("mediator"),
-        evidence: facts[:evidence], draft: draft(group, c, facts), traits: facts[:traits],
+        evidence: facts[:evidence], draft: contest&.ai_text.presence || draft(group, c, facts), traits: facts[:traits],
+        generic_draft: contest&.ai_text.present? ? draft(group, c, facts) : nil,
+        ai: contest&.ai_generated_at ? { generated_at: contest.ai_generated_at, argument: contest.ai_notes["argument"],
+                                         attach: Array(contest.ai_notes["attach"]), weak_points: Array(contest.ai_notes["weak_points"]) } : nil,
+        ai_error: contest&.ai_error,
         contest: contest ? { status: contest.status, text: contest.text, contested_at: contest.contested_at, user: contest.user&.name }
                          : { status: "pendente", text: nil, contested_at: nil, user: nil },
         link: order ? "https://www.mercadolivre.com.br/vendas/#{order.order_id}/detalhe" : nil
