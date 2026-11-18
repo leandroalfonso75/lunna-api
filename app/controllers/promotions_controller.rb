@@ -12,6 +12,9 @@
 # POST /api/promotions/apply_best?account_id= (admin) → aplica a melhor oferta em vários anúncios (item_ids), em fila.
 # PATCH /api/promotions/items/:item_id/automation?account_id= (admin) → "não automatizar promoções neste anúncio"
 #   (enabled: false) ou volta a automatizar; apply_to_sku / apply_to_variations levam aos outros anúncios do produto.
+# PATCH /api/promotions/items/:item_id/review_dismissed?account_id= (admin) → "Ciente, nada a ser feito": tira o anúncio
+#   de "Para revisar" (dismissed: false desfaz). Aplicar, sair ou mudar os limites de um anúncio em "Para revisar" também
+#   o tira da guia na hora.
 # GET /api/promotions/actions?account_id= → histórico das ações nas promoções.
 # GET /api/promotions/runs?account_id= → execuções da rotina das 03:00 (e simulações manuais), com os totais.
 # POST /api/promotions/runs?account_id= (admin) → "Simular agora": roda a rotina em simulação, em fila.
@@ -20,7 +23,7 @@
 class PromotionsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: %i[update_settings update_automation sync apply leave apply_best simulate dismiss_catalog_check]
+  before_action :require_admin!, only: %i[update_settings update_automation update_review_dismissed sync apply leave apply_best simulate dismiss_catalog_check]
   MAX_BATCH = 300
 
   def index
@@ -35,7 +38,7 @@ class PromotionsController < ApplicationController
 
   def update_settings
     Painel::PromotionSettings.update(Current.account, params[:item_id], settings_params, Current.user)
-    render json: Painel::PromotionsQuery.detail(Current.account, params[:item_id])
+    render json: dismiss_if_reviewing(Painel::PromotionsQuery.detail(Current.account, params[:item_id]))
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Anúncio não encontrado." ], status: :not_found)
   rescue ActiveRecord::RecordInvalid => e
@@ -47,6 +50,14 @@ class PromotionsController < ApplicationController
     ids = Painel::PromotionSettings.set_automation(Current.account, params[:item_id], bool.cast(params[:enabled]) != false, Current.user,
       sku: bool.cast(params[:apply_to_sku]), variations: bool.cast(params[:apply_to_variations]))
     render json: Painel::PromotionsQuery.detail(Current.account, params[:item_id]).merge(updated: ids.size)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Anúncio não encontrado." ], status: :not_found)
+  end
+
+  def update_review_dismissed
+    dismissed = ActiveModel::Type::Boolean.new.cast(params[:dismissed]) != false
+    Painel::PromotionSettings.set_review_dismissed(Current.account, params[:item_id], dismissed, Current.user)
+    render json: Painel::PromotionsQuery.detail(Current.account, params[:item_id])
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Anúncio não encontrado." ], status: :not_found)
   end
@@ -148,7 +159,18 @@ class PromotionsController < ApplicationController
   private
 
   def action_response(result)
-    { ok: result.ok, message: result.message, item: Painel::PromotionsQuery.detail(Current.account, params[:item_id]) }
+    item = Painel::PromotionsQuery.detail(Current.account, params[:item_id])
+    item = dismiss_if_reviewing(item) if result.ok
+    { ok: result.ok, message: result.message, item: item }
+  end
+
+  # Qualquer ação que deu certo num anúncio de "Para revisar" (aplicar mesmo assim, a cabível, outro valor, sair, mudar os
+  # limites) o tira da guia na hora, mesmo que ele continue fora das regras (pedido do usuário em 18/11/2026).
+  def dismiss_if_reviewing(item)
+    return item unless item.dig(:status, :key) == "para_revisar" && !item[:review_dismissed]
+
+    Painel::PromotionSettings.set_review_dismissed(Current.account, params[:item_id], true, Current.user)
+    item.merge(review_dismissed: true)
   end
 
   def settings_params

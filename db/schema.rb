@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_17_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_18_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -792,7 +792,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_020000) do
     t.decimal "max_price", precision: 12, scale: 2
     t.boolean "apply_to_variations", default: false, null: false
     t.text "rules_note"
+    t.datetime "review_dismissed_at"
+    t.uuid "review_dismissed_by_id"
     t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_settings_unique", unique: true
+    t.index ["review_dismissed_by_id"], name: "index_ml_promotion_settings_on_review_dismissed_by_id"
     t.index ["updated_by_id"], name: "index_ml_promotion_settings_on_updated_by_id"
   end
 
@@ -1313,6 +1316,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_020000) do
   add_foreign_key "ml_promotion_runs", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_runs", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_settings", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_settings", "users", column: "review_dismissed_by_id", on_delete: :nullify
   add_foreign_key "ml_promotion_settings", "users", column: "updated_by_id", on_delete: :nullify
   add_foreign_key "ml_promotions", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_sync_runs", "ml_accounts", on_delete: :cascade

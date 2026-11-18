@@ -123,6 +123,7 @@ Rails.application.routes.draw do
     get "promotions/items/:item_id", to: "promotions#show", as: :promotion_item
     patch "promotions/items/:item_id/settings", to: "promotions#update_settings"
     patch "promotions/items/:item_id/automation", to: "promotions#update_automation"
+    patch "promotions/items/:item_id/review_dismissed", to: "promotions#update_review_dismissed"
     post "promotions/items/:item_id/apply", to: "promotions#apply"
     post "promotions/items/:item_id/leave", to: "promotions#leave"
     post "promotions/apply_best", to: "promotions#apply_best"

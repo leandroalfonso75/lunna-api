@@ -42,10 +42,13 @@ module Painel
     # dentro; anúncio sem pai fica numa linha própria. Contagens, resumo e filtros são por anúncio; a paginação, por linha.
     def call
       rows = build_rows(items_scope.to_a)
+      expire_review_dismissals!(rows)
       attach_review_rounds!(rows)
-      # "Para revisar" não conta os anúncios marcados para não automatizar (quem não automatiza não precisa revisar)
-      counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k && !(k == "para_revisar" && r[:manual]) } }
+      # "Para revisar" não conta os anúncios marcados para não automatizar (quem não automatiza não precisa revisar) nem
+      # os marcados "Ciente, nada a ser feito"
+      counts = STATUSES.keys.index_with { |k| rows.count { |r| r[:status][:key] == k && !(k == "para_revisar" && review_hidden?(r)) } }
       counts["nao_automatizados"] = rows.count { |r| r[:manual] }
+      counts["revisar_ciente"] = rows.count { |r| r[:status][:key] == "para_revisar" && r[:review_dismissed] && !r[:manual] }
       counts["catalogo"] = rows.count { |r| r[:catalog] }
       counts["catalogo_perdendo"] = rows.count { |r| r.dig(:catalog_info, :state) == "perdendo" }
       top = group_rows(rows)
@@ -349,7 +352,9 @@ module Painel
         review: review_for(cost, current, best, evaluated, evaluator),
         notes: setting&.rules_note.presence,
         # "não automatizar promoções neste anúncio": a rotina e o lote não mexem; a melhor oferta segue sugerida
-        manual: setting.present? && !setting.automation_enabled
+        manual: setting.present? && !setting.automation_enabled,
+        # "Ciente, nada a ser feito" (18/11/2026): fora da guia "Para revisar" enquanto o anúncio seguir nela
+        review_dismissed: setting&.review_dismissed_at.present? || false
       }
       [ row, evaluated ]
     end
@@ -518,7 +523,7 @@ module Painel
         to_switch: rows.count { |r| r[:status][:key] == "trocar" },
         switch_gain: rows.sum { |r| r[:status][:key] == "trocar" ? r[:gain].to_f : 0.0 }.round(2),
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
-        to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !r[:manual] },
+        to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !review_hidden?(r) },
         scheduled: rows.count { |r| r[:status][:key] == "programado" },
         unreachable: rows.count { |r| r[:status][:key] == "minima_inalcancavel" },
         without_cost: rows.count { |r| r[:status][:key] == "sem_custo" }
@@ -573,12 +578,15 @@ module Painel
     def filter(rows)
       manual_only = @params[:status].to_s == "nao_automatizados"
       catalog_only = @params[:status].to_s == "catalogo"
-      status = STATUSES.key?(@params[:status].to_s) ? @params[:status].to_s : nil
+      # "Ciente, nada a ser feito": a guia própria lista os dispensados de "Para revisar" (para desfazer)
+      dismissed_only = @params[:status].to_s == "revisar_ciente"
+      status = dismissed_only ? "para_revisar" : STATUSES.key?(@params[:status].to_s) ? @params[:status].to_s : nil
       promo_ids = @params[:promotion_id].present? ? @account.ml_promotion_offers.where(promotion_id: @params[:promotion_id]).pluck(:item_id).to_set : nil
       q = @params[:q].to_s.strip.downcase.presence
       keep = lambda do |r|
         (!manual_only || r[:manual]) && (!catalog_only || r[:catalog]) &&
           (status.nil? || r[:status][:key] == status) && !(status == "para_revisar" && r[:manual]) &&
+          (status != "para_revisar" || (dismissed_only ? r[:review_dismissed] : !r[:review_dismissed])) &&
           (promo_ids.nil? || promo_ids.include?(r[:item_id])) &&
           (q.nil? || [ r[:item_id], r[:sku], r[:title] ].compact.any? { |v| v.downcase.include?(q) })
       end
@@ -598,7 +606,7 @@ module Painel
     def sort_key
       return @params[:sort].to_s if SORTS.include?(@params[:sort].to_s)
 
-      @params[:status].to_s == "para_revisar" ? "review_round" : "gain"
+      %w[para_revisar revisar_ciente].include?(@params[:status].to_s) ? "review_round" : "gain"
     end
     def sort_dir = @params[:dir].to_s == "asc" ? "asc" : "desc"
 
@@ -656,6 +664,18 @@ module Painel
     end
 
     # Valor de ordenação: data da rodada; quem entrou depois da última rodada é o mais recente de todos.
+    # "Ciente, nada a ser feito" vale enquanto o anúncio estiver em "Para revisar": quando ele sai (aplicou uma oferta que
+    # cabe, mudou o limite, programou a troca…), a marca é apagada e, se voltar a precisar de revisão, ele reaparece.
+    def expire_review_dismissals!(rows)
+      gone = rows.select { |r| r[:review_dismissed] && r[:status][:key] != "para_revisar" }.map { |r| r[:item_id] }
+      return if gone.empty?
+
+      @account.ml_promotion_settings.where(item_id: gone).update_all(review_dismissed_at: nil, review_dismissed_by_id: nil)
+      rows.each { |r| r[:review_dismissed] = false if gone.include?(r[:item_id]) }
+    end
+
+    def review_hidden?(r) = r[:manual] || r[:review_dismissed]
+
     def review_round_value(r)
       list = r[:group] ? Array(r[:children]) : [ r ]
       list.filter_map { |x| x[:review_round] && (x[:review_round][:at] || Time.current) }.max&.to_f

@@ -54,6 +54,16 @@ module Painel
       targets.uniq
     end
 
+    # "Ciente, nada a ser feito" em "Para revisar" (pedido do usuário em 18/11/2026): tira o anúncio da guia e da contagem
+    # (dismissed: false desfaz). A marca some sozinha quando o anúncio sai de "Para revisar" (PromotionsQuery).
+    def set_review_dismissed(account, item_id, dismissed, user)
+      item = account.ml_items.find(item_id)
+      setting = account.ml_promotion_settings.find_or_initialize_by(item_id: item.item_id)
+      setting.sku ||= item.sku
+      setting.update!(review_dismissed_at: dismissed ? Time.current : nil, review_dismissed_by: dismissed ? user : nil)
+      setting
+    end
+
     # Anúncios (ativos ou pausados) das outras variações do mesmo produto: SKUs com o mesmo produto pai no Olist.
     # O anúncio equivalente em cada outra variação do produto (a mesma "versão" do anúncio em outra cor/tamanho): entre os
     # anúncios do SKU irmão, o de título mais parecido com o deste (os títulos seguem o mesmo modelo, só muda a variação).

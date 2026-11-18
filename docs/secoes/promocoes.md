@@ -283,3 +283,14 @@ da última vez nesse preço). Vale para todos os anúncios (regra do usuário). 
 - Prejuízo em qualquer oferta (margem ≤ 0, ex.: pincéis Boca Rosa): **fica como está** (decisão do usuário).
 - Na tela: mínima, margem do preço cheio e a oferta mais perto (`row[:unreachable]`); total da rotina `inalcancavel`.
 - Em 15/11/2026: "Para revisar" 28 → 14; 18 com mínima inalcançável (11 com prejuízo em qualquer oferta).
+
+## "Ciente, nada a ser feito" em Para revisar (18/11/2026, pedido do usuário)
+- Botão na guia "Para revisar" (só administradores): o anúncio sai da guia, do card e da contagem na hora
+  (`ml_promotion_settings.review_dismissed_at` / `review_dismissed_by_id`; `PATCH /api/promotions/items/:item_id/review_dismissed`,
+  `dismissed: false` desfaz). Os dispensados ficam no filtro `status=revisar_ciente` (contagem `counts.revisar_ciente`).
+- Qualquer ação que deu certo num anúncio de "Para revisar" (aplicar mesmo assim, aplicar a cabível, outro valor, sair,
+  mudar os limites) também o tira da guia na hora, mesmo que ele siga fora das regras (`PromotionsController#dismiss_if_reviewing`).
+  Ação recusada pelo ML não tira.
+- A marca vale enquanto o anúncio estiver em "Para revisar": quando ele sai (passa a caber, é programado, mínima
+  inalcançável…), `PromotionsQuery#expire_review_dismissals!` apaga a marca ao listar e, se voltar a precisar de revisão
+  depois, ele reaparece. A rotina automática não muda: continua avaliando o anúncio normalmente.

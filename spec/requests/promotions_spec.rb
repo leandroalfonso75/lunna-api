@@ -183,6 +183,47 @@ RSpec.describe "/api/promotions", type: :request do
     expect(json["counts"]["para_revisar"]).to eq(0)
   end
 
+  it "Ciente, nada a ser feito: sai de Para revisar e da contagem até o anúncio sair da revisão; dá para desfazer" do
+    company.update!(min_margin_pct: 24)
+    ids = lambda do |status|
+      get "/api/promotions", params: { account_id: account.id, status: status }, headers: auth_headers(member)
+      json["items"].map { |r| r["item_id"] }
+    end
+    expect(ids.call("para_revisar")).to include(item.item_id)
+    before_count = json["counts"]["para_revisar"]
+
+    patch "/api/promotions/items/#{item.item_id}/review_dismissed", params: { account_id: account.id }, headers: auth_headers(member)
+    expect(response).to have_http_status(:forbidden)
+
+    patch "/api/promotions/items/#{item.item_id}/review_dismissed", params: { account_id: account.id }, headers: auth_headers(admin)
+    expect(json["review_dismissed"]).to be(true)
+    expect(ids.call("para_revisar")).not_to include(item.item_id)
+    expect(json["counts"]["para_revisar"]).to eq(before_count - 1)
+    expect(json["summary"]["to_review"]).to eq(before_count - 1)
+    expect(json["counts"]["revisar_ciente"]).to eq(1)
+    expect(ids.call("revisar_ciente")).to eq([ item.item_id ])
+
+    # desfazer
+    patch "/api/promotions/items/#{item.item_id}/review_dismissed", params: { account_id: account.id, dismissed: false }, headers: auth_headers(admin)
+    expect(ids.call("para_revisar")).to include(item.item_id)
+
+    # mudar os limites de um anúncio em revisão também o tira da guia na hora, mesmo que siga fora das regras
+    patch "/api/promotions/items/#{item.item_id}/settings", params: { account_id: account.id, limit_mode: "margin", min_margin_pct: 23.5 },
+      headers: auth_headers(admin)
+    expect(json["status"]["key"]).to eq("para_revisar")
+    expect(json["review_dismissed"]).to be(true)
+    expect(ids.call("para_revisar")).not_to include(item.item_id)
+
+    # saiu da revisão (agora cabe): a marca é apagada; se voltar a precisar de revisão, reaparece
+    patch "/api/promotions/items/#{item.item_id}/settings", params: { account_id: account.id, limit_mode: "margin", min_margin_pct: 5 },
+      headers: auth_headers(admin)
+    expect(json["status"]["key"]).not_to eq("para_revisar")
+    ids.call(nil)
+    expect(account.ml_promotion_settings.find_by(item_id: item.item_id).review_dismissed_at).to be_nil
+    account.ml_promotion_settings.find_by(item_id: item.item_id).update!(min_margin_pct: nil)
+    expect(ids.call("para_revisar")).to include(item.item_id)
+  end
+
   it "variações do mesmo produto ficam agrupadas numa linha, e a nota de regras do anúncio é guardada" do
     parent = create(:olist_product, company: company, sku: "PAI", description: "Produto Pai", status: "A", kind: "V", variation_kind: "P")
     OlistProduct.where(company_id: company.id, sku: "SKU-A").update_all(parent_olist_id: parent.olist_id, variation_kind: "V")
