@@ -53,6 +53,31 @@ registra falhas de sincronização para ela; pare o serviço `jobs` se quiser o 
 
 O Postgres não expõe porta no host. Console: `docker compose exec api bin/rails console`.
 
+### Importação parada (PC suspenso ou Docker fechado)
+
+Quando os dados vêm do ambiente local, a sincronização com o Mercado Livre só acontece com o PC ligado
+e o Docker Desktop aberto. O `restart: unless-stopped` religa os containers, mas só depois que o próprio
+Docker sobe, e o Docker Desktop desta máquina está com AutoStart desligado.
+
+Incidente de 20 a 22/11/2026: o Windows suspendeu às 15:49 de 20/11 (Kernel-Power 42, motivo
+"Application API"; o timer de suspensão está em "nunca", então foi um pedido manual, tampa ou botão) e só
+acordou às 22:37 de 22/11. O último sync foi às 15:48 de 20/11. Não houve erro de token nem do Solid Queue.
+
+Para recuperar:
+
+1. Abra o Docker Desktop. Confira com `docker compose ps` que postgres, api e jobs estão `Up`. O sync de
+   5 em 5 minutos volta sozinho (veja `ml_sync_runs` ou Configurações › Contas).
+2. Reimporte vendas e Ads com os mesmos jobs dos botões de atualizar. São upserts e não apagam nada:
+
+   ```bash
+   docker compose exec jobs bin/rails runner 'a=MlAccount.active.first; Ml::SalesBackfillJob.perform_later(a.id); Ml::AdsSyncJob.perform_later(a.id)'
+   ```
+
+3. Confira a contagem de pedidos por dia (`ml_orders.date_created`) e as datas de `ml_ad_day_syncs`.
+
+Para evitar: ligue "Start Docker Desktop when you sign in" (Settings › General) e não suspenda o PC
+enquanto ele estiver rodando os jobs. Para rodar 24h, a importação deve ficar só em produção (k3s).
+
 ## Variáveis de ambiente
 
 Todas estão comentadas em [`.env.example`](.env.example).

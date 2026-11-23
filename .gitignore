@@ -20,3 +20,7 @@
 /storage/*
 !/storage/.keep
 /coverage
+
+# Rascunhos locais (scripts de console) e arquivo "nul" criado por redirecionamento no Windows
+/scratchpad/
+/nul

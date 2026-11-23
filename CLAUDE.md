@@ -38,6 +38,8 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
   contra as quedas do Ruby. Se as quedas pararem, manter; se não, suspeitar da máquina (memória/WSL2).
 - O serviço `jobs` roda `bin/jobs-watchdog`: sobe o Solid Queue e, se nenhum Worker der heartbeat por 5 minutos
   (`bin/jobs-heartbeat`), sai com erro para o Docker reiniciar (`restart: unless-stopped`).
+- Importação parada sem erro nos logs costuma ser o PC suspenso ou o Docker Desktop fechado (AutoStart desligado).
+  Foi o caso de 20 a 22/11/2026. Recuperação e reimportação estão no README, em "Importação parada".
 - Testes: `docker compose run --rm -e RAILS_ENV=test api bash -c "bin/rails db:prepare && bundle exec rspec"`.
   Nunca rode o rspec sem `RAILS_ENV=test`: ele cairia no banco de desenvolvimento.
 - Estilo: `bundle exec rubocop`.
