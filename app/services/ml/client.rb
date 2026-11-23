@@ -29,6 +29,12 @@ module Ml
       seller_custom_field attributes variations pictures video_id health date_created last_updated
     ].join(",")
 
+    # No /items/bulk os campos do item levam o prefixo `body.`, e o filtro
+    # também vale para a raiz: sem pedir `id,status_code` eles somem da resposta.
+    def self.bulk_attributes(attributes)
+      [ "id", "status_code", *attributes.split(",").map { |name| "body.#{name}" } ].join(",")
+    end
+
     def initialize(access_token:, sleeper: ->(seconds) { sleep(seconds) })
       @access_token = access_token
       @sleeper = sleeper
@@ -44,8 +50,11 @@ module Ml
       get("/users/#{seller_id}/items/search", params)
     end
 
+    # /items?ids= foi descontinuado pelo ML (migração até 25/10/2026). Cada
+    # elemento volta como { id, status_code, body } — ou { id, status_code,
+    # error } quando o item não pode ser lido (404, 403...).
     def items_multiget(ids)
-      get("/items", ids: ids.join(","), attributes: ITEM_ATTRIBUTES)
+      get("/items/bulk", ids: ids.join(","), attributes: self.class.bulk_attributes(ITEM_ATTRIBUTES))
     end
 
     def item_visits(item_id)

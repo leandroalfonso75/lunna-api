@@ -9,7 +9,7 @@ Conta fictícia: seller `430014725`, nickname `LUNNA_SHOP`.
 | oauth_token.json / oauth_token_no_refresh.json / oauth_refresh.json | POST /oauth/token |
 | users_me.json | GET /users/me |
 | items_search_scan_1.json, items_search_scan_2.json, items_search_scan_3.json | GET /users/{id}/items/search?search_type=scan |
-| items_multiget.json | GET /items?ids=…&attributes=… |
+| items_multiget.json | GET /items/bulk?ids=…&attributes=id,status_code,body.… |
 | visits_time_window.json | GET /items/{id}/visits/time_window |
 | orders_search.json | GET /orders/search |
 | item_performance.json | GET /item/{id}/performance |

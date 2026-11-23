@@ -1,6 +1,6 @@
-# Etapa 2 (SPEC 4): multiget de 20 em 20 e upsert_all de 200 em 200 em
-# ml_items. Item com code != 200 (ex.: 404 por ter sido apagado entre o scan
-# e o multiget) vira nota; os demais seguem.
+# Etapa 2 (SPEC 4): multiget (/items/bulk) de 20 em 20 e upsert_all de 200 em
+# 200 em ml_items. Item com status_code != 200 (ex.: 404 por ter sido apagado
+# entre o scan e o multiget) vira nota; os demais seguem.
 module Ml
   module Sync
     module Items
@@ -22,10 +22,10 @@ module Ml
           end
 
           entries.each_with_index do |entry, i|
-            if entry["code"] == 200
+            if entry["status_code"] == 200
               rows << Ml::ItemAttributes.from(entry["body"], account)
             else
-              notes << "item #{batch[i]}: HTTP #{entry["code"]} no multiget"
+              notes << "item #{entry["id"] || batch[i]}: HTTP #{entry["status_code"]} no multiget"
             end
           end
         end

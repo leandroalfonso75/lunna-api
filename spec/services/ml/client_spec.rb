@@ -43,21 +43,25 @@ RSpec.describe Ml::Client do
   end
 
   describe "#items_multiget" do
-    it "manda ids separados por vírgula e a lista exata de attributes da SPEC" do
+    it "usa /items/bulk com id, status_code e os attributes da SPEC prefixados com body." do
       expected_attributes = %w[
-        id title status sub_status price original_price available_quantity sold_quantity
-        listing_type_id category_id shipping catalog_listing permalink thumbnail
-        seller_custom_field attributes variations pictures video_id health date_created last_updated
+        id status_code
+        body.id body.title body.status body.sub_status body.price body.original_price
+        body.available_quantity body.sold_quantity body.listing_type_id body.category_id
+        body.shipping body.catalog_listing body.permalink body.thumbnail body.seller_custom_field
+        body.attributes body.variations body.pictures body.video_id body.health
+        body.date_created body.last_updated
       ].join(",")
 
-      stub_request(:get, "https://api.mercadolibre.com/items")
+      stub_request(:get, "https://api.mercadolibre.com/items/bulk")
         .with(query: { ids: "MLB1,MLB2", attributes: expected_attributes })
         .to_return(status: 200, body: ml_fixture("items_multiget"))
 
       result = client.items_multiget(%w[MLB1 MLB2])
 
       expect(result).to be_an(Array)
-      expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/items")
+      expect(result.first).to include("id" => "MLB1000000001", "status_code" => 200)
+      expect(WebMock).to have_requested(:get, "https://api.mercadolibre.com/items/bulk")
         .with(query: { ids: "MLB1,MLB2", attributes: expected_attributes })
     end
   end

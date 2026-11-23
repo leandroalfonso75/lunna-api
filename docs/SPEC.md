@@ -82,7 +82,7 @@ São 14 endpoints, todos em `https://api.mercadolibre.com` com `Authorization: B
 | 2 | `POST /oauth/token` | Trocar `code` por tokens e renovar com `refresh_token` | Na conexão; renova quando falta < 10 min | `ml_credentials` (access, refresh, expires_at, scope) |
 | 3 | `GET /users/me` | Identificar seller e nickname | Na conexão | Valida `allowed_seller_id`; nickname no cabeçalho |
 | 4 | `GET /users/{seller_id}/items/search?search_type=scan&limit=100&scroll_id=…` | Listar **todos** os IDs de anúncio (qualquer status) | Toda rodada (5 min) | Base da lista de anúncios. Modo `scan` com `scroll_id` para passar do limite de 1.000 do offset |
-| 5 | `GET /items?ids=ID1,…,ID20&attributes=…` | Multiget dos dados do anúncio, 20 por chamada | Toda rodada | Upsert em `ml_items`: título, status, sub_status, preço, preço original, estoque, vendidos, tipo, categoria, logística (Full), frete grátis, catálogo, SKU, variações, fotos, vídeo, marca, modelo, atributos preenchidos |
+| 5 | `GET /items/bulk?ids=ID1,…,ID20&attributes=id,status_code,body.…` | Multiget dos dados do anúncio, 20 por chamada | Toda rodada | Upsert em `ml_items`: título, status, sub_status, preço, preço original, estoque, vendidos, tipo, categoria, logística (Full), frete grátis, catálogo, SKU, variações, fotos, vídeo, marca, modelo, atributos preenchidos |
 | 6 | `GET /items/{id}/visits/time_window?last=60&unit=day` | Visitas diárias dos últimos 60 dias | A cada 30 min, só ativos e pausados | `ml_item_visits` (item, dia, visitas). Alimenta visitas 7d/30d, conversão e gráfico |
 | 7 | `GET /orders/search?seller={id}&order.date_created.from=…&sort=date_desc&limit=50&offset=…` | Pedidos do vendedor | Toda rodada: 62 dias na 1ª vez, depois últimos 4 dias | `ml_orders` + `ml_order_items` (quantidade, preço unitário, `sale_fee`). Base de vendas, faturamento e tarifa real |
 | 8 | `GET /item/{id}/performance` | Nota de qualidade do anúncio e ações pendentes | A cada 6 h, só ativos | `quality_score`, `quality_level`, `quality_pending` (regras com status PENDING) |
@@ -93,7 +93,7 @@ São 14 endpoints, todos em `https://api.mercadolibre.com` com `Authorization: B
 | 13 | `GET /users/{seller_id}/shipping_options/free?item_id=…&free_shipping=…&item_price=…&verbose=true` | Custo de envio pago pelo vendedor | A cada 12 h, no preço efetivo e no sugerido | `ship_cost` e `ship_at_ref` (`coverage.all_country.list_cost`) |
 | 14 | `GET /suggestions/items/{id}/details` | Referência de preço e concorrentes | A cada 12 h | `price_ref`: status, preço atual, sugerido, menor, % diferença, qtd. comparados, até 8 concorrentes (preço, título, vendidos). 404 = sem referência |
 
-**Campos pedidos no multiget (item 5):** `id,title,status,sub_status,price,original_price,available_quantity,sold_quantity,listing_type_id,category_id,shipping,catalog_listing,permalink,thumbnail,seller_custom_field,attributes,variations,pictures,video_id,health,date_created,last_updated`.
+**Campos pedidos no multiget (item 5):** `id,title,status,sub_status,price,original_price,available_quantity,sold_quantity,listing_type_id,category_id,shipping,catalog_listing,permalink,thumbnail,seller_custom_field,attributes,variations,pictures,video_id,health,date_created,last_updated`. No `/items/bulk` (substituto do `/items?ids=`, descontinuado pelo ML com migração até 25/10/2026) cada campo leva o prefixo `body.` e é preciso pedir também `id,status_code`, senão eles somem da resposta.
 
 **Regras de aplicação dos dados**
 
