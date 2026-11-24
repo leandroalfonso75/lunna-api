@@ -64,12 +64,21 @@ module Painel
         !attended?(claim)
     end
 
+    # 24/11/2026: a confirmação automática do assistente do ML ("Entendido. Vamos oferecer…"), que chega segundos depois da
+    # mensagem do vendedor, não conta como mensagem nova (#5619298052).
+    AUTO_REPLY_WINDOW = 60.seconds
+
     def self.attended?(claim)
       at = claim.try(:attended_at)
       return false if at.nil?
 
-      Array(claim.messages).none? do |m|
-        !SELLER_ROLES.include?(m["sender_role"].to_s) && (Time.zone.parse(m["date_created"].to_s) rescue nil).to_i > at.to_i
+      messages = Array(claim.messages).map { |m| [ m["sender_role"].to_s, (Time.zone.parse(m["date_created"].to_s) rescue nil) ] }
+      seller_times = messages.filter_map { |role, time| time if SELLER_ROLES.include?(role) && time }
+      messages.none? do |role, time|
+        next false if time.nil? || SELLER_ROLES.include?(role) || time.to_i <= at.to_i
+
+        auto_reply = role == "mediator" && seller_times.any? { |t| time >= t && time - t <= AUTO_REPLY_WINDOW }
+        !auto_reply
       end
     end
 

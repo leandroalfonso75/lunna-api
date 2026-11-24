@@ -302,6 +302,32 @@ RSpec.describe "/api/claims", type: :request do
       expect(Ml::Sync::ClaimsCenter).to have_received(:fetch_details)
     end
 
+    it "respondeu pelo Lunna: sai de A atender na hora, mesmo antes de o ML passar a vez ao comprador (#5619298052)" do
+      stub_request(:post, "#{base}/1/actions/send-message").to_return(status: 201, body: { id: "m1" }.to_json)
+      allow(Ml::OAuth).to receive(:refresh!)
+      allow(Ml::Sync::ClaimsCenter).to receive(:fetch_details).and_return({}) # o ML ainda aponta o vendedor
+
+      expect { post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "complainant", message: "Devolução com reembolso total", confirm: true }, headers: auth_headers(admin) }
+        .to have_enqueued_job(Ml::ClaimRefreshJob).on_queue("claims").twice
+      expect(response).to have_http_status(:created)
+      claim = account.ml_claims.find_by(claim_id: 1)
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(false)
+      get "/api/claims", params: { account_id: account.id, view: "atender" }, headers: auth_headers(member)
+      expect(json["claims"].map { |c| c["claim_id"] }).not_to include(1)
+
+      sent = claim.attended_at
+      seller = { "sender_role" => "respondent", "date_created" => sent.iso8601, "message" => "Devolução com reembolso total" }
+      # a confirmação automática do assistente do ML, segundos depois, não traz de volta
+      ack = { "sender_role" => "mediator", "date_created" => (sent + 6.seconds).iso8601, "message" => "Entendido." }
+      claim.update!(messages: [ seller, ack ])
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(false)
+      # mensagem nova de verdade (mediador minutos depois ou comprador) traz de volta
+      claim.update!(messages: [ seller, ack, { "sender_role" => "mediator", "date_created" => (sent + 5.minutes).iso8601, "message" => "Precisamos de fotos" } ])
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(true)
+      claim.update!(messages: [ seller, ack, { "sender_role" => "complainant", "date_created" => (sent + 20.seconds).iso8601, "message" => "Ok" } ])
+      expect(Painel::ClaimsQuery.to_attend?(claim)).to be(true)
+    end
+
     it "recusa destinatário que o ML não libera e registra a falha quando o ML recusa" do
       allow(Ml::OAuth).to receive(:refresh!)
       post "/api/claims/1/reply", params: { account_id: account.id, receiver_role: "mediator", message: "Oi", confirm: true }, headers: auth_headers(admin)

@@ -3,6 +3,11 @@ default: &default
     - polling_interval: 1
       batch_size: 500
   workers:
+    # Releitura de reclamação depois de responder (Ml::ClaimRefreshJob), sem esperar a sincronização (24/11/2026).
+    - queues: "claims"
+      threads: 1
+      processes: 1
+      polling_interval: 1
     - queues: "*"
       threads: <%= ENV.fetch("JOB_THREADS", 3) %>
       processes: <%= ENV.fetch("JOB_CONCURRENCY", 1) %>

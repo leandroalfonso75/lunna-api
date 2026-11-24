@@ -2,7 +2,8 @@
 # alguns segundos depois, o tempo do ML processar (pedido do usuário em 10/11/2026: sair de "A atender" imediatamente).
 module Ml
   class ClaimRefreshJob < ApplicationJob
-    queue_as :default
+    # Fila própria (24/11/2026): na "default", com 1 thread, a releitura de 10 s esperava a sincronização da conta (~3 min).
+    queue_as :claims
 
     def self.refresh_now(account, claim_id)
       claim = account.ml_claims.find_by(claim_id: claim_id)

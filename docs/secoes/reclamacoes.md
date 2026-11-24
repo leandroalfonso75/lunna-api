@@ -241,3 +241,15 @@ reclamações; filtros e regras serão definidos depois, com os dados já no Lun
   padrão continua em "Usar o texto padrão". Nada é enviado ao ML.
 - `Ml::ClaimContestDraftsJob` (a cada hora) escreve as pendentes que ainda não têm texto da IA ou cuja reclamação mudou.
   Em 17/11/2026 as 12 pendentes foram reescritas.
+
+## Respondeu pelo Lunna, sai de A atender na hora (24/11/2026)
+
+- Caso #5619298052: a resposta "Devolução com reembolso total" foi enviada pelo Lunna às 17:30:01, mas a reclamação
+  continuou em "A atender". O ML só passou a vez para o comprador depois de alguns segundos, e a releitura de +10 s ficou
+  na fila atrás da sincronização da conta (~3 min, worker com 1 thread). Ela só rodou às 17:31:56.
+- Agora responder (`Painel::ClaimReply`) ou agir (`Painel::ClaimAction`) pelo Lunna marca `attended_at`, como o botão
+  "Já respondi no Mercado Livre": a reclamação sai de "A atender" na hora e continua em "Abertas". Volta se chegar
+  mensagem nova do ML ou do comprador.
+- A confirmação automática do assistente do ML ("Entendido. Vamos oferecer…"), que chega até 60 s depois da mensagem do
+  vendedor, não conta como mensagem nova (`ClaimsQuery::AUTO_REPLY_WINDOW`).
+- `Ml::ClaimRefreshJob` roda na fila `claims`, com um worker próprio (`config/queue.yml`), e não espera mais a sincronização.

@@ -34,6 +34,9 @@ module Painel
       response = client.claim_send_message(@claim.claim_id, receiver_role: @receiver, message: @text)
       reply.update!(status: "sent", response: response.is_a?(Hash) ? response : {})
       refresh(client)
+      # Respondeu pelo Lunna: sai de "A atender" na hora, como no "Já respondi" (24/11/2026). O ML leva de segundos a minutos
+      # para passar a vez ao comprador; volta se chegar mensagem nova do ML ou do comprador.
+      @claim.update_columns(attended_at: Time.current)
       Ml::ClaimRefreshJob.schedule(@account, @claim.claim_id) # relê de novo em 10 s e 60 s (o ML processa a resposta)
       Result.new(ok: true, message: "Mensagem enviada na reclamação no Mercado Livre.", reply: reply)
     rescue Ml::Client::Error => e
