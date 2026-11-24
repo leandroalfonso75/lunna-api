@@ -46,6 +46,8 @@ Rails.application.routes.draw do
     get "painel", to: "painel#show"
     get "items", to: "items#index"
     get "items/catalog", to: "items#catalog"
+    get "items/bulk_edit", to: "items#bulk_edit"
+    post "items/bulk_delete", to: "items#bulk_delete"
     get "items/:item_id/title", to: "item_edits#title"
     post "items/:item_id/title/suggest", to: "item_edits#suggest_title"
     post "items/:item_id/title", to: "item_edits#publish_title"

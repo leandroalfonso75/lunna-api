@@ -14,7 +14,8 @@
 # GET  /api/items/:item_id/description?account_id=      → descrição atual
 # POST /api/items/:item_id/description/suggest?...      → descrição mais chamativa (IA; não publica)
 # POST /api/items/:item_id/description?account_id=      → publica no ML (admin; text, confirm: true)
-# Modelo e descrição aceitam also_item_ids[]: outros anúncios do mesmo SKU escolhidos na confirmação (14/11/2026).
+# Modelo, descrição e ficha técnica aceitam also_item_ids[]: outros anúncios do mesmo SKU escolhidos na confirmação (14/11/2026;
+# ficha técnica em 24/11/2026). Ficha técnica com all=true traz e altera também os campos já preenchidos (Anúncios › Editar).
 # Ciente, ficha técnica, preço, modelo e descrição aceitam apply_to_variations=true: valem também para as outras variações do anúncio pai.
 class ItemEditsController < ApplicationController
   include CurrentAccount
@@ -53,13 +54,13 @@ class ItemEditsController < ApplicationController
   end
 
   def specs
-    render json: Ml::ItemSpecs.info(client, Current.account, item_id)
+    render json: Ml::ItemSpecs.info(client, Current.account, item_id, all: all_specs?)
   rescue Ml::Client::Error => e
     ml_error(e)
   end
 
   def suggest_specs
-    info = Ml::ItemSpecs.info(client, Current.account, item_id)
+    info = Ml::ItemSpecs.info(client, Current.account, item_id, all: all_specs?)
     render json: { values: Ai::SpecSuggestions.call(Current.account.company, info, description: description) }
   rescue Ai::JsonChat::Error => e
     render_errors([ e.message ], status: :unprocessable_content)
@@ -69,10 +70,11 @@ class ItemEditsController < ApplicationController
 
   def publish_specs
     values = params[:values].respond_to?(:to_unsafe_h) ? params[:values].to_unsafe_h : params[:values].to_h
-    result = Ml::ItemSpecs.publish(client, Current.account, item_id, values, user: Current.user)
+    result = Ml::ItemSpecs.publish(client, Current.account, item_id, values, user: Current.user, all: all_specs?)
     others = result.ok && apply_to_variations? ? each_variation { |id| Ml::ItemSpecs.publish_shared(client, Current.account, id, values, user: Current.user) } : nil
-    render json: { ok: result.ok, message: [ result.message, variations_message(others, "ficha técnica completada") ].compact.join(" "),
-                   published: result.published, variations: others, errors: result.ok ? nil : [ result.message ] },
+    same = result.ok ? each_same_sku(others) { |id| Ml::ItemSpecs.publish_shared(client, Current.account, id, values, user: Current.user, all: all_specs?) } : nil
+    render json: { ok: result.ok, message: [ result.message, variations_message(others, "ficha técnica completada"), same_sku_message(same, "ficha técnica alterada") ].compact.join(" "),
+                   published: result.published, variations: others, same_sku: same, errors: result.ok ? nil : [ result.message ] },
            status: result.ok ? :ok : :unprocessable_content
   rescue Ml::Client::Error => e
     ml_error(e)
@@ -169,6 +171,9 @@ class ItemEditsController < ApplicationController
 
   def apply_to_variations? = ActiveModel::Type::Boolean.new.cast(params[:apply_to_variations]) == true
 
+  # Ficha técnica completa (preenchidos + faltando), usada em Anúncios › Editar (24/11/2026)
+  def all_specs? = ActiveModel::Type::Boolean.new.cast(params[:all]) == true
+
   # Publica em cada uma das outras variações do anúncio pai, uma a uma (escrita no ML, registrada em ml_item_edits);
   # a falha de uma não para as demais. => [{ item_id:, sku:, ok:, message: }]
   def each_variation
@@ -187,7 +192,10 @@ class ItemEditsController < ApplicationController
     wanted = Array(params[:also_item_ids]).map(&:to_s) - Array(done).map { |v| v[:item_id] }
     return nil if wanted.empty?
 
-    Ml::ItemVariations.same_sku(Current.account, item_id).where(item_id: wanted).order(:item_id).pluck(:item_id, :sku).map do |id, sku|
+    allowed = Ml::ItemVariations.same_sku(Current.account, item_id).where(item_id: wanted).pluck(:item_id)
+    # Anúncios › Editar (24/11/2026): anúncios com variações (sem SKU no anúncio) valem quando têm os mesmos SKUs nas variações
+    allowed |= wanted if allowed.size < wanted.size && Painel::BulkEditGroup.call(Current.account, [ item_id ] + wanted).ok
+    Current.account.ml_items.where(item_id: allowed).order(:item_id).pluck(:item_id, :sku).map do |id, sku|
       r = yield(id)
       { item_id: id, sku: sku, ok: r.ok, message: r.message }
     rescue Ml::Client::Error => e

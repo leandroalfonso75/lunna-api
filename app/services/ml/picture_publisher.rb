@@ -4,7 +4,8 @@
 #
 # Anúncio de catálogo não aceita troca de fotos (o ML usa as do produto do catálogo: "pictures is not modifiable").
 # Nesse caso não sobe nada e devolve os anúncios tradicionais do mesmo produto (`alternatives`), onde dá para publicar
-# (pedido do usuário em 04/11/2026, MLB6827577574 → MLB6626564772). `target_item_id` publica num deles.
+# (pedido do usuário em 04/11/2026, MLB6827577574 → MLB6626564772). `target_item_id` publica num deles, ou num anúncio
+# com o(s) mesmo(s) SKU(s) (Anúncios › Editar, 24/11/2026).
 module Ml
   class PicturePublisher
     MAX_PICTURES = 10
@@ -34,7 +35,7 @@ module Ml
     end
 
     def call
-      return invalid_target unless @target == @job.item_id || alternative_ids.include?(@target)
+      return invalid_target unless @target == @job.item_id || same_sku_target? || alternative_ids.include?(@target)
 
       info = @client.item_info(@target)
       if info["catalog_listing"]
@@ -88,8 +89,13 @@ module Ml
       @alternative_ids ||= self.class.alternatives(@client, @seller_id, @job.item_id).map { |a| a[:item_id] }
     end
 
+    # Anúncios › Editar (24/11/2026): as mesmas fotos podem ir para os outros anúncios selecionados com os mesmos SKUs.
+    def same_sku_target?
+      Painel::BulkEditGroup.call(@job.ml_account, [ @job.item_id, @target ]).ok
+    end
+
     def invalid_target
-      Result.new(ok: false, published: 0, message: "Só dá para publicar no próprio anúncio ou num anúncio tradicional do mesmo produto.")
+      Result.new(ok: false, published: 0, message: "Só dá para publicar no próprio anúncio, num anúncio com o(s) mesmo(s) SKU(s) ou num anúncio tradicional do mesmo produto.")
     end
   end
 end

@@ -97,6 +97,27 @@ RSpec.describe "Curva ABC: alterar título, ficha técnica e Ciente", type: :req
       expect(account.ml_item_edits.sole).to have_attributes(kind: "ficha_tecnica", ok: true)
     end
 
+    it "ficha completa (all=true, Anúncios › Editar): traz os preenchidos com o valor atual e altera também no outro do mesmo SKU" do
+      account.ml_items.find_by(item_id: "MLB1").update!(sku: "GLOSS-1")
+      create(:ml_item, ml_account: account, item_id: "MLB4", sku: "GLOSS-1", listing_type_id: "gold_special")
+      stub_request(:get, "#{ml}/items/MLB4").to_return(status: 200, body: item.merge("id" => "MLB4").to_json)
+
+      get "/api/items/MLB1/specs", params: { account_id: account.id, all: true }, headers: auth_headers(member)
+      expect(json["fields"].map { |f| f["id"] }).to eq([ "MAIN_COLOR", "IS_PLUMPING", "BRAND" ])
+      expect(json["fields"].last).to include("filled" => true, "current" => { "value_id" => nil, "value_name" => "Letty", "not_applicable" => false })
+
+      put1 = stub_request(:put, "#{ml}/items/MLB1").with(body: { attributes: [ { id: "BRAND", value_name: "Letty Beauty" } ] }.to_json).to_return(status: 200, body: "{}")
+      put4 = stub_request(:put, "#{ml}/items/MLB4").with(body: { attributes: [ { id: "BRAND", value_name: "Letty Beauty" } ] }.to_json).to_return(status: 200, body: "{}")
+      post "/api/items/MLB1/specs", params: { account_id: account.id, confirm: true, all: true, also_item_ids: [ "MLB4" ],
+                                              values: { BRAND: { value_name: "Letty Beauty" } } }, headers: auth_headers(admin), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(put1).to have_been_requested.once
+      expect(put4).to have_been_requested.once
+      expect(json["same_sku"]).to eq([ { "item_id" => "MLB4", "sku" => "GLOSS-1", "ok" => true, "message" => "1 característica(s) publicada(s) no Mercado Livre." } ])
+      expect(account.ml_item_edits.where(item_id: "MLB1").sole.before["current"]).to eq("BRAND" => { "value_id" => nil, "value_name" => "Letty", "not_applicable" => false })
+    end
+
     it "anúncio com variações: não pede o que já está nas variações e manda atributo de variação em cada variação" do
       create(:ml_item, ml_account: account, item_id: "MLV", price: 197.0)
       stub_request(:get, "#{ml}/categories/MLB5412/attributes").to_return(status: 200, body: [

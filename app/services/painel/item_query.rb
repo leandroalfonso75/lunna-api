@@ -13,13 +13,17 @@ module Painel
     # Ordenações calculadas em Ruby (não são colunas de item_metrics): o lucro depende do custo do Olist, das
     # tarifas e dos parâmetros da empresa, então tudo é ordenado antes de montar a página.
     COMPUTED_SORTS = %i[net_profit_pct net_profit_after_ads_pct].freeze
-    SORTABLE_COLUMNS = (NUMERIC_FILTERS + %i[title status sku] + COMPUTED_SORTS).freeze
-    ASC_DEFAULT_COLUMNS = %i[title status sku coverage_days].freeze
+    # Curva ABC (a mesma da seção Curva ABC, Abc::Classifier) e data de criação no ML (pedido do usuário em 24/11/2026):
+    # ordenadas em Ruby sobre a lista inteira. Curva: A, B, C (asc) ou C, B, A; sem curva (finalizado sem venda) no fim.
+    EXTRA_SORTS = %i[curve date_created].freeze
+    CURVE_RANK = { "A" => 0, "B" => 1, "C" => 2 }.freeze
+    SORTABLE_COLUMNS = (NUMERIC_FILTERS + %i[title status sku] + COMPUTED_SORTS + EXTRA_SORTS).freeze
+    ASC_DEFAULT_COLUMNS = %i[title status sku coverage_days curve].freeze
 
     # "Finalizados/inativos sem faturamento nos últimos 60 dias" (SPEC 6):
     # payload enxuto, sem under_review (esse ainda precisa de atenção).
     LEAN_STATUSES = %w[closed inactive].freeze
-    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean].freeze
+    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean curve date_created].freeze
 
     def self.call(account, params) = new(account, params).call
 
@@ -58,8 +62,31 @@ module Painel
     # [metrics da página, economics já calculada ou nil]. Ordenação em SQL, ou em Ruby quando a coluna é calculada.
     def page_of(relation, sort_column, dir, page, per_page)
       return sorted_by_economics(relation, sort_column, dir, page, per_page) if COMPUTED_SORTS.include?(sort_column)
+      return sorted_by_extra(relation, sort_column, dir, page, per_page) if EXTRA_SORTS.include?(sort_column)
 
       [ relation.order(order_clause(sort_column, dir)).offset((page - 1) * per_page).limit(per_page).to_a, nil ]
+    end
+
+    # Curva ou data de criação; sem valor vai sempre para o fim; desempate por visitas e id, como no SQL.
+    def sorted_by_extra(relation, column, dir, page, per_page)
+      metrics = relation.to_a
+      value = column == :curve ? ->(m) { CURVE_RANK[curves[m.item_id]] } : ->(m) { created_dates[m.item_id]&.to_i }
+      with, without = metrics.partition { |m| !value.call(m).nil? }
+      sign = dir == "desc" ? -1 : 1
+      ranked = with.sort_by { |m| [ sign * value.call(m), -m.visits_7d.to_i, m.item_id ] } +
+               without.sort_by { |m| [ -m.visits_7d.to_i, m.item_id ] }
+
+      [ ranked.slice((page - 1) * per_page, per_page) || [], nil ]
+    end
+
+    # Curva A/B/C de cada anúncio, pela mesma regra da seção Curva ABC (faturamento de 30 dias acumulado).
+    def curves
+      @curves ||= Abc::Classifier.call(@account.item_metrics.to_a, Abc::Params.from(@account.company))
+                                 .rows.to_h { |row| [ row.metric.item_id, row.curve ] }
+    end
+
+    def created_dates
+      @created_dates ||= @account.ml_items.pluck(:item_id, :date_created).to_h
     end
 
     def sorted_by_economics(relation, column, dir, page, per_page)
@@ -252,7 +279,8 @@ module Painel
         coverage_days: metric.coverage_days&.to_f, coverage_state: coverage_state(metric.coverage_days),
         quality_score: metric.quality_score, quality_state: quality_state(metric.quality_score),
         quality_level: quality_level, quality_actions: quality_actions(quality_pending),
-        alert_keys: alert_keys, links: Painel::Labels.links(metric.item_id), lean: false
+        alert_keys: alert_keys, links: Painel::Labels.links(metric.item_id), lean: false,
+        curve: curves[metric.item_id], date_created: created_dates[metric.item_id]
       }
 
       lean?(metric) ? leanify(row) : row

@@ -6,8 +6,8 @@ module Ml
     MAX_VALUES = 300
     Result = Struct.new(:ok, :message, :published, keyword_init: true)
 
-    def self.info(client, account, item_id) = new(client, account, item_id).info
-    def self.publish(client, account, item_id, values, user:) = new(client, account, item_id).publish(values, user)
+    def self.info(client, account, item_id, all: false) = new(client, account, item_id, all: all).info
+    def self.publish(client, account, item_id, values, user:, all: false) = new(client, account, item_id, all: all).publish(values, user)
 
     # Atributos que mudam de uma variação para outra (cor, tom, voltagem, GTIN, SKU): nunca são copiados para as outras
     # variações do anúncio pai.
@@ -16,8 +16,8 @@ module Ml
 
     # "Aplicar a todas as variações" (pedido do usuário em 13/11/2026): publica nesta variação só os valores comuns
     # (sem os atributos de variação) dos campos que ainda faltam nela. Sem nada a publicar, não chama o ML.
-    def self.publish_shared(client, account, item_id, values, user:)
-      specs = new(client, account, item_id)
+    def self.publish_shared(client, account, item_id, values, user:, all: false)
+      specs = new(client, account, item_id, all: all)
       fields = specs.info[:fields].reject { |f| f[:variant] }.map { |f| f[:id] }.to_set
       shared = values.to_h.select { |id, _| fields.include?(id.to_s) }
       return Result.new(ok: true, published: 0, message: "nada a completar") if shared.empty?
@@ -25,10 +25,13 @@ module Ml
       specs.publish(shared, user)
     end
 
-    def initialize(client, account, item_id)
+    # all: true (Anúncios › Editar, 24/11/2026): além dos campos que faltam, traz os já preenchidos no anúncio, com o valor
+    # atual (`current`), para alterar. Atributos de variação (cor, voltagem, GTIN…) ficam de fora: mudam por variação.
+    def initialize(client, account, item_id, all: false)
       @client = client
       @account = account
       @item_id = item_id
+      @all = all
     end
 
     def item = @item ||= @client.item_full(@item_id)
@@ -47,11 +50,29 @@ module Ml
         filled = lists.flat_map { |l| Array(l) }.select { |a| a["value_id"].present? || a["value_name"].present? }.map { |a| a["id"] }.to_set
         relevant = Array(@client.category_attributes(item["category_id"])).reject { |a| excluded?(a) }
         missing = relevant.select { |a| (required?(a) || a["relevance"] == 1) && !filled.include?(a["id"]) }
+        fields = missing.sort_by { |a| required?(a) ? 0 : 1 }.map { |a| field(a) }
+        fields += editable_filled(relevant, missing) if @all
         { item_id: @item_id, title: item["title"], category_id: item["category_id"],
           variations: variations.map { |v| { id: v["id"], label: variation_label(v) } },
           filled: Array(item["attributes"]).filter_map { |a| { id: a["id"], name: a["name"], value: a["value_name"] } if a["value_name"].present? },
-          fields: missing.sort_by { |a| required?(a) ? 0 : 1 }.map { |a| field(a) } }
+          fields: fields }
       end
+    end
+
+    # Campos já preenchidos no anúncio (atributos do item, não das variações), com o valor atual; obrigatórios primeiro.
+    def editable_filled(relevant, missing)
+      current = Array(item["attributes"]).select { |a| a["value_id"].present? || a["value_name"].present? }.index_by { |a| a["id"] }
+      skip = missing.map { |a| a["id"] }.to_set
+      relevant.select { |a| current[a["id"]] && !skip.include?(a["id"]) }
+              .map { |a| field(a).merge(current: current_value(current[a["id"]]), filled: true) }
+              .reject { |f| f[:variant] || f[:per_variation] }
+              .sort_by { |f| [ f[:required] ? 0 : 1, f[:name].to_s ] }
+    end
+
+    def current_value(a)
+      return { value_id: nil, value_name: "", not_applicable: true } if a["value_id"].to_s == Ml::SpecRules::NOT_APPLICABLE.to_s
+
+      { value_id: a["value_id"], value_name: a["value_name"].to_s, not_applicable: false }
     end
 
     # values: { "ATTR_ID" => { "value_id" => "...", "value_name" => "..." } } (vazios ficam de fora). Campo de variação
@@ -94,7 +115,9 @@ module Ml
           { id: x["id"], attributes: kept + per_variation[x["id"].to_s] }
         end
       end
-      edit = @account.ml_item_edits.create!(item_id: @item_id, user: user, kind: "ficha_tecnica", before: { missing: fields.keys }, after: body)
+      before = { missing: fields.values.reject { |f| f[:filled] }.map { |f| f[:id] },
+                 current: fields.values.select { |f| f[:filled] && published.include?(f[:id]) }.to_h { |f| [ f[:id], f[:current] ] } }
+      edit = @account.ml_item_edits.create!(item_id: @item_id, user: user, kind: "ficha_tecnica", before: before, after: body)
       @client.update_item(@item_id, body)
       edit.update!(ok: true)
       refresh_local(published)

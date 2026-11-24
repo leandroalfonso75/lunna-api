@@ -62,3 +62,30 @@ Tabela de anúncios do Mercado Livre com o **lucro antes Ads por unidade**.
 (tem `item_relations` com um tradicional, como em Promoções) ou **Não sincronizado**, **Ganhando / Compartilhando / Perdendo**
 (`catalog_status` do price_to_win, lido a cada 30 min só para ativos; pausados ficam "Sem leitura"), preço para ganhar,
 preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do topo filtram; busca por MLB, título ou SKU.
+
+## Curva ABC, data de criação, seleção, excluir e editar (24/11/2026, pedido do usuário)
+
+- **Curva**: bola ao lado do anúncio, azul = A, verde = B, vermelha = C. É a mesma curva da seção Curva ABC
+  (`Abc::Classifier`, faturamento de 30 dias acumulado com os cortes da empresa). "—" = fora da curva (finalizado sem venda).
+- **Criado em**: `ml_items.date_created` (data de criação no ML, DD/MM/AAAA).
+- **Ordenação** por curva (`sort=curve`: A→B→C; inverte para C→B→A) e por data de criação (`sort=date_created`: mais novo
+  primeiro), feita na API sobre a lista inteira (`Painel::ItemQuery#sorted_by_extra`). Sem valor vai para o fim.
+- **Caixa de seleção** à esquerda de cada anúncio, mais "selecionar todos da página" no cabeçalho. Com algum selecionado,
+  aparece a barra com **Editar anúncios selecionados** e **Excluir anúncios selecionados**. A seleção vale para a página
+  na tela: mudar de página ou de filtro tira da seleção o que saiu da tela.
+- **Excluir** (só admin): janela "Confirma a exclusão do(s) anúncio(s) selecionado(s)?" com a lista e o aviso, e os botões
+  Sim/Não. Sim chama `POST /api/items/bulk_delete` (`item_ids[]`, `confirm=true`, até 50), que no ML **finaliza**
+  (`status=closed`) e depois **marca como excluído** (`deleted=true`), anúncio por anúncio (`Ml::ItemDeletion`). Não tem
+  volta: excluído não pode ser reativado, só publicado de novo como anúncio novo. O ML pode recusar (ex.: estoque no Full,
+  anúncio em revisão); o recusado não impede os outros, e a tela lista o motivo de cada um. Cada tentativa fica em
+  `ml_item_edits` (kind `exclusao`). No Lunna o anúncio excluído passa a "Finalizado".
+- **Editar**: só um anúncio, ou vários com o(s) mesmo(s) SKU(s). Os SKUs de cada anúncio são o do anúncio mais os das
+  variações; a API confere em `GET /api/items/bulk_edit` (`Painel::BulkEditGroup`, até 20) e explica quando os SKUs não
+  batem. O primeiro selecionado é o principal: os editores leem e sugerem a partir dele, e a publicação vale também para os
+  outros, que vêm marcados na confirmação e podem ser desmarcados (`also_item_ids[]`).
+  - **Ficha técnica**: modo completo (`all=true` em `/api/items/:id/specs`), com os campos já preenchidos (valor atual,
+    "alterado" e "desfazer") e os que faltam. "Sugerir características" pela IA. Publica só o que mudou. Atributos de
+    variação (cor, voltagem, GTIN) ficam de fora.
+  - **Descrição**: o editor da Curva ABC, com "Sugerir descrição".
+  - **Imagens**: o gerador com IA da Curva ABC (`AbcPhotoGenerator`). As fotos aprovadas vão para o principal e depois para
+    os outros do mesmo SKU (`PicturePublisher` aceita esses destinos).
