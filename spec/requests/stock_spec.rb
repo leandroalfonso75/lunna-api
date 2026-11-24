@@ -36,6 +36,30 @@ RSpec.describe "/api/stock (seção Estoque)", type: :request do
     expect(json["summary"]).to include("replenish" => 1, "urgent" => 1, "suggested_units" => 24, "can_send_units" => 10, "to_buy_units" => 14)
   end
 
+  it "ordena o Full pela coluna pedida (sort/dir), com os sem valor sempre no fim" do
+    stub_request(:get, "#{ml}/marketplace/fbm/sellers/430/user-products/replenishment").with(query: hash_including(country: "BR"))
+      .to_return(status: 200, body: { results: [ rec("MLBU1", "A-1", urgency: "URGENT", suggest: 5), rec("MLBU2", "B-1", suggest: 30),
+                                                 rec("MLBU3", "C-1", urgency: "THIS_WEEK", suggest: 12), rec("MLBU4", "D-1", stock: 8) ],
+                                      paging: { total: 4 } }.to_json)
+    create(:olist_product, company: company, sku: "A-1", description: "A", stock_available: 50, status: "A", kind: "S")
+    create(:olist_product, company: company, sku: "C-1", description: "C", stock_available: 3, status: "A", kind: "S")
+    Ml::Sync::FullReplenishment.call(Ml::Client.new(access_token: "tok", sleeper: ->(_) { }), account)
+    skus = ->(params) do
+      get "/api/stock/full", params: { account_id: account.id, view: "todos" }.merge(params), headers: auth_headers(member)
+      json["rows"].map { |r| r["sku"] }
+    end
+
+    expect(skus.call(sort: "suggested", dir: "desc")).to eq(%w[B-1 C-1 A-1 D-1])
+    expect(json).to include("sort" => "suggested", "dir" => "desc")
+    expect(skus.call(sort: "suggested", dir: "asc")).to eq(%w[A-1 C-1 B-1 D-1])
+    expect(skus.call(sort: "olist")).to eq(%w[A-1 C-1 B-1 D-1])
+    expect(skus.call(sort: "can_send")).to eq(%w[A-1 C-1 B-1 D-1])
+    expect(skus.call(sort: "urgency")).to eq(%w[A-1 C-1 B-1 D-1])
+    # sem sort: a ordem de sempre (repor primeiro, por urgência)
+    expect(skus.call({})).to eq(%w[A-1 C-1 B-1 D-1])
+    expect(json["sort"]).to be_nil
+  end
+
   it "estoque Full de anúncio antigo (com variações, sem User Product) entra mesmo sem vir na API de reposição" do
     stub_request(:get, "#{ml}/marketplace/fbm/sellers/430/user-products/replenishment").with(query: hash_including(country: "BR"))
       .to_return(status: 200, body: { results: [ rec("MLBU1", "SEC-1", suggest: 5) ], paging: { total: 1 } }.to_json)

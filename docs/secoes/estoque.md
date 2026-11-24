@@ -17,6 +17,10 @@ Seção criada em 14/11/2026 a pedido do usuário, logo abaixo de Produtos no me
   preço do anúncio.
 - Filtros: Repor (padrão), Urgente, Falta comprar, Sem necessidade, Todos no Full, Todos os produtos; busca por SKU, produto ou
   MLB. Ordem: repor primeiro, por urgência e quantidade.
+- Ordenação por coluna (24/11/2026): clicar no cabeçalho ordena por Produto, No Full, Urgência, Sugerido, No depósito,
+  Enviar já, Comprar ou Vendas 30 dias (`sort` = `title|stock|urgency|suggested|olist|can_send|to_buy|sold`, `dir` =
+  `asc|desc`). Clicar de novo inverte. Ao abrir a página vale **Sugerido, decrescente**. Linhas sem valor na coluna (sem
+  sugestão, SKU fora do Olist) ficam sempre no fim; empates seguem a ordem padrão.
 
 ## Depósito (ERP)
 - Produtos do Olist com SKU (sem kits, que não têm estoque próprio, sem pais de variação e sem excluídos): disponível,

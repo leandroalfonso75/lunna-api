@@ -94,7 +94,7 @@ module Painel
                              .to_h { |id, title, thumb, price, status| [ id, { item_id: id, title: title, thumbnail: thumb, price: price&.to_f, status: status } ] }
       rows = recs.map { |r| full_row(r, (r.item_id && legacy_items[r.item_id]) || items[r.user_product_id] || {}, olist[r.seller_sku]) }
       filtered = filter_full(rows)
-      sorted = filtered.sort_by { |r| [ r[:replenish] ? 0 : 1, MlFullReplenishment::URGENCY_ORDER.index(r[:urgency]) || 9, -(r[:suggested] || 0), -(r[:lost_revenue] || 0) ] }
+      sorted = sort_full(filtered)
       page, per = paging
       reps = rows.select { |r| r[:replenish] }
       {
@@ -103,6 +103,7 @@ module Painel
                    to_buy_units: reps.sum { |r| r[:to_buy].to_i }, out_of_stock: rows.count { |r| r[:in_full] && r[:stock].to_i.zero? },
                    lost_revenue: rows.sum { |r| r[:lost_revenue].to_f }.round(2) },
         rows: sorted.slice((page - 1) * per, per) || [], total: sorted.size, page: page, per_page: per,
+        sort: full_sort_key, dir: full_sort_key && full_sort_dir,
         synced_at: @account.full_replenishment_synced_at
       }
     end
@@ -134,6 +135,38 @@ module Painel
         olist_available: available, can_send: can_send, to_buy: suggested && can_send ? suggested - can_send : nil,
         benefits: r.benefits, synced_at: r.synced_at
       }
+    end
+
+    # Colunas da tabela do Full que dá para ordenar (pedido do usuário em 24/11/2026), com `sort` e `dir` (asc|desc, padrão
+    # desc). Urgência: maior = mais urgente. Sem `sort` vale a ordem padrão: repor primeiro, por urgência, sugerido e receita
+    # perdida; ela também desempata as colunas.
+    FULL_SORTS = {
+      "title" => ->(r) { r[:title].to_s.downcase.presence },
+      "stock" => ->(r) { r[:stock] },
+      "urgency" => ->(r) { (i = MlFullReplenishment::URGENCY_ORDER.index(r[:urgency])) && MlFullReplenishment::URGENCY_ORDER.size - i },
+      "suggested" => ->(r) { r[:suggested] },
+      "olist" => ->(r) { r[:olist_available] },
+      "can_send" => ->(r) { r[:can_send] },
+      "to_buy" => ->(r) { r[:to_buy] },
+      "sold" => ->(r) { r[:units_30d] }
+    }.freeze
+
+    def full_sort_key = FULL_SORTS.key?(@params[:sort].to_s) ? @params[:sort].to_s : nil
+    def full_sort_dir = @params[:dir].to_s == "asc" ? "asc" : "desc"
+
+    def default_full_order(r)
+      [ r[:replenish] ? 0 : 1, MlFullReplenishment::URGENCY_ORDER.index(r[:urgency]) || 9, -(r[:suggested] || 0), -(r[:lost_revenue] || 0) ]
+    end
+
+    # Linhas sem valor na coluna (ex.: sem sugestão, SKU fora do Olist) ficam sempre no fim, nas duas direções.
+    def sort_full(rows)
+      base = rows.sort_by { |r| default_full_order(r) }
+      return base unless (key = full_sort_key)
+
+      sign = full_sort_dir == "asc" ? 1 : -1
+      ranked = base.each_with_index.map { |r, i| [ FULL_SORTS[key].call(r), i, r ] }
+      with, without = ranked.partition { |v, _, _| !v.nil? }
+      with.sort { |(va, ia, _), (vb, ib, _)| ((va <=> vb) * sign).nonzero? || (ia <=> ib) }.map(&:last) + without.map(&:last)
     end
 
     def filter_full(rows)
