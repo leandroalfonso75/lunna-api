@@ -43,6 +43,28 @@ RSpec.describe "/api/items: curva, data de criação, editar e excluir em lote",
       expect(ids(sort: "date_created", dir: "asc")).to eq(%w[MLBA MLBC MLBB MLBZ])
       expect(ids(sort: "curve", per_page: 2, page: 2)).to eq(%w[MLBC MLBZ])
     end
+
+    it "filtra os criados há mais de N dias, também nas contagens das abas; vazio ou inválido não filtra" do
+      travel_to(Time.zone.parse("2026-11-24 12:00")) do
+        expect(ids(created_older_than: 90, sort: "date_created")).to eq(%w[MLBB MLBC MLBA]) # MLBZ é de 01/11
+        expect(json["status_counts"]["active"]).to eq(3)
+        expect(json["created_older_than"]).to eq(90)
+        expect(ids(created_older_than: 365, sort: "date_created")).to eq(%w[MLBC MLBA])
+        expect(ids(created_older_than: 1000, sort: "date_created")).to eq([])
+        expect(ids(created_older_than: "abc").size).to eq(4)
+        expect(json["created_older_than"]).to be_nil
+        expect(ids(created_older_than: "").size).to eq(4)
+      end
+    end
+
+    it "aba Catálogo também filtra pela data de criação" do
+      account.ml_items.where(item_id: %w[MLBA MLBZ]).update_all(catalog_listing: true)
+      travel_to(Time.zone.parse("2026-11-24 12:00")) do
+        get "/api/items/catalog", params: { account_id: account.id, created_older_than: 30 }, headers: auth_headers(member)
+        expect(json["items"].map { |i| i["item_id"] }).to eq([ "MLBA" ])
+        expect(json["counts"]["total"]).to eq(1)
+      end
+    end
   end
 
   describe "editar selecionados" do

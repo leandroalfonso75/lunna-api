@@ -1,5 +1,6 @@
 # GET  /api/items (SPEC 10.4) → tabela de anúncios com filtros, busca, ordenação e paginação (Painel::ItemQuery); traz a
 #      curva ABC e a data de criação de cada anúncio e ordena por elas (sort=curve|date_created, 24/11/2026)
+#      ?created_older_than=N (dias) → só anúncios criados há mais de N dias (também em /api/items/catalog)
 # GET  /api/items/bulk_edit?item_ids[]=   → confere se os selecionados podem ser editados juntos (um só ou mesmos SKUs)
 # POST /api/items/bulk_delete?account_id= → exclui do Mercado Livre (admin; item_ids[], confirm: true); resultado por anúncio
 class ItemsController < ApplicationController

@@ -35,6 +35,9 @@ module Painel
 
     def call
       base = @account.item_metrics
+      # "criados há mais de N dias" (24/11/2026): vale também para as contagens das abas de status
+      created = Painel::CreatedFilter.item_ids(@account, @params)
+      base = base.where(item_id: created) if created && @params[:id].blank? # modo focado (?id=) ignora os filtros
       counts = status_counts(base)
 
       relation = @params[:id].present? ? base.where(item_id: @params[:id]) : filtered_relation(base)
@@ -53,7 +56,8 @@ module Painel
         active_filter: { alert: active_alert_info },
         active_filters_count: active_filters_count,
         invalid_filters: @invalid_filters,
-        sort: sort_column, dir: dir
+        sort: sort_column, dir: dir,
+        created_older_than: Painel::CreatedFilter.days(@params)
       }
     end
 

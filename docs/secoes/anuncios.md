@@ -89,3 +89,10 @@ preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do to
   - **Descrição**: o editor da Curva ABC, com "Sugerir descrição".
   - **Imagens**: o gerador com IA da Curva ABC (`AbcPhotoGenerator`). As fotos aprovadas vão para o principal e depois para
     os outros do mesmo SKU (`PicturePublisher` aceita esses destinos).
+
+## Filtro "Anúncios criados há mais de" (24/11/2026, pedido do usuário)
+
+- Acima das abas Todos e Catálogo: 30, 60, 90, 180 ou 365 dias, ou **Personalizado** (campo só de números, até 36.500
+  dias). Vale para as duas abas e para as contagens (Ativos, Pausados, Finalizados, Todos e os contadores do Catálogo).
+- API: `created_older_than=N` em `GET /api/items` e `GET /api/items/catalog` (`Painel::CreatedFilter`, por
+  `ml_items.date_created < agora − N dias`). Vazio, zero ou não numérico = sem filtro. O modo focado (`?id=`) ignora o filtro.

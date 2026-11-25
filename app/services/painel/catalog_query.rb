@@ -23,7 +23,10 @@ module Painel
     end
 
     def call
-      items = @account.ml_items.where(catalog_listing: true).to_a
+      scope = @account.ml_items.where(catalog_listing: true)
+      # "criados há mais de N dias" (24/11/2026), acima das abas: vale também para os contadores do topo
+      scope = scope.where("date_created < ?", Painel::CreatedFilter.cutoff(@params)) if Painel::CreatedFilter.days(@params)
+      items = scope.to_a
       related_ids = items.flat_map { |i| Array(i.item_relations).map { |r| r["id"] } }.compact.uniq
       related = @account.ml_items.where(item_id: related_ids).index_by(&:item_id)
       metrics = @account.item_metrics.where(item_id: items.map(&:item_id)).index_by(&:item_id)
