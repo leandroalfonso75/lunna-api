@@ -106,3 +106,8 @@ preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do to
   sincronização), não só pelos pedidos importados no Lunna (que cobrem os últimos meses).
 - API: `sales=none|N` em `GET /api/items` e `GET /api/items/catalog` (`Painel::SalesFilter`); os dois filtros juntos em
   `Painel::ListingFilters`. "+N" = N ou mais. Front: `ListingFilterSelect.vue`, usado pelos dois filtros.
+- Revisto em 25/11/2026 (pedido do usuário): as opções viraram **faixas**: Sem vendas, 1 a 4, 5 a 9, 10 a 24, 25 a 49,
+  50 a 99, 100 a 499, 500 a 999, 1.000 a 4.999, 5.000 a 9.999 e Personalizado com **de/até** ("até" vazio = de N para
+  cima). API: `sales=none|A-B|A-` (o formato antigo `N` = N ou mais continua aceito; faixa invertida = sem filtro).
+- Os dois filtros só valem depois de clicar em **Aplicar** (botão azul arredondado ao lado de cada um; Enter no campo
+  personalizado também aplica). Enquanto não aplicar, aparece "clique em Aplicar para filtrar". "Limpar" tira o filtro na hora.
