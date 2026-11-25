@@ -63,6 +63,26 @@ Tabela de anúncios do Mercado Livre com o **lucro antes Ads por unidade**.
 (`catalog_status` do price_to_win, lido a cada 30 min só para ativos; pausados ficam "Sem leitura"), preço para ganhar,
 preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do topo filtram; busca por MLB, título ou SKU.
 
+## Aba Tradicional (25/11/2026, pedido do usuário)
+
+- Ao lado de Catálogo. É a mesma tabela da aba Todos (`ItemsTable.vue` com `kind="traditional"`), só com os anúncios que
+  **não** são de catálogo: `GET /api/items?kind=traditional` (`Painel::ItemQuery`, `item_metrics.catalog` falso ou vazio).
+  Filtros de criação e de vendas, ordenação, seleção, Editar/Excluir e as contagens (Ativos, Pausados, Finalizados,
+  Todos) valem igual; as contagens contam só tradicionais.
+- Abaixo do título de cada anúncio: **Sincronizado com catálogo** (verde) ou **Não sincronizado com catálogo** (amarelo), e o
+  código de cada anúncio de catálogo sincronizado como **link** para o anúncio publicado (abre em outra aba). Na API, cada
+  linha traz `catalog_sync`: `[{ item_id, permalink, status }]` (vazio = não sincronizado; `nil` nos de catálogo).
+- A regra de sincronização é a de Promoções: `item_relations` de qualquer um dos dois lados (`Painel::CatalogSync`).
+  `Painel::PromotionsQuery#synced_with_catalog` passou a usar a mesma classe (conferido em 25/11/2026 na LUNNA_SHOP: 72
+  tradicionais sincronizados pelas duas formas, mesmo conjunto).
+- **Excluir tradicional sincronizado** (vale nas abas Todos e Tradicional): antes de abrir a confirmação, a tela pergunta à
+  API (`GET /api/items/delete_preview?item_ids[]=`) quais selecionados são sincronizados. A janela avisa "O anúncio de
+  catálogo também será excluído" com `tradicional → catálogo` e soma os catálogos no total. Com **Sim**, vai
+  `with_catalog=true` em `bulk_delete`: para cada tradicional, o(s) catálogo(s) saem **primeiro** e depois o tradicional;
+  se o ML recusar o catálogo, o tradicional **não** é excluído (não fica catálogo órfão). A tela mostra o resultado de cada
+  anúncio (o catálogo aparece como "catálogo sincronizado a MLB…"). Sem `with_catalog`, a API recusa (422) a exclusão de
+  um tradicional sincronizado. Catálogo já finalizado não entra. Catálogo também selecionado sai uma vez só.
+
 ## Curva ABC, data de criação, seleção, excluir e editar (24/11/2026, pedido do usuário)
 
 - **Curva**: bola ao lado do anúncio, azul = A, verde = B, vermelha = C. É a mesma curva da seção Curva ABC
@@ -92,7 +112,7 @@ preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do to
 
 ## Filtro "Anúncios criados há mais de" (24/11/2026, pedido do usuário)
 
-- Acima das abas Todos e Catálogo: 30, 60, 90, 180 ou 365 dias, ou **Personalizado** (campo só de números, até 36.500
+- Acima das abas Todos, Catálogo e Tradicional: 30, 60, 90, 180 ou 365 dias, ou **Personalizado** (campo só de números, até 36.500
   dias). Vale para as duas abas e para as contagens (Ativos, Pausados, Finalizados, Todos e os contadores do Catálogo).
 - API: `created_older_than=N` em `GET /api/items` e `GET /api/items/catalog` (`Painel::CreatedFilter`, por
   `ml_items.date_created < agora − N dias`). Vazio, zero ou não numérico = sem filtro. O modo focado (`?id=`) ignora o filtro.

@@ -242,9 +242,9 @@ module Painel
     def brl(v) = ActiveSupport::NumberHelper.number_to_currency(v, unit: "R$", separator: ",", delimiter: ".")
 
     # Anúncios tradicionais ligados a um anúncio de catálogo (item_relations de qualquer um dos dois lados).
+    # Mesma regra da aba Anúncios › Tradicional (Painel::CatalogSync).
     def synced_with_catalog
-      @synced_with_catalog ||= @account.ml_items.where("jsonb_array_length(item_relations) > 0").pluck(:item_id, :catalog_listing, :item_relations)
-        .flat_map { |id, catalog, rel| catalog ? rel.map { |r| r["id"] } : [ id ] }.to_set
+      @synced_with_catalog ||= Painel::CatalogSync.for(@account).map.keys.to_set
     end
 
     # Custo de Ads por unidade de cada anúncio nos últimos 15 dias fechados: gasto ÷ unidades vendidas (vendas não

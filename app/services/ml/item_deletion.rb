@@ -3,12 +3,27 @@
 # Não tem volta: anúncio excluído some do painel do ML e não pode ser reativado (só republicado como anúncio novo).
 # Escrita no ML: só admin, com confirmação na tela, cada anúncio registrado em ml_item_edits (kind "exclusao").
 # Um anúncio que o ML recusar não impede os outros; o resultado vem por anúncio.
+#
+# Tradicional sincronizado com catálogo (25/11/2026): a tela avisa que o anúncio de catálogo também será excluído e, com
+# a confirmação (with_catalog), o catálogo é excluído primeiro e depois o tradicional. Se o catálogo não puder ser
+# excluído, o tradicional fica como está (não deixa catálogo órfão).
 module Ml
   class ItemDeletion
     MAX_ITEMS = 50
-    Result = Struct.new(:item_id, :ok, :message, keyword_init: true)
+    Result = Struct.new(:item_id, :ok, :message, :catalog_of, keyword_init: true)
 
-    def self.call(client, account, item_ids, user:) = new(client, account, user).call(item_ids)
+    def self.call(client, account, item_ids, user:, with_catalog: false) = new(client, account, user).call(item_ids, with_catalog: with_catalog)
+
+    # { tradicional selecionado => [anúncios de catálogo sincronizados a ele, ainda não finalizados] }
+    # Vale também quando o catálogo já está na seleção: ele sai junto com o tradicional, antes dele.
+    def self.linked_catalogs(account, item_ids)
+      ids = Array(item_ids).map(&:to_s).uniq
+      traditional = account.ml_items.where(item_id: ids, catalog_listing: [ false, nil ]).pluck(:item_id)
+      sync = Painel::CatalogSync.for(account)
+      linked = traditional.to_h { |id| [ id, sync.catalog_ids_for(id) ] }.reject { |_, cats| cats.empty? }
+      open = account.ml_items.where(item_id: linked.values.flatten, catalog_listing: true).where.not(status: "closed").pluck(:item_id).to_set
+      linked.transform_values { |cats| cats.select { |c| open.include?(c) } }.reject { |_, cats| cats.empty? }
+    end
 
     def initialize(client, account, user)
       @client = client
@@ -16,10 +31,26 @@ module Ml
       @user = user
     end
 
-    def call(item_ids)
+    def call(item_ids, with_catalog: false)
       ids = Array(item_ids).map(&:to_s).reject(&:blank?).uniq
-      own = @account.ml_items.where(item_id: ids).index_by(&:item_id)
-      ids.map { |id| own[id] ? delete(own[id]) : Result.new(item_id: id, ok: false, message: "Anúncio não encontrado nesta conta.") }
+      linked = with_catalog ? self.class.linked_catalogs(@account, ids) : {}
+      own = @account.ml_items.where(item_id: ids + linked.values.flatten).index_by(&:item_id)
+      done = {}
+      ids.each do |id|
+        next if done.key?(id) # catálogo selecionado que já saiu junto com o seu tradicional
+        unless own[id]
+          done[id] = Result.new(item_id: id, ok: false, message: "Anúncio não encontrado nesta conta.")
+          next
+        end
+        catalogs = Array(linked[id]).reject { |cid| done.key?(cid) }.filter_map { |cid| own[cid] }
+                                    .map { |cat| done[cat.item_id] = delete(cat).tap { |r| r.catalog_of = id } }
+        done[id] = if catalogs.any? { |r| !r.ok }
+          Result.new(item_id: id, ok: false, message: "Não excluído: o anúncio de catálogo sincronizado não pôde ser excluído.")
+        else
+          delete(own[id])
+        end
+      end
+      done.values
     end
 
     private

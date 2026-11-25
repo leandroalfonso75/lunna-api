@@ -47,6 +47,7 @@ Rails.application.routes.draw do
     get "items", to: "items#index"
     get "items/catalog", to: "items#catalog"
     get "items/bulk_edit", to: "items#bulk_edit"
+    get "items/delete_preview", to: "items#delete_preview"
     post "items/bulk_delete", to: "items#bulk_delete"
     get "items/:item_id/title", to: "item_edits#title"
     post "items/:item_id/title/suggest", to: "item_edits#suggest_title"

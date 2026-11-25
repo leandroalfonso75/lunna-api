@@ -23,7 +23,7 @@ module Painel
     # "Finalizados/inativos sem faturamento nos últimos 60 dias" (SPEC 6):
     # payload enxuto, sem under_review (esse ainda precisa de atenção).
     LEAN_STATUSES = %w[closed inactive].freeze
-    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean curve date_created].freeze
+    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean curve date_created catalog catalog_sync].freeze
 
     def self.call(account, params) = new(account, params).call
 
@@ -38,6 +38,8 @@ module Painel
       # "criados há mais de N dias" (24/11) e "Quantidade de Vendas" (25/11), cumulativos: valem também para as contagens
       listed = Painel::ListingFilters.item_ids(@account, @params)
       base = base.where(item_id: listed) if listed && @params[:id].blank? # modo focado (?id=) ignora os filtros
+      # aba Tradicional (25/11/2026): só os anúncios que não são de catálogo; as contagens das abas de status acompanham
+      base = base.where(catalog: [ false, nil ]) if @params[:kind].to_s == "traditional" && @params[:id].blank?
       counts = status_counts(base)
 
       relation = @params[:id].present? ? base.where(item_id: @params[:id]) : filtered_relation(base)
@@ -88,6 +90,8 @@ module Painel
       @curves ||= Abc::Classifier.call(@account.item_metrics.to_a, Abc::Params.from(@account.company))
                                  .rows.to_h { |row| [ row.metric.item_id, row.curve ] }
     end
+
+    def catalog_sync = @catalog_sync ||= Painel::CatalogSync.for(@account)
 
     def created_dates
       @created_dates ||= @account.ml_items.pluck(:item_id, :date_created).to_h
@@ -284,7 +288,9 @@ module Painel
         quality_score: metric.quality_score, quality_state: quality_state(metric.quality_score),
         quality_level: quality_level, quality_actions: quality_actions(quality_pending),
         alert_keys: alert_keys, links: Painel::Labels.links(metric.item_id), lean: false,
-        curve: curves[metric.item_id], date_created: created_dates[metric.item_id]
+        curve: curves[metric.item_id], date_created: created_dates[metric.item_id],
+        # tradicional: anúncios de catálogo sincronizados (vazio = não sincronizado); catálogo: nil (25/11/2026)
+        catalog_sync: metric.catalog ? nil : catalog_sync.links_for(metric.item_id)
       }
 
       lean?(metric) ? leanify(row) : row
