@@ -96,3 +96,13 @@ preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do to
   dias). Vale para as duas abas e para as contagens (Ativos, Pausados, Finalizados, Todos e os contadores do Catálogo).
 - API: `created_older_than=N` em `GET /api/items` e `GET /api/items/catalog` (`Painel::CreatedFilter`, por
   `ml_items.date_created < agora − N dias`). Vazio, zero ou não numérico = sem filtro. O modo focado (`?id=`) ignora o filtro.
+
+## Filtro "Quantidade de Vendas" (25/11/2026, pedido do usuário)
+
+- Logo abaixo de "Anúncios criados há mais de": Sem vendas, +5, +10, +25, +50, +100, +500, +1.000, +5.000 vendas ou
+  **Personalizado** (campo só de números, N vendas ou mais). Cumulativo com o filtro de criação (ex.: criados há mais de
+  90 dias **e** sem vendas). Vale para as duas abas e para as contagens.
+- Pelo total vendido do anúncio desde a criação, como o Mercado Livre informa (`ml_items.sold_quantity`, relido a cada
+  sincronização), não só pelos pedidos importados no Lunna (que cobrem os últimos meses).
+- API: `sales=none|N` em `GET /api/items` e `GET /api/items/catalog` (`Painel::SalesFilter`); os dois filtros juntos em
+  `Painel::ListingFilters`. "+N" = N ou mais. Front: `ListingFilterSelect.vue`, usado pelos dois filtros.

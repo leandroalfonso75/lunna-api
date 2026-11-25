@@ -17,10 +17,9 @@ module Painel
       (d = days(params)) ? d.days.ago : nil
     end
 
-    # ids dos anúncios da conta criados antes do corte (sem data de criação ficam de fora quando há filtro)
-    def self.item_ids(account, params)
-      cut = cutoff(params)
-      cut && account.ml_items.where("date_created < ?", cut).select(:item_id)
+    # sem data de criação fica de fora quando há filtro
+    def self.apply(scope, params)
+      (cut = cutoff(params)) ? scope.where("date_created < ?", cut) : scope
     end
   end
 end

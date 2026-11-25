@@ -57,12 +57,35 @@ RSpec.describe "/api/items: curva, data de criação, editar e excluir em lote",
       end
     end
 
+    it "Quantidade de Vendas: sem vendas ou N vendas ou mais (total do ML), cumulativo com a data de criação" do
+      { "MLBA" => 1200, "MLBB" => 30, "MLBC" => 0, "MLBZ" => 5 }.each { |id, sold| account.ml_items.find_by(item_id: id).update!(sold_quantity: sold) }
+      travel_to(Time.zone.parse("2026-11-24 12:00")) do
+        expect(ids(sales: "none")).to eq([ "MLBC" ])
+        expect(json["status_counts"]["active"]).to eq(1)
+        expect(json["sales"]).to eq("none")
+        expect(ids(sales: 5, sort: "date_created")).to eq(%w[MLBZ MLBB MLBA])
+        expect(ids(sales: 25, sort: "date_created")).to eq(%w[MLBB MLBA])
+        expect(ids(sales: 1000)).to eq([ "MLBA" ])
+        expect(json["sales"]).to eq(1000)
+        expect(ids(sales: 5000)).to eq([])
+        # cumulativo: criados há mais de 90 dias E com 25 vendas ou mais
+        expect(ids(sales: 25, created_older_than: 365, sort: "date_created")).to eq([ "MLBA" ])
+        expect(ids(sales: "none", created_older_than: 90)).to eq([ "MLBC" ])
+        expect(ids(sales: "xyz").size).to eq(4)
+        expect(json["sales"]).to be_nil
+      end
+    end
+
     it "aba Catálogo também filtra pela data de criação" do
       account.ml_items.where(item_id: %w[MLBA MLBZ]).update_all(catalog_listing: true)
       travel_to(Time.zone.parse("2026-11-24 12:00")) do
         get "/api/items/catalog", params: { account_id: account.id, created_older_than: 30 }, headers: auth_headers(member)
         expect(json["items"].map { |i| i["item_id"] }).to eq([ "MLBA" ])
         expect(json["counts"]["total"]).to eq(1)
+
+        account.ml_items.find_by(item_id: "MLBA").update!(sold_quantity: 0)
+        get "/api/items/catalog", params: { account_id: account.id, created_older_than: 30, sales: 10 }, headers: auth_headers(member)
+        expect(json["items"]).to eq([])
       end
     end
   end
