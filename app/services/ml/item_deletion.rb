@@ -10,6 +10,8 @@
 module Ml
   class ItemDeletion
     MAX_ITEMS = 50
+    # anúncio pai com variações (25/11/2026): a seleção (até 50) pode virar mais anúncios ao incluir as variações
+    MAX_EXPANDED = 200
     Result = Struct.new(:item_id, :ok, :message, :catalog_of, keyword_init: true)
 
     def self.call(client, account, item_ids, user:, with_catalog: false) = new(client, account, user).call(item_ids, with_catalog: with_catalog)

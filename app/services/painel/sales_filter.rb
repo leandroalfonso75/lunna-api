@@ -38,6 +38,15 @@ module Painel
       end
     end
 
+    # um total de vendas passa no filtro? (sem filtro: sempre). Usado pelo anúncio pai (Painel::ListingFamilies)
+    def self.match?(sold, params)
+      case (v = value(params))
+      when :none then sold.to_i.zero?
+      when Range then sold.to_i >= v.min && (v.max.nil? || sold.to_i <= v.max)
+      else true
+      end
+    end
+
     # valor normalizado devolvido pela API ("none", "A-B", "A-") ou nil
     def self.label(params)
       case (v = value(params))

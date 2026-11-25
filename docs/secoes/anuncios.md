@@ -131,3 +131,25 @@ preço do vencedor e motivo, SKUs completos, preço e vendas 30d. Cartões do to
   cima). API: `sales=none|A-B|A-` (o formato antigo `N` = N ou mais continua aceito; faixa invertida = sem filtro).
 - Os dois filtros só valem depois de clicar em **Aplicar** (botão azul arredondado ao lado de cada um; Enter no campo
   personalizado também aplica). Enquanto não aplicar, aparece "clique em Aplicar para filtrar". "Limpar" tira o filtro na hora.
+
+## Filtros pelo anúncio pai, com variações (25/11/2026, pedido do usuário)
+
+- No modelo de User Products do ML cada variação é um anúncio próprio; o pai é a família (`ml_items.family_id`, mesma
+  regra de `Ml::ItemVariations`: mesma família, mesmo tipo Clássico/Premium, fora do catálogo). Anúncio de catálogo e
+  anúncio sem família são o próprio pai.
+- Com "Anúncios criados há mais de" ou "Quantidade de Vendas" aplicado, as abas Todos e Tradicional mostram **só o pai**
+  de cada família (`Painel::ListingFamilies`), e o filtro olha a família inteira:
+  - **vendas** = soma de todas as variações (1.000 + 100 + 50 + três sem venda = 1.150: não aparece em "Sem vendas";
+    3 + 4 = 7: aparece em "5 a 9");
+  - **criação** = a data do anúncio mais antigo da família (quando o pai foi criado).
+  Motivo: não aparecer como "sem vendas" uma variação cujo pai ainda vende pelas outras. As contagens das abas contam pais.
+- O pai é a variação que melhor representa a família (ativa antes de pausada/finalizada, depois a que mais vendeu). A linha
+  mostra o selo **"N variações · X vendas"** (vendas somadas) e a data de criação do pai; a seta abre a lista das variações
+  (como em Produtos). API: `family: { count, sold_total, date_created, item_ids }` em cada linha e `grouped_by_parent: true`.
+- **Excluir o pai exclui todas as variações**: com os filtros aplicados a tela manda `with_variations=true` em
+  `delete_preview` e `bulk_delete`; a confirmação avisa "todas as variações também serão excluídas" e lista cada uma, e o
+  total conta as variações (e os catálogos sincronizados, que continuam saindo junto). Até 50 selecionados e até 200
+  anúncios com as variações (`Ml::ItemDeletion::MAX_EXPANDED`). O resultado mostra cada anúncio.
+- Sem esses dois filtros, a tabela continua com cada variação numa linha, como antes.
+- Conferido em 25/11/2026 na LUNNA_SHOP: 686 anúncios em 223 pais (41 com variações). "Sem vendas" caiu de 399 anúncios
+  para 51 pais (344 variações sem venda saíram porque o pai vende). Ex.: Base Stick Boca Rosa, 50 variações, 118 vendas.

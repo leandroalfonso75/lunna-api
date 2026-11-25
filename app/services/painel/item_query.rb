@@ -23,7 +23,8 @@ module Painel
     # "Finalizados/inativos sem faturamento nos últimos 60 dias" (SPEC 6):
     # payload enxuto, sem under_review (esse ainda precisa de atenção).
     LEAN_STATUSES = %w[closed inactive].freeze
-    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean curve date_created catalog catalog_sync].freeze
+    LEAN_KEEP = %i[id title status status_label sku price stock listing_type_label full links lean curve date_created catalog catalog_sync
+                   family].freeze
 
     def self.call(account, params) = new(account, params).call
 
@@ -35,9 +36,9 @@ module Painel
 
     def call
       base = @account.item_metrics
-      # "criados há mais de N dias" (24/11) e "Quantidade de Vendas" (25/11), cumulativos: valem também para as contagens
-      listed = Painel::ListingFilters.item_ids(@account, @params)
-      base = base.where(item_id: listed) if listed && @params[:id].blank? # modo focado (?id=) ignora os filtros
+      # "criados há mais de N dias" (24/11) e "Quantidade de Vendas" (25/11), cumulativos: valem também para as contagens.
+      # Pelo anúncio pai (25/11/2026): só o pai de cada família, com as vendas somadas e a criação do mais antigo.
+      base = base.where(item_id: families.lead_ids(@params)) if grouped? # modo focado (?id=) ignora os filtros
       # aba Tradicional (25/11/2026): só os anúncios que não são de catálogo; as contagens das abas de status acompanham
       base = base.where(catalog: [ false, nil ]) if @params[:kind].to_s == "traditional" && @params[:id].blank?
       counts = status_counts(base)
@@ -59,11 +60,24 @@ module Painel
         active_filters_count: active_filters_count,
         invalid_filters: @invalid_filters,
         sort: sort_column, dir: dir,
-        created_older_than: Painel::CreatedFilter.days(@params), sales: Painel::SalesFilter.label(@params)
+        created_older_than: Painel::CreatedFilter.days(@params), sales: Painel::SalesFilter.label(@params),
+        grouped_by_parent: grouped?
       }
     end
 
     private
+
+    def grouped? = Painel::ListingFilters.active?(@params) && @params[:id].blank?
+
+    def families = @families ||= Painel::ListingFamilies.for(@account)
+
+    # anúncio pai com variações: quantas são, vendas somadas, criação do pai e os anúncios da família (para excluir junto)
+    def family_info(item_id)
+      group = grouped? ? families.group_of(item_id) : nil
+      return nil unless group&.variations?
+
+      { count: group.item_ids.size, sold_total: group.sold, date_created: group.created, item_ids: group.item_ids }
+    end
 
     # [metrics da página, economics já calculada ou nil]. Ordenação em SQL, ou em Ruby quando a coluna é calculada.
     def page_of(relation, sort_column, dir, page, per_page)
@@ -290,7 +304,8 @@ module Painel
         alert_keys: alert_keys, links: Painel::Labels.links(metric.item_id), lean: false,
         curve: curves[metric.item_id], date_created: created_dates[metric.item_id],
         # tradicional: anúncios de catálogo sincronizados (vazio = não sincronizado); catálogo: nil (25/11/2026)
-        catalog_sync: metric.catalog ? nil : catalog_sync.links_for(metric.item_id)
+        catalog_sync: metric.catalog ? nil : catalog_sync.links_for(metric.item_id),
+        family: family_info(metric.item_id)
       }
 
       lean?(metric) ? leanify(row) : row
