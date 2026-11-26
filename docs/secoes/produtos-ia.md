@@ -12,8 +12,10 @@ Flex, frete grátis e a publicação no Mercado Livre.
 ## Tipos
 
 - **Simples** (`simple`): um produto, um SKU.
-- **Com variações** (`variations`): até 3 eixos (Cor, Voltagem, Tamanho, Tom ou outro); os valores são digitados
-  separados por vírgula e "Montar grade" cria todas as combinações (mantendo SKU/EAN/estoque das linhas que já
+- **Com variações** (`variations`): até 3 **tipos de variação** combinados (ex.: roupas com Cor e Tamanho; Cor,
+  Voltagem, Tamanho, Tom ou outro digitado). Os botões dos tipos que faltam continuam visíveis depois do primeiro
+  (corrigido em 26/11/2026: antes só sobrava um campo "Outro eixo"). Os valores são digitados separados por vírgula, a
+  tela mostra a conta (ex.: 3 × 4 = 12 variações) e "Montar grade" cria todas as combinações (mantendo SKU/EAN/estoque das linhas que já
   existiam). Cada linha: SKU, EAN, preço, estoque inicial (opcional) e **É kit**.
 - **Kit** (`kit`): composição de produtos já existentes (SKU + quantidade), escolhidos dos produtos do ERP sincronizados no
   Lunna (`GET /api/catalog_products/sku_search`; pai de variações fica de fora). Opção **Não tenho / não quero SKUs de
