@@ -49,6 +49,11 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   cotação ficam no título. **Reprovar** ao lado de Aprovar abre o aviso "A reprovação da imagem não exime do pagamento
   de sua geração" com **Excluir mesmo assim** (`DELETE /api/photo_images/:id`, admin: marca `rejected_at`, tira da
   tela, da ordem e da publicação; o custo segue no total do pedido) e **Manter imagem e Aprovar**.
+  **+ Adicionar foto** (25/11/2026): gera mais uma imagem no mesmo pedido (`POST /api/photo_jobs/:id/add_photo`, admin),
+  com as mesmas referências e instruções e a próxima cena; até 10 por pedido (`MlPhotoJob::MAX_TOTAL`; pedido novo
+  segue até 6), não em pedido gerando nem já publicado (aí é "Novo pedido").
+  Fotos publicadas entram na posição escolhida na ordem: na página do ML a galeria mostra 7 miniaturas e "+N"; as que
+  ficam depois da 7ª só aparecem ao abrir a galeria (caso MLB6259194640 em 25/11/2026: fotos novas em 7ª e 10ª).
 
 ## Arquivos
 **Front (`lunna-web`)**

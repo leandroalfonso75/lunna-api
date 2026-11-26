@@ -5,10 +5,11 @@
 # PATCH /api/photo_images/:id?account_id=             → aprovar/reprovar (admin; approved)
 # DELETE /api/photo_images/:id?account_id=            → reprovar e tirar da tela (admin); o custo segue no pedido
 # POST  /api/photo_jobs/:id/publish?account_id=       → publica as aprovadas no ML (admin; confirm: true)
+# POST  /api/photo_jobs/:id/add_photo?account_id=     → gera mais uma imagem no mesmo pedido (admin; até 10)
 class PhotoJobsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :create, :approve, :reject, :publish, :check_cover ]
+  before_action :require_admin!, only: [ :create, :approve, :reject, :add_photo, :publish, :check_cover ]
 
   MAX_UPLOAD_BYTES = 8.megabytes
 
@@ -65,6 +66,24 @@ class PhotoJobsController < ApplicationController
     render json: { id: photo.id, approved: photo.approved }
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Imagem não encontrada." ], status: :not_found)
+  end
+
+  # "Adicionar foto" (pedido do usuário em 25/11/2026): mais uma imagem no mesmo pedido, com as mesmas referências e
+  # instruções e a próxima cena da lista. Reprovadas contam no limite (já foram geradas e pagas).
+  def add_photo
+    job = Current.account.ml_photo_jobs.find(params[:id])
+    return render_errors([ "As fotos ainda estão sendo geradas." ], status: :unprocessable_content) if job.status == "gerando"
+    return render_errors([ "Este pedido já foi publicado; faça um novo pedido." ], status: :unprocessable_content) if job.status == "publicado"
+    if job.count >= MlPhotoJob::MAX_TOTAL
+      return render_errors([ "Limite de #{MlPhotoJob::MAX_TOTAL} imagens por pedido; faça um novo pedido." ], status: :unprocessable_content)
+    end
+    return render_errors([ Ai::PhotoGenerator::CONFIG_ERROR ], status: :unprocessable_content) if Current.account.company.openrouter_api_key.blank?
+
+    job.update!(count: [ job.count, job.generated.size ].max + 1, status: "gerando", error: nil)
+    Ai::PhotoGenerationJob.perform_later(job.id)
+    render json: job_json(job.reload)
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Pedido não encontrado." ], status: :not_found)
   end
 
   # Reprovar (pedido do usuário em 25/11/2026): a imagem some da tela e não é publicada; a geração já foi paga, então ela

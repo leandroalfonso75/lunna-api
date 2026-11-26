@@ -74,6 +74,36 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
     expect(listed["photos"].find { |p| p["id"] == bad.id }).to include("rejected" => true, "cost_brl" => 0.78)
   end
 
+  it "Adicionar foto gera mais uma imagem no mesmo pedido (só admin, até 10, não em pedido publicado)" do
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 2, status: "pronto")
+    2.times { |i| job.photos.create!(kind: "gerada", position: i, mime: "image/png", data: png) }
+
+    post "/api/photo_jobs/#{job.id}/add_photo", params: { account_id: account.id }, headers: auth_headers(member), as: :json
+    expect(response).to have_http_status(:forbidden)
+
+    expect {
+      post "/api/photo_jobs/#{job.id}/add_photo", params: { account_id: account.id }, headers: auth_headers(admin), as: :json
+    }.to have_enqueued_job(Ai::PhotoGenerationJob).with(job.id)
+    expect(json).to include("count" => 3, "status" => "gerando")
+
+    post "/api/photo_jobs/#{job.id}/add_photo", params: { account_id: account.id }, headers: auth_headers(admin), as: :json
+    expect(response).to have_http_status(:unprocessable_content) # ainda gerando
+
+    job.reload.update!(status: "pronto", count: 10)
+    post "/api/photo_jobs/#{job.id}/add_photo", params: { account_id: account.id }, headers: auth_headers(admin), as: :json
+    expect(json["errors"].first).to include("Limite de 10")
+
+    job.update!(status: "publicado", count: 3)
+    post "/api/photo_jobs/#{job.id}/add_photo", params: { account_id: account.id }, headers: auth_headers(admin), as: :json
+    expect(json["errors"].first).to include("já foi publicado")
+  end
+
+  it "um pedido novo continua limitado a 6 imagens" do
+    expect(account.ml_photo_jobs.new(item_id: "MLB1", count: 7, status: "gerando")).not_to be_valid
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 6, status: "pronto")
+    expect(job.update(count: 7)).to be(true)
+  end
+
   it "publica no ML só as aprovadas, com confirmação, mantendo as fotos que já estavam" do
     job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 2, status: "pronto")
     ok = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png)
