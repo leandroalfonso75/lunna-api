@@ -216,9 +216,8 @@ module Painel
 
       # só conta agendamento de verdade: o registro de uma simulação não cria a tarefa (até 04/11/2026 contava e a rotina
       # pulava o anúncio achando que já estava programado)
-      if @account.ml_promotion_actions.where(item_id: ev[:item].item_id, kind: "agendar", ok: true, to_type: fit[:offer].promotion_type,
-                                             to_promotion_id: fit[:offer].promotion_id).where.not(source: "simulacao")
-                 .where("effective_at > ?", Time.current).exists?
+      if @account.ml_promotion_actions.pending_schedules.where(item_id: ev[:item].item_id, to_type: fit[:offer].promotion_type,
+                                                               to_promotion_id: fit[:offer].promotion_id).where.not(source: "simulacao").exists?
         return skip(run, ev, "sem_mudanca", "oferta cabível já programada para quando a promoção atual acabar")
       end
 

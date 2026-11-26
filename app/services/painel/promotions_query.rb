@@ -185,7 +185,7 @@ module Painel
 
     # Troca já programada pela automação (ação "agendar" que deu certo e ainda não chegou a hora), a mais recente por anúncio.
     def scheduled_by_item(ids)
-      @account.ml_promotion_actions.where(item_id: ids, kind: "agendar", ok: true).where("effective_at > ?", Time.current)
+      @account.ml_promotion_actions.pending_schedules.where(item_id: ids)
               .order(:created_at).each_with_object({}) do |a, h|
         h[a.item_id] = { effective_at: a.effective_at, name: a.to_name, type: a.to_type, price: a.to_price&.to_f,
                          margin_pct: a.to_margin_pct&.to_f, label: PromotionEvaluator::TYPE_LABELS.fetch(a.to_type, a.to_type) }

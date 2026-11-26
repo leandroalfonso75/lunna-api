@@ -179,6 +179,7 @@ module Painel
         return failed(log, "O Mercado Livre recusou a entrada em #{name_of(chosen)}: #{ml_message(e)}. O anúncio segue em #{name_of(current)}.", e)
       end
       log.update!(ok: true)
+      cancel_scheduled_applies(item.item_id)
       finish = current[:offer].finish_date
       overlap = finish.nil? || finish > start
       if overlap
@@ -206,6 +207,23 @@ module Painel
       target = ->(o) { { promotion_id: o.promotion_id.to_s, promotion_type: o.promotion_type } }
       Ml::PromotionsHandoffJob.set(wait_until: scheduled.last + 5.minutes)
         .perform_later(@account.id, item.item_id, target.(chosen[:offer]), target.(scheduled.first), @source)
+    end
+
+    # A mudança que acabou de dar certo substitui o que estava marcado para depois neste anúncio: a cabível programada
+    # pela rotina para o fim da promoção atual e as novas tentativas de uma aplicação que tinha falhado. Sem isso, a
+    # tarefa antiga rodava depois e mexia de novo no preço (MLB4954103843, 25/11/2026: a cabível aplicada pela tela
+    # ficaria com uma tarefa de 07/12 e outra de nova tentativa, cada uma saindo e entrando de novo no desconto).
+    def cancel_scheduled_applies(item_id)
+      return unless Ml::PromotionsApplyJob.queue_adapter.is_a?(ActiveJob::QueueAdapters::SolidQueueAdapter)
+
+      SolidQueue::Job.where(class_name: "Ml::PromotionsApplyJob", finished_at: nil).where("scheduled_at > ?", Time.current + 1.minute).find_each do |job|
+        args = job.arguments.is_a?(Hash) ? job.arguments["arguments"] : nil
+        next unless args.is_a?(Array) && args[0] == @account.id && args[1] == [ item_id ]
+
+        job.discard
+      end
+    rescue StandardError => e
+      Rails.logger.warn("cancel_scheduled_applies #{item_id}: #{e.class} #{e.message}")
     end
 
     def fresh_client
@@ -259,6 +277,7 @@ module Painel
       end
 
       log.update!(ok: true)
+      cancel_scheduled_applies(item.item_id)
       handoff_to_scheduled(item, chosen)
       Result.new(ok: true, message: success_message(kind, current, chosen), action: log)
     ensure
