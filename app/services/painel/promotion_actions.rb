@@ -87,6 +87,12 @@ module Painel
       end
 
       kind = self.class.kind_for(@account, current, chosen)
+      # ajustar para o mesmo preço não muda nada, mas sairia e entraria de novo na promoção (e o ML pode recusar a volta
+      # por alguns minutos: MLB4954103843 ficou no preço cheio às 22:11 de 25/11/2026 por uma nova tentativa assim)
+      if kind == "ajustar_preco" && (chosen[:price].to_f - current[:price].to_f).abs < 0.005
+        cancel_scheduled_applies(ev[:item].item_id)
+        return Result.new(ok: true, message: "O anúncio já está em #{name_of(current)} a #{brl(current[:price])}.")
+      end
       return schedule(client, ev[:item], current, chosen) if kind == "agendar"
 
       execute(client, ev[:item], kind, current, chosen)
@@ -374,6 +380,8 @@ module Painel
     end
 
     def name_of(entry) = entry[:offer].name.presence || entry[:label]
+
+    def brl(value) = ActiveSupport::NumberHelper.number_to_currency(value, unit: "R$", separator: ",", delimiter: ".")
 
     def success_message(kind, current, chosen)
       price = ActiveSupport::NumberHelper.number_to_currency(chosen[:price], unit: "R$", separator: ",", delimiter: ".")

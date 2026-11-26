@@ -89,6 +89,16 @@ RSpec.describe Painel::PromotionActions do
       .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], user.id, hash_including("price" => 82.5, "attempt" => 1))
   end
 
+  it "ajustar a promoção atual para o mesmo preço não sai nem entra de novo" do
+    leave = stub_request(:delete, base).to_return(status: 200, body: "{}")
+
+    result = described_class.apply(account, item.item_id, user: user, target: { promotion_id: "C-1", promotion_type: "SELLER_CAMPAIGN", action: "editar_preco", price: 80, force: true })
+
+    expect(result.ok).to be true
+    expect(result.message).to include("já está em C-1 a R$ 80,00")
+    expect(leave).not_to have_been_requested
+  end
+
   it "sem promoção atual e outra recusa do ML: não fica tentando de novo" do
     MlPromotionOffer.where(promotion_id: "C-1").delete_all
     stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "item not eligible" }.to_json)
