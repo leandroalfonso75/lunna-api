@@ -60,6 +60,21 @@ atributos, descrição; outros sites pelo texto da página, até 12 mil caracter
 referência (cadastro do ERP + anúncio do ML do mesmo SKU, com os atributos com valor lidos na hora); fotos anexadas (até 6,
 vão para o modelo de visão).
 
+### Ajustes de 26/11/2026 (pedido do usuário)
+
+- **Custo** é opcional, com o aviso "O custo será atualizado pelo valor de custo informado no lançamento do seu
+  estoque, pelo método PEPS (Primeiro que entra, primeira que sai)".
+- Abaixo do texto das Referências: sugestão de colar ficha técnica, descrição, perguntas e respostas e avaliações dos
+  anúncios usados como referência.
+- Fotos de referência também por **colar (Ctrl+V)** um print ou imagem copiada (área "Clique aqui e cole"), além do
+  upload de arquivo.
+- **Planilha das variações**: "Baixar modelo de planilha" gera um CSV (`;`, UTF-8 com BOM, abre em colunas no Excel)
+  com uma coluna por eixo e as variações da grade já preenchidas (se a grade estiver vazia, é montada com os valores
+  digitados), mais SKU, EAN, Preço e Estoque inicial. "Enviar planilha preenchida" lê o CSV (`;` ou `,`, com aspas),
+  casa as linhas pelos valores dos eixos (sem diferenciar maiúsculas/acentos), preenche SKU/EAN/preço/estoque, cria a
+  variação quando a combinação é nova e aponta EAN inválido e colunas faltando (`importVariationsSheet`). Preço aceita
+  "129,90" e "1.299,90".
+
 ## Status
 
 `rascunho` → `em_revisao` (depois do rascunho da IA) → `pronto` ("Marcar como pronto", bloqueado com EAN inválido ou
