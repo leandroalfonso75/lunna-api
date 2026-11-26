@@ -192,6 +192,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
     Já programada (mesma oferta, `effective_at` futuro) não programa de novo. Atual sem data de fim: não programa;
   - ferindo a trava de lucro: não aplica (registra como "para revisar"); anúncio com regra própria em texto, "não
     automatizar" e catálogo fora da automação seguem as regras de sempre.
+  Aplicação que deu certo depois (tela ou lote) substitui a programada: a tarefa marcada só para aquele anúncio
+  (cabível programada e novas tentativas) é descartada, e "Programado" / "já programada" passam a ignorar o registro
+  `agendar` antigo (`MlPromotionAction.pending_schedules`, desde 26/11/2026).
   A checagem "oferta cabível já programada" só conta agendamentos reais: até 04/11/2026 o registro de uma **simulação**
   contava, e a rotina pulava o anúncio sem criar a tarefa (23 anúncios na rodada de 04/11)
 - `config/recurring.yml` dispara o job a cada hora cheia (`0 * * * * America/Sao_Paulo`); o job roda para cada conta
@@ -294,3 +297,10 @@ da última vez nesse preço). Vale para todos os anúncios (regra do usuário). 
 - A marca vale enquanto o anúncio estiver em "Para revisar": quando ele sai (passa a caber, é programado, mínima
   inalcançável…), `PromotionsQuery#expire_review_dismissals!` apaga a marca ao listar e, se voltar a precisar de revisão
   depois, ele reaparece. A rotina automática não muda: continua avaliando o anúncio normalmente.
+
+- **26/11/2026 — "Aplicar a cabível" / "Aplicar mesmo assim" na promoção atual não chegava ao ML:** o corpo manda
+  `action: "editar_preco"`, mas o controller lia `params[:action]`, que no Rails é sempre o nome da ação (`"apply"`).
+  Toda edição de preço da promoção atual voltava "Nenhuma oferta deste anúncio respeita a margem mínima" sem registro no
+  Histórico. Agora a ação vem de `request.request_parameters["action"]`. Atenção: ajustar o preço de um desconto próprio
+  é sair e entrar de novo; o ML às vezes responde "No candidates found" por alguns minutos depois da saída (o anúncio
+  fica no preço cheio até a nova tentativa).
