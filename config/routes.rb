@@ -68,6 +68,7 @@ Rails.application.routes.draw do
     post "items/:item_id/photos", to: "photo_jobs#create"
     get "photo_images/:id", to: "photo_jobs#image"
     patch "photo_images/:id", to: "photo_jobs#approve"
+    delete "photo_images/:id", to: "photo_jobs#reject"
     post "photo_jobs/:id/publish", to: "photo_jobs#publish"
     post "photo_jobs/:id/check_cover", to: "photo_jobs#check_cover"
     get "items/:id/ai-plan", to: "ai_plans#show"

@@ -42,6 +42,13 @@ Classifica os anúncios por faturamento (A, B, C) e mostra lucro, margem e suges
   (`POST /api/photo_jobs/:id/check_cover`, modelo de visão `google/gemini-2.5-flash`, ~US$ 0,001) confere fundo branco,
   texto, logo/marca d'água, borda, produto inteiro, colagem e nitidez; fora do padrão abre o aviso "Capa fora dos padrões
   do Mercado Livre" com **Publicar mesmo assim** (publica direto) e **Cancelar** (volta a ordem de antes).
+  **Arrastar, R$ e Reprovar** (pedido do usuário em 25/11/2026; a mesma janela serve Curva ABC e Anúncios › Editar
+  anúncios selecionados): as fotos da galeria final também mudam de lugar arrastando (soltar na posição de outra; mexer
+  na capa confere a nova). Custos em R$: a API manda `cost_brl` (pedido e cada imagem) e `usd_brl`, pela cotação de
+  venda do dólar da AwesomeAPI (`Fx::UsdBrl`, guardada 6 h; sem cotação, a tela mostra US$); o valor em US$ e a
+  cotação ficam no título. **Reprovar** ao lado de Aprovar abre o aviso "A reprovação da imagem não exime do pagamento
+  de sua geração" com **Excluir mesmo assim** (`DELETE /api/photo_images/:id`, admin: marca `rejected_at`, tira da
+  tela, da ordem e da publicação; o custo segue no total do pedido) e **Manter imagem e Aprovar**.
 
 ## Arquivos
 **Front (`lunna-web`)**

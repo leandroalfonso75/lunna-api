@@ -54,6 +54,26 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
     expect(MlPhotoJob.last).to have_attributes(status: "erro", error: a_string_including("Configurações › Empresa"))
   end
 
+  it "reprovar tira a imagem da tela e da publicação, mas o custo segue no pedido; custos também em R$" do
+    allow(Fx::UsdBrl).to receive(:rate).and_return(5.5)
+    job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 2, status: "pronto")
+    bad = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png, cost_usd: 0.142, approved: true)
+    job.photos.create!(kind: "gerada", position: 1, mime: "image/png", data: png, cost_usd: 0.143)
+
+    delete "/api/photo_images/#{bad.id}", params: { account_id: account.id }, headers: auth_headers(member), as: :json
+    expect(response).to have_http_status(:forbidden)
+
+    delete "/api/photo_images/#{bad.id}", params: { account_id: account.id }, headers: auth_headers(admin), as: :json
+    expect(response).to have_http_status(:ok)
+    expect(bad.reload).to have_attributes(approved: false)
+    expect(bad.rejected_at).to be_present
+
+    get "/api/items/MLB1/photos", params: { account_id: account.id }, headers: auth_headers(admin)
+    listed = json["jobs"].first
+    expect(listed).to include("cost_usd" => 0.285, "cost_brl" => 1.57, "usd_brl" => 5.5)
+    expect(listed["photos"].find { |p| p["id"] == bad.id }).to include("rejected" => true, "cost_brl" => 0.78)
+  end
+
   it "publica no ML só as aprovadas, com confirmação, mantendo as fotos que já estavam" do
     job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 2, status: "pronto")
     ok = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png)
@@ -86,6 +106,7 @@ RSpec.describe "Curva ABC > Fotos", type: :request do
     job = account.ml_photo_jobs.create!(item_id: "MLB1", count: 1, status: "pronto")
     photo = job.photos.create!(kind: "gerada", position: 0, mime: "image/png", data: png, approved: true)
     WebMock.reset!
+    stub_request(:get, Fx::UsdBrl::URL.to_s).to_return(status: 503)
     stub_request(:get, %r{\Ahttps://api\.mercadolibre\.com/items/MLB1\?})
       .to_return(status: 200, body: { id: "MLB1", catalog_listing: true, user_product_id: "MLBU1", pictures: pictures }.to_json)
     stub_request(:get, %r{\Ahttps://api\.mercadolibre\.com/items/MLB2\?})

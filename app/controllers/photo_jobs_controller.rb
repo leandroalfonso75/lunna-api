@@ -3,11 +3,12 @@
 # POST  /api/items/:item_id/photos?account_id=        → novo pedido (admin; count, instructions, reference_urls[], uploads[])
 # GET   /api/photo_images/:id?account_id=             → a imagem (bytes)
 # PATCH /api/photo_images/:id?account_id=             → aprovar/reprovar (admin; approved)
+# DELETE /api/photo_images/:id?account_id=            → reprovar e tirar da tela (admin); o custo segue no pedido
 # POST  /api/photo_jobs/:id/publish?account_id=       → publica as aprovadas no ML (admin; confirm: true)
 class PhotoJobsController < ApplicationController
   include CurrentAccount
 
-  before_action :require_admin!, only: [ :create, :approve, :publish, :check_cover ]
+  before_action :require_admin!, only: [ :create, :approve, :reject, :publish, :check_cover ]
 
   MAX_UPLOAD_BYTES = 8.megabytes
 
@@ -66,6 +67,20 @@ class PhotoJobsController < ApplicationController
     render_errors([ "Imagem não encontrada." ], status: :not_found)
   end
 
+  # Reprovar (pedido do usuário em 25/11/2026): a imagem some da tela e não é publicada; a geração já foi paga, então ela
+  # continua no pedido e o custo segue no total. Imagem já publicada no ML não pode ser reprovada.
+  def reject
+    photo = photo_scope.where(kind: "gerada").find(params[:id])
+    if photo.ml_picture_id.present? && photo.ml_photo_job.status == "publicado"
+      return render_errors([ "Esta imagem já foi publicada no Mercado Livre." ], status: :unprocessable_content)
+    end
+
+    photo.update!(approved: false, rejected_at: photo.rejected_at || Time.current)
+    render json: { id: photo.id, rejected: true }
+  rescue ActiveRecord::RecordNotFound
+    render_errors([ "Imagem não encontrada." ], status: :not_found)
+  end
+
   # Confere se uma foto serve de capa no Mercado Livre (fundo branco, sem texto, produto inteiro...) pela IA de visão.
   # ref: "ml:<id>" (foto atual do anúncio) ou "new:<id>" (imagem gerada). Não publica nada.
   def check_cover
@@ -116,13 +131,20 @@ class PhotoJobsController < ApplicationController
   def photo_scope = MlGeneratedPhoto.joins(:ml_photo_job).where(ml_photo_jobs: { ml_account_id: Current.account.id })
 
   def job_json(job)
+    @usd_brl = Fx::UsdBrl.rate unless defined?(@usd_brl)
+    brl = ->(usd) { usd && @usd_brl ? (usd.to_f * @usd_brl).round(2) : nil }
+    cost = job.photos.sum { |p| p.cost_usd.to_f }.round(4)
     {
       id: job.id, item_id: job.item_id, status: job.status, count: job.count, instructions: job.instructions,
       error: job.error, publish_error: job.publish_error, published_at: job.published_at, published_item_id: job.published_item_id,
       created_at: job.created_at,
       model: job.model, reference_urls: job.reference_urls,
-      cost_usd: job.photos.sum { |p| p.cost_usd.to_f }.round(4),
-      photos: job.photos.map { |p| { id: p.id, kind: p.kind, position: p.position, approved: p.approved, ml_picture_id: p.ml_picture_id, cost_usd: p.cost_usd&.to_f, model: p.model } }
+      # custo em US$ (OpenRouter) e em R$ pela cotação do dia (usd_brl; nil se a cotação não veio). Reprovadas contam.
+      cost_usd: cost, cost_brl: brl.(cost), usd_brl: @usd_brl,
+      photos: job.photos.map do |p|
+        { id: p.id, kind: p.kind, position: p.position, approved: p.approved, rejected: p.rejected_at.present?, ml_picture_id: p.ml_picture_id,
+          cost_usd: p.cost_usd&.to_f, cost_brl: brl.(p.cost_usd), model: p.model }
+      end
     }
   end
 end
