@@ -149,7 +149,9 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   tentativa em 1 hora (`PromotionActions#retry_later`), para o anúncio não ficar no preço cheio. Desde 04/11/2026 tenta
   de hora em hora até 6 vezes (`MAX_RETRIES`, contador `attempt` no alvo do `Ml::PromotionsApplyJob`), inclusive quando o
   anúncio já está sem promoção e o ML repete "No candidates found" (caso real: 12 de 16 variações do Stick Boca Rosa
-  entraram na 1ª nova tentativa; 4 seguiram recusadas pelo ML, sem diferença no anúncio). Relâmpago e oferta do dia (pedem
+  entraram na 1ª nova tentativa; 4 seguiram recusadas pelo ML, sem diferença no anúncio). Desde 26/11/2026 (pedido do
+  usuário), antes disso tenta a cada 2 minutos por 20 minutos (`SHORT_RETRIES` = 10) e só então de hora em hora (até 6);
+  cada tentativa fica no Histórico, e o preço escolhido na tela (cabível / outro valor) vai junto (`price` no alvo). Relâmpago e oferta do dia (pedem
   estoque reservado) entram com o estoque mínimo que o ML sugere (`stock`), se o anúncio tiver esse estoque.
 - Histórico em `ml_promotion_actions` (tipo, origem, de/para, preço, margem, ganho, ok/erro, usuário).
 

@@ -65,6 +65,7 @@ module Painel
 
       return Result.new(ok: false, message: "Nenhuma oferta deste anúncio respeita a margem mínima.") if chosen.nil?
       if target && target[:price].present?
+        @custom_price = true
         price = target[:price].to_s.tr(",", ".").to_f.round(2)
         if (why = custom_price_problem(chosen[:offer], price, ev[:evaluator]))
           return Result.new(ok: false, message: why)
@@ -288,18 +289,33 @@ module Painel
     # de sair): deixa uma nova tentativa agendada para não ficar no preço cheio.
     # Até 04/11/2026 só havia uma nova tentativa; o ML às vezes recusa por mais de 1 hora (16 variações do Stick Boca
     # Rosa: 12 entraram na 1ª nova tentativa, 4 não). Agora tenta de hora em hora, até MAX_RETRIES vezes.
+    # Desde 26/11/2026 (pedido do usuário): o "No candidates found" logo depois de sair costuma durar poucos minutos
+    # (MLB4954103843: ~3 min), então antes das tentativas de hora em hora há SHORT_RETRIES tentativas a cada 2 minutos
+    # (20 min). Cada tentativa é uma aplicação nova e fica no Histórico.
+    SHORT_RETRY_AFTER = 2.minutes
+    SHORT_RETRIES = 10
     RETRY_AFTER = 1.hour
     MAX_RETRIES = 6
     NO_CANDIDATES = "No candidates found"
 
     def retry_later(item, chosen)
-      return " Não houve nova tentativa: o Mercado Livre recusou #{MAX_RETRIES} vezes; tente pela tela mais tarde." if @attempt.to_i >= MAX_RETRIES
+      if @attempt.to_i >= SHORT_RETRIES + MAX_RETRIES
+        return " Não houve nova tentativa: o Mercado Livre recusou #{SHORT_RETRIES + MAX_RETRIES} vezes; tente pela tela mais tarde."
+      end
 
+      attempt = @attempt.to_i + 1
       target = { "promotion_id" => chosen[:offer].promotion_id.to_s, "promotion_type" => chosen[:offer].promotion_type,
-                 "attempt" => @attempt.to_i + 1 }
+                 "attempt" => attempt }
       target["force"] = true if @forced_reason
-      Ml::PromotionsApplyJob.set(wait: RETRY_AFTER).perform_later(@account.id, [ item.item_id ], @user&.id, target)
-      " Nova tentativa agendada para daqui a 1 hora (#{@attempt.to_i + 1} de #{MAX_RETRIES})."
+      # o preço escolhido (cabível / outro valor) vale nas novas tentativas: sem a promoção atual a avaliação mudaria
+      target["price"] = chosen[:price].to_f.round(2) if @custom_price && chosen[:offer].flexible?
+      short = attempt <= SHORT_RETRIES
+      Ml::PromotionsApplyJob.set(wait: short ? SHORT_RETRY_AFTER : RETRY_AFTER).perform_later(@account.id, [ item.item_id ], @user&.id, target)
+      if short
+        " Nova tentativa em 2 minutos (#{attempt} de #{SHORT_RETRIES}; depois, de hora em hora)."
+      else
+        " Nova tentativa agendada para daqui a 1 hora (#{attempt - SHORT_RETRIES} de #{MAX_RETRIES})."
+      end
     end
 
     def rejoin(client, item_id, current)

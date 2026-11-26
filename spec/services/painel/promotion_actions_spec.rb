@@ -48,7 +48,7 @@ RSpec.describe Painel::PromotionActions do
     expect(MlPromotionAction.last).to have_attributes(ok: false)
   end
 
-  it "se o ML recusar a entrada e a volta, agenda nova tentativa em 1 hora" do
+  it "se o ML recusar a entrada e a volta, agenda nova tentativa em 2 minutos" do
     stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}")
     stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "No candidates found for item" }.to_json)
 
@@ -56,21 +56,37 @@ RSpec.describe Painel::PromotionActions do
     expect { result = described_class.apply(account, item.item_id, user: user) }.to have_enqueued_job(Ml::PromotionsApplyJob)
       .with(account.id, [ item.item_id ], user.id, { "promotion_id" => "P-2", "promotion_type" => "DEAL", "attempt" => 1 })
     expect(result.ok).to be false
-    expect(result.message).to include("ficou sem promoção", "Nova tentativa agendada", "1 de 6")
+    expect(result.message).to include("ficou sem promoção", "Nova tentativa em 2 minutos", "1 de 10")
+    expect(ActiveJob::Base.queue_adapter.enqueued_jobs.last[:at]).to be_within(5).of(2.minutes.from_now.to_f)
   end
 
-  it "sem promoção atual e o ML ainda diz \"No candidates\": tenta de novo, até 6 vezes" do
+  it "sem promoção atual e o ML ainda diz \"No candidates\": 10 vezes a cada 2 min, depois de hora em hora até 6" do
     MlPromotionOffer.where(promotion_id: "C-1").delete_all
     stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "No candidates found for item" }.to_json)
     target = { promotion_id: "P-2", promotion_type: "DEAL", force: true }
 
     expect { described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 2)) }
       .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], user.id, hash_including("attempt" => 3))
+    expect(ActiveJob::Base.queue_adapter.enqueued_jobs.last[:at]).to be_within(5).of(2.minutes.from_now.to_f)
 
     result = nil
-    expect { result = described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 6)) }
+    expect { result = described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 10)) }
+      .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], user.id, hash_including("attempt" => 11))
+    expect(ActiveJob::Base.queue_adapter.enqueued_jobs.last[:at]).to be_within(5).of(1.hour.from_now.to_f)
+    expect(result.message).to include("daqui a 1 hora (1 de 6)")
+    expect(MlPromotionAction.where(item_id: item.item_id, ok: false).count).to eq(2) # cada tentativa fica no Histórico
+
+    expect { result = described_class.apply(account, item.item_id, user: user, target: target.merge(attempt: 16)) }
       .not_to have_enqueued_job(Ml::PromotionsApplyJob)
-    expect(result.message).to include("recusou 6 vezes")
+    expect(result.message).to include("recusou 16 vezes")
+  end
+
+  it "a nova tentativa leva o preço escolhido na tela (cabível / outro valor)" do
+    stub_request(:delete, base).with(query: hash_including(promotion_id: "C-1")).to_return(status: 200, body: "{}")
+    stub_request(:post, base).with(query: { app_version: "v2" }).to_return(status: 400, body: { message: "No candidates found for item" }.to_json)
+
+    expect { described_class.apply(account, item.item_id, user: user, target: { promotion_id: "P-2", promotion_type: "DEAL", price: 82.5, force: true }) }
+      .to have_enqueued_job(Ml::PromotionsApplyJob).with(account.id, [ item.item_id ], user.id, hash_including("price" => 82.5, "attempt" => 1))
   end
 
   it "sem promoção atual e outra recusa do ML: não fica tentando de novo" do
