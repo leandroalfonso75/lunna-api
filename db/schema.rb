@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_013000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_26_230000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -35,6 +35,81 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_013000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["ml_account_id", "item_id"], name: "index_ai_plans_on_ml_account_id_and_item_id", unique: true
+  end
+
+  create_table "catalog_product_assets", force: :cascade do |t|
+    t.bigint "catalog_product_id", null: false
+    t.string "kind", default: "referencia", null: false
+    t.string "variation_key"
+    t.integer "position", default: 0, null: false
+    t.string "name"
+    t.string "mime", null: false
+    t.binary "data", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["catalog_product_id"], name: "index_catalog_product_assets_on_catalog_product_id"
+  end
+
+  create_table "catalog_products", force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "created_by_id"
+    t.string "kind", default: "simple", null: false
+    t.string "status", default: "rascunho", null: false
+    t.string "name"
+    t.string "sku"
+    t.string "gtin"
+    t.string "unit", default: "UN", null: false
+    t.decimal "price", precision: 14, scale: 2
+    t.decimal "cost_price", precision: 14, scale: 2
+    t.decimal "weight_net", precision: 10, scale: 3
+    t.decimal "weight_gross", precision: 10, scale: 3
+    t.integer "package_width"
+    t.integer "package_height"
+    t.integer "package_length"
+    t.string "package_source"
+    t.boolean "stock_control", default: true, null: false
+    t.decimal "initial_stock", precision: 14, scale: 3
+    t.decimal "min_stock", precision: 14, scale: 3
+    t.decimal "max_stock", precision: 14, scale: 3
+    t.string "location"
+    t.integer "preparation_days"
+    t.string "ncm"
+    t.string "cest"
+    t.integer "icms_origin"
+    t.string "sped_item_type"
+    t.string "brand"
+    t.string "line"
+    t.string "model"
+    t.string "category"
+    t.string "condition", default: "novo", null: false
+    t.string "sale_format", default: "unidade", null: false
+    t.jsonb "titles", default: [], null: false
+    t.text "description"
+    t.jsonb "technical_sheet", default: [], null: false
+    t.string "keywords"
+    t.string "seo_title"
+    t.text "seo_description"
+    t.string "video_url"
+    t.string "warranty"
+    t.string "supplier"
+    t.jsonb "regulatory", default: {}, null: false
+    t.text "notes"
+    t.jsonb "references", default: {}, null: false
+    t.boolean "no_reference_skus", default: false, null: false
+    t.jsonb "kit_components", default: [], null: false
+    t.jsonb "variation_axes", default: [], null: false
+    t.jsonb "variations", default: [], null: false
+    t.jsonb "common_components", default: [], null: false
+    t.jsonb "ai_suggestions", default: {}, null: false
+    t.jsonb "ai_review", default: [], null: false
+    t.datetime "ai_generated_at"
+    t.string "ai_error"
+    t.jsonb "erp_exports", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "created_at"], name: "index_catalog_products_on_company_id_and_created_at"
+    t.index ["company_id"], name: "index_catalog_products_on_company_id"
+    t.index ["created_by_id"], name: "index_catalog_products_on_created_by_id"
   end
 
   create_table "companies", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1274,6 +1349,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_013000) do
   end
 
   add_foreign_key "ai_plans", "ml_accounts", on_delete: :cascade
+  add_foreign_key "catalog_product_assets", "catalog_products", on_delete: :cascade
+  add_foreign_key "catalog_products", "companies", on_delete: :cascade
+  add_foreign_key "catalog_products", "users", column: "created_by_id", on_delete: :nullify
   add_foreign_key "finance_entries", "ml_accounts", on_delete: :cascade
   add_foreign_key "finance_entries", "users", on_delete: :nullify
   add_foreign_key "fixed_expenses", "companies", on_delete: :cascade

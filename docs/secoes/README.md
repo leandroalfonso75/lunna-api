@@ -8,6 +8,7 @@ documento dela; ao mudar uma regra, atualize o documento no mesmo commit.
 |---|---|---|
 | Visão geral | [visao-geral.md](visao-geral.md) | Números do dia, alertas e vendas recentes da conta do Mercado Livre |
 | Produtos | [produtos.md](produtos.md) | Produtos do Olist ERP: preços, custo (PEPS e kits), estoque Olist + Full |
+| Produtos › Criar Produto com IA | [produtos-ia.md](produtos-ia.md) | Cadastro de produto no Lunna (simples, variações, kit; variação que é kit) com rascunho pela IA a partir das referências, Para conferir e fiscal só como sugestão; exportação para o ERP na etapa seguinte |
 | Estoque | [estoque.md](estoque.md) | Depósito (Olist) com valor, vendas e cobertura; Full com as recomendações de reposição do ML (urgência, quantidade, prazo, dias sem estoque, enviar já x comprar) |
 | Anúncios | [anuncios.md](anuncios.md) | Tabela de anúncios do Mercado Livre com lucro antes Ads por unidade; aba Catálogo (sincronizado com tradicional, ganhando/perdendo) |
 | Vendas | [vendas.md](vendas.md) | Vendas dos últimos 3 meses do Mercado Livre, com envio, pagamento e lucro por venda |

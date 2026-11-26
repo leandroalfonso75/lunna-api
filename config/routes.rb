@@ -31,6 +31,12 @@ Rails.application.routes.draw do
     delete "olist", to: "olist#destroy"
     post "olist/sync", to: "olist#sync"
     get "olist/sync_runs", to: "olist#sync_runs"
+    get "catalog_products/sku_search", to: "catalog_products#sku_search"
+    resources :catalog_products, only: [ :index, :show, :create, :update, :destroy ]
+    post "catalog_products/:id/generate", to: "catalog_products#generate"
+    post "catalog_products/:id/assets", to: "catalog_products#add_asset"
+    get "catalog_product_assets/:id", to: "catalog_products#asset"
+    delete "catalog_product_assets/:id", to: "catalog_products#remove_asset"
     get "olist/products", to: "olist_products#index"
     post "olist/products/remove", to: "olist_products#remove"
     post "olist/products/restore", to: "olist_products#restore"

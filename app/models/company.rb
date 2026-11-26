@@ -12,6 +12,7 @@ class Company < ApplicationRecord
   has_many :radar_searches
   has_one :olist_connection
   has_many :olist_products
+  has_many :catalog_products, dependent: :destroy
   has_many :olist_sync_runs
   has_many :olist_changes
   has_many :olist_stock_movements
