@@ -73,7 +73,11 @@ class PromotionsController < ApplicationController
   end
 
   def apply
-    target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :action, :price, :force).to_h.symbolize_keys : nil
+    target = params[:promotion_type].present? ? params.permit(:promotion_id, :promotion_type, :price, :force).to_h.symbolize_keys : nil
+    # "action" (aderir | editar_preco) vem no corpo, mas params[:action] é sempre o nome da ação do Rails ("apply"):
+    # lido do corpo. Até 26/11/2026 lia params[:action], e todo "editar_preco" (cabível / mesmo assim na promoção
+    # atual) voltava "Nenhuma oferta ... respeita a margem mínima" sem chegar ao Mercado Livre.
+    target[:action] = (request.request_parameters["action"].presence || params[:offer_action]).to_s if target
     result = Painel::PromotionActions.apply(Current.account, params[:item_id], user: Current.user, target: target)
     queued = 0
     if result.ok

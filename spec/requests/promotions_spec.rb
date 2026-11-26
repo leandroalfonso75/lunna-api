@@ -132,6 +132,17 @@ RSpec.describe "/api/promotions", type: :request do
     expect(json["message"]).to include("mais 1 anúncios")
   end
 
+  it "aplicar repassa a ação da oferta do corpo (editar_preco), não o nome da ação do Rails" do
+    allow(Painel::PromotionActions).to receive(:apply).and_return(Painel::PromotionActions::Result.new(ok: false, message: "x"))
+
+    post "/api/promotions/items/#{item.item_id}/apply?account_id=#{account.id}",
+      params: { promotion_id: "", promotion_type: "PRICE_DISCOUNT", action: "editar_preco", price: 65.47, force: true }.to_json,
+      headers: auth_headers(admin).merge("CONTENT_TYPE" => "application/json")
+
+    expect(Painel::PromotionActions).to have_received(:apply)
+      .with(account, item.item_id, user: admin, target: hash_including(action: "editar_preco", promotion_type: "PRICE_DISCOUNT", price: 65.47, force: true))
+  end
+
   it "a melhor oferta nunca fica acima do preço cheio do anúncio" do
     get "/api/promotions/items/#{item.item_id}", params: { account_id: account.id }, headers: auth_headers(member)
 
