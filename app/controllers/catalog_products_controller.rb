@@ -9,6 +9,9 @@
 #   GET    /api/catalog_product_assets/:id       → a imagem (bytes)
 #   DELETE /api/catalog_product_assets/:id       → remove a imagem
 #   GET    /api/catalog_products/sku_search      → busca SKUs para compor kits (produtos do ERP sincronizados no Lunna)
+#   GET    /api/catalog_products/erp/:erp_id     → a ficha completa vinda do ERP de um produto (pelo id dele no ERP; a
+#                                                   variação abre a ficha do pai), com estoque e custo PEPS da cópia
+# A lista mostra os produtos criados no Lunna; ?source=erp lista os vindos do ERP (migração de 27/11/2026).
 class CatalogProductsController < ApplicationController
   before_action :require_admin!, only: [ :create, :update, :destroy, :generate, :add_asset, :remove_asset ]
   before_action :set_product, only: [ :show, :update, :destroy, :generate, :add_asset ]
@@ -23,7 +26,7 @@ class CatalogProductsController < ApplicationController
   JSON_FIELDS = %i[titles technical_sheet variation_axes variations kit_components common_components references regulatory].freeze
 
   def index
-    scope = Current.company.catalog_products.order(updated_at: :desc)
+    scope = Current.company.catalog_products.order(updated_at: :desc).where(source: params[:source] == "erp" ? "erp" : "lunna")
     scope = scope.where(status: params[:status]) if CatalogProduct::STATUSES.include?(params[:status])
     if params[:q].present?
       q = "%#{CatalogProduct.sanitize_sql_like(params[:q].to_s.strip)}%"
@@ -34,6 +37,16 @@ class CatalogProductsController < ApplicationController
 
   def show
     render json: detail(@product)
+  end
+
+  def by_erp
+    erp_id = params[:erp_id].to_i
+    parent = Current.company.olist_products.find_by(olist_id: erp_id)&.parent_olist_id
+    product = Current.company.catalog_products.find_by(source: "erp", erp_id: [ erp_id, parent ].compact) ||
+              Current.company.catalog_products.where(source: "erp").find_by("variations @> ?", [ { erp_id: erp_id } ].to_json)
+    return render_errors([ "Este produto ainda não foi importado do ERP." ], status: :not_found) unless product
+
+    render json: detail(product)
   end
 
   def create
@@ -153,7 +166,9 @@ class CatalogProductsController < ApplicationController
   def detail(p)
     p.as_json(except: %w[company_id]).merge(
       "assets" => p.assets.map { |a| asset_json(a) },
-      "components_info" => components_info(p)
+      "components_info" => components_info(p),
+      "erp_stock" => p.from_erp? ? Erp::CatalogStock.call(Current.company, p) : nil,
+      "erp_name" => p.from_erp? ? (p.erp_key == "olist" ? "Olist" : p.erp_key) : nil
     )
   end
 

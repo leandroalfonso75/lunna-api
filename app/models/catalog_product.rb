@@ -20,13 +20,16 @@ class CatalogProduct < ApplicationRecord
   validates :sale_format, inclusion: { in: SALE_FORMATS }
   validates :icms_origin, inclusion: { in: 0..8 }, allow_nil: true
   validates :name, length: { maximum: 120 }
-  validate :gtins_valid
-  validate :variations_valid
-  validate :components_valid
+  # Produto vindo do ERP (27/11/2026): o ERP manda nos dados; as conferências do cadastro do Lunna viram avisos
+  # (erp_warnings) em vez de barrar a cópia.
+  validate :gtins_valid, unless: :from_erp?
+  validate :variations_valid, unless: :from_erp?
+  validate :components_valid, unless: :from_erp?
 
   before_validation :normalize
 
   def reference_images = assets.select { |a| a.kind == "referencia" }
+  def from_erp? = source == "erp"
 
   # Kit com variações (1 produto com variações + 1 produto simples): a grade de variações vale como em "Com variações",
   # cada linha é um kit (variação do pai + o simples, que fica nos itens comuns).
@@ -75,8 +78,10 @@ class CatalogProduct < ApplicationRecord
         "attrs" => v["attrs"].to_h.transform_values { |x| x.to_s.squish }.slice(*variation_axes),
         "sku" => v["sku"].to_s.strip.presence, "gtin" => v["gtin"].to_s.strip.presence,
         "price" => v["price"].presence&.to_s&.tr(",", ".")&.to_f, "stock" => v["stock"].presence&.to_s&.tr(",", ".")&.to_f,
-        "kit" => ActiveModel::Type::Boolean.new.cast(v["kit"]) || false, "components" => clean_components(v["components"])
-      }
+        "kit" => ActiveModel::Type::Boolean.new.cast(v["kit"]) || false, "components" => clean_components(v["components"]),
+        # id da variação no ERP (produto vindo do ERP)
+        "erp_id" => v["erp_id"].presence
+      }.tap { |h| h.delete("erp_id") if h["erp_id"].nil? }
     end
     self.kit_components = clean_components(kit_components)
     self.common_components = clean_components(common_components)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_27_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -47,6 +47,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_120000) do
     t.binary "data", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "source_url"
     t.index ["catalog_product_id"], name: "index_catalog_product_assets_on_catalog_product_id"
   end
 
@@ -114,7 +115,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_120000) do
     t.string "kit_parent_sku"
     t.decimal "kit_parent_quantity", precision: 10, scale: 3, default: "1.0", null: false
     t.boolean "use_component_photos", default: false, null: false
+    t.string "source", default: "lunna", null: false
+    t.string "erp_key"
+    t.bigint "erp_id"
+    t.datetime "erp_synced_at"
+    t.jsonb "erp_payload", default: {}, null: false
+    t.jsonb "erp_warnings", default: [], null: false
     t.index ["company_id", "created_at"], name: "index_catalog_products_on_company_id_and_created_at"
+    t.index ["company_id", "erp_key", "erp_id"], name: "index_catalog_products_on_erp", unique: true, where: "(erp_id IS NOT NULL)"
     t.index ["company_id"], name: "index_catalog_products_on_company_id"
     t.index ["created_by_id"], name: "index_catalog_products_on_created_by_id"
   end
