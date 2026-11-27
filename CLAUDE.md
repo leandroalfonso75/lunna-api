@@ -5,14 +5,15 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 ## Leia antes de mexer
 - `docs/secoes/README.md`: um documento por item do menu (o que faz, dados, regras, arquivos). Ao mudar uma regra,
   atualize o documento da seção no mesmo commit.
-- `.claude/skills/secao-*`: uma skill por seção (visão geral, produtos, anúncios, vendas, reclamações, ads, promoções, curva ABC, financeiro, radar, configurações)
+- `.claude/skills/secao-*`: uma skill por seção (visão geral, produtos, criar produto com IA, anúncios, vendas, reclamações, ads, promoções, curva ABC, financeiro, radar, configurações)
   que aponta para o documento certo; use-as ao mexer em uma seção.
 - `docs/DECISOES.md` prevalece sobre `docs/SPEC.md`. `docs/METRICS.md` define as métricas.
 
 ## Mapa de pastas
 - `app/controllers/`: finos; só autenticam, escopam pela empresa e renderizam.
 - `app/services/`: regras de negócio. `painel/` (visão geral, anúncios), `abc/`, `ml/` (leitura do Mercado Livre, incl. pedidos e envios da seção Vendas),
-  `olist/` (ERP, custo PEPS, kits), `ai/`.
+  `olist/` (ERP, custo PEPS, kits), `ai/`, `catalog/` (Criar Produto com IA: evidências, rascunho pela IA, kit de produto
+  com variações + simples), `fx/` (cotação do dólar para custos em R$).
 - `app/jobs/`: segundo plano (Solid Queue). Agenda em `config/recurring.yml`.
 - `app/models/`: dados e validações.
 - `spec/`: RSpec, WebMock e FactoryBot. Espelha a estrutura de `app/`.
@@ -25,6 +26,8 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 4. Tudo escopado por `Current.company`. Nunca consultar dados de outra empresa.
 5. Segredos (`.env`, tokens) nunca entram no git nem em respostas/logs. Tokens são cifrados (Active Record Encryption).
 6. A coleta do Radar acontece só por pedido do usuário; nada agendado.
+7. O Lunna é multi-conta e poderá ser vendido a outras lojas: nada da Lunna Shop (loja piloto) fixo no código ou nos
+   textos (SKU, prefixos, exemplos, regras). Sugestões vêm dos dados da própria conta ou ficam em branco.
 
 ## Comandos
 - Subir: `docker compose up` (api na 3000, `jobs`, postgres). No Windows, a porta é publicada só em IPv4.
@@ -50,3 +53,5 @@ Back-end do Lunna, painel para vendedores do Mercado Livre. O front fica em `lun
 - `db/schema.rb` só entra no commit com a migration correspondente.
 - Não fazer push, PR, merge nem deploy sem o dono pedir.
 - `config/environments/development.rb` pode ter ajuste local (túnel); não commitar.
+- Dados criados para testar (rascunhos, pedidos de fotos etc.) se apagam só pelo ID exato que você criou, nunca por
+  filtro; o resto pode ser do usuário.

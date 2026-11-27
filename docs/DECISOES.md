@@ -150,3 +150,23 @@ Substitui o SSE do `POST /api/items/:id/ai-plan` (a resposta longa ficava presa 
 - **`Ai::ActionPlanJob`** lê a OpenRouter em streaming e grava o texto parcial a cada ~1,5 s (o polling mostra o texto crescendo). Termina só a partir de `running`, então um `cancelled` não é sobrescrito. Qualquer exceção vira `error` genérico (a exceção não vaza).
 - **Modelos de raciocínio**: o request leva `reasoning: {enabled: false}`. Sem isso o `deepseek/deepseek-v4.1-flash` gastou os 4096 `max_tokens` só raciocinando (~1.100 eventos com `content: ""`, `finish_reason: "length"`) e o plano saiu vazio com o aviso de "gerado" (produção, 2026-09-25). Eventos com `content` vazio são ignorados.
 - **Nunca plano vazio**: stream "ok" sem nenhum texto vira erro — "O modelo gastou todo o limite de tokens raciocinando e não gerou o plano. Use um modelo sem raciocínio em Configurações › Empresa." (`finish_reason: "length"`) ou "A IA não devolveu o plano. Tente de novo.".
+
+## 11. Decisões de 25 a 27/11/2026 (pedidos do usuário)
+
+- **Sistema multi-conta:** o Lunna poderá ser vendido a outras lojas. Nada de padrão da Lunna Shop (loja piloto) fixo na
+  interface ou no código: sem sugestão de SKU no formato dela, exemplos genéricos nos textos de ajuda, parâmetros por
+  empresa. Sugestões só a partir dos dados da própria conta (ex.: preço do kit pela soma dos preços cheios cadastrados).
+- **Custo de Ads por venda** (seção Vendas, confirmado em 11/11 e mantido em 27/11): gasto do anúncio no período ÷ todas
+  as unidades vendidas dele no período. A seção Ads passou a somar o gasto pelas mesmas linhas diárias e a mostrar
+  "Vendas reais" e "Ads por venda real" ao lado das "Vendas atribuídas (ML)", que podem incluir outro anúncio da mesma
+  família, pedidos cancelados e compras indiretas (ver `docs/secoes/ads.md`).
+- **Criar Produto com IA:** o produto é cadastrado no Lunna (`catalog_products`, neutro de ERP) e só depois exportado
+  para o ERP, por adaptador (Olist hoje; Bling, Upseller etc. no futuro). Tipos: simples, com variações (até 3 tipos de
+  variação combinados; cada variação pode ser kit) e kit (comum ou 1 produto com variações + 1 produto simples). Regras de
+  criação adaptadas da skill de fichas de anúncio do usuário (sem copiá-la nem alterá-la): só evidências, títulos até 60
+  e distintos, fiscal só como sugestão, a IA não troca o que o usuário preencheu, embalagem do kit nunca de um componente.
+  Promoção, tipo de anúncio e envio ficam para a publicação do anúncio. Ver `docs/secoes/produtos-ia.md`.
+- **Promoções:** "Aplicar a cabível"/"Aplicar mesmo assim" vão ao Mercado Livre na hora; se o ML recusar a volta ao
+  desconto, novas tentativas a cada 2 minutos por 20 minutos e depois de hora em hora (ver `docs/secoes/promocoes.md`).
+- **Dados de teste:** rascunhos e registros criados para testar são apagados só pelo número/ID exato de quem os criou,
+  nunca por filtro (em 26/11 um filtro apagou dois rascunhos do usuário).
