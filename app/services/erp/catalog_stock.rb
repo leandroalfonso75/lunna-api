@@ -14,6 +14,11 @@ module Erp
       mirror = company.olist_products.where(sku: skus, status: "A").order(:updated_at).index_by(&:sku)
       stock_of = ->(sku) { mirror[sku]&.stock_available&.to_f || 0.0 }
       cost_of = ->(sku) { m = mirror[sku]; m && (m.fifo_unit_cost || m.cost_price)&.to_f }
+      # o próprio produto e as variações são lidos pelo id do ERP (há SKUs repetidos em cadastros diferentes)
+      ids = ([ product.erp_id ] + product.variations.map { |v| v["erp_id"] }).compact
+      by_id = ids.any? ? company.olist_products.where(olist_id: ids).index_by(&:olist_id) : {}
+      own_stock = ->(erp_id, sku) { by_id[erp_id] ? by_id[erp_id].stock_available.to_f : (sku ? stock_of.(sku) : nil) }
+      own_cost = ->(erp_id, sku) { (m = by_id[erp_id]) ? (m.fifo_unit_cost || m.cost_price)&.to_f : (sku ? cost_of.(sku) : nil) }
 
       kit = lambda do |comps|
         list = Array(comps)
@@ -33,7 +38,7 @@ module Erp
         k = kit.(product.kit_components)
         { stock: k[:stock], cost: k[:cost], parts: k[:parts] }
       elsif product.kind == "simple"
-        { stock: product.sku ? stock_of.(product.sku) : nil, cost: product.sku ? cost_of.(product.sku) : nil, parts: [] }
+        { stock: own_stock.(product.erp_id, product.sku), cost: own_cost.(product.erp_id, product.sku), parts: [] }
       else
         { stock: nil, cost: nil, parts: [] }
       end
@@ -43,7 +48,7 @@ module Erp
           k = kit.(product.components_for(v))
           [ v["key"], { stock: k[:stock], cost: k[:cost], parts: k[:parts], kit: true } ]
         else
-          [ v["key"], { stock: v["sku"] ? stock_of.(v["sku"]) : nil, cost: v["sku"] ? cost_of.(v["sku"]) : nil, parts: [], kit: false } ]
+          [ v["key"], { stock: own_stock.(v["erp_id"], v["sku"]), cost: own_cost.(v["erp_id"], v["sku"]), parts: [], kit: false } ]
         end
       end
 

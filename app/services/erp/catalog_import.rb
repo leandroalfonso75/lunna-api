@@ -15,12 +15,14 @@ module Erp
     IMAGE_TIMEOUT = 20
     MIMES = { "image/jpeg" => "image/jpeg", "image/jpg" => "image/jpeg", "image/png" => "image/png", "image/webp" => "image/webp" }.freeze
 
-    def self.call(company, erp_ids:, client: nil, downloader: nil)
-      new(company, client: client, downloader: downloader).call(erp_ids)
+    def self.call(company, erp_ids:, client: nil, downloader: nil, sleeper: nil)
+      new(company, client: client, downloader: downloader, sleeper: sleeper).call(erp_ids)
     end
 
-    def initialize(company, client: nil, downloader: nil)
+    # sleeper: pausa entre leituras no ERP (ele limita as chamadas por minuto); nos testes, nenhuma
+    def initialize(company, client: nil, downloader: nil, sleeper: nil)
       @company = company
+      @sleeper = sleeper || (client ? ->(_) {} : ->(s) { sleep(s) })
       @client = client || Olist::Client.new(company.olist_connection)
       @downloader = downloader || method(:download)
     end
@@ -28,6 +30,7 @@ module Erp
     def call(erp_ids)
       result = Result.new(imported: [], skipped: [], errors: [])
       top_ids(erp_ids, result).each do |id|
+        pause
         result.imported << import_one(id)
       rescue StandardError => e
         result.errors << { erp_id: id, error: "#{e.class}: #{e.message}".truncate(300) }
@@ -38,11 +41,13 @@ module Erp
     # Cadastro do ERP de um produto e das variações que precisam ser lidas (kits e imagens próprias).
     def fetch(id)
       payload = @client.product(id)
-      children = Array(payload["variacoes"]).to_h { |v| [ v["id"], @client.product(v["id"]) ] }
+      children = Array(payload["variacoes"]).to_h { |v| pause; [ v["id"], @client.product(v["id"]) ] }
       [ payload, children ]
     end
 
     private
+
+    def pause = @sleeper.call(1.0)
 
     # Resolve variação → pai; tira inativos/excluídos e os removidos da lista do Lunna.
     def top_ids(erp_ids, result)

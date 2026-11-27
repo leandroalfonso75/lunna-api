@@ -25,7 +25,7 @@ module Erp
       rescue StandardError => e
         { id_erp: top.olist_id, sku: top.sku, nome: top.description, tipo: "erro", avisos: "não lido: #{e.message.truncate(120)}" }
       ensure
-        @sleeper.call(0.3)
+        @sleeper.call(1.0) # o ERP limita as chamadas por minuto (no ensaio de 27/11, 4 respostas 429 com 0,3 s)
       end
       { rows: rows, summary: summary(rows), csv: to_csv(rows) }
     end
