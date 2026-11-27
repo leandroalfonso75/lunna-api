@@ -16,7 +16,8 @@ Flex, frete grátis e a publicação no Mercado Livre.
   Voltagem, Tamanho, Tom ou outro digitado). Os botões dos tipos que faltam continuam visíveis depois do primeiro
   (corrigido em 26/11/2026: antes só sobrava um campo "Outro eixo"). Os valores são digitados separados por vírgula, a
   tela mostra a conta (ex.: 3 × 4 = 12 variações) e "Montar grade" cria todas as combinações (mantendo SKU/EAN/estoque das linhas que já
-  existiam). Cada linha: SKU, EAN, preço, estoque inicial (opcional) e **É kit**.
+  existiam). Cada linha: SKU, EAN, preço, estoque inicial (opcional) e **É kit**. Com o preço ou o estoque da 1ª
+  linha preenchido, aparece ao lado **Repetir em todas**, que copia o valor para todas as variações (substitui).
 - **Kit** (`kit`): composição de produtos já existentes (SKU + quantidade), escolhidos dos produtos do ERP sincronizados no
   Lunna (`GET /api/catalog_products/sku_search`; pai de variações fica de fora). Opção **Não tenho / não quero SKUs de
   referência**: segue com as referências livres. O custo somado dos componentes aparece e pode ser usado como custo.
