@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_230000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_003000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -107,6 +107,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_230000) do
     t.jsonb "erp_exports", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "use_component_references", default: false, null: false
     t.index ["company_id", "created_at"], name: "index_catalog_products_on_company_id_and_created_at"
     t.index ["company_id"], name: "index_catalog_products_on_company_id"
     t.index ["created_by_id"], name: "index_catalog_products_on_created_by_id"

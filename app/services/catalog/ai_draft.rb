@@ -95,7 +95,7 @@ module Catalog
       filled = filled_by_user
       variations = @product.variations.map { |v| v["attrs"].map { |k, x| "#{k}: #{x}" }.join(", ") }.compact_blank
       <<~TXT
-        TIPO: #{kind}#{@product.kind == 'kit' && @product.no_reference_skus ? ' (sem SKUs de referência: use as referências livres)' : ''}
+        TIPO: #{kind}#{@product.kind == 'kit' && @product.no_reference_skus ? ' (sem SKUs de referência: use as referências livres)' : ''}#{@product.kind == 'kit' && @product.use_component_references && !@product.no_reference_skus && @product.kit_components.any? ? ' (referências = os produtos que formam o kit: use as descrições, fichas técnicas e especificações de cada componente, sem misturar atributos entre eles)' : ''}
         #{"VARIAÇÕES JÁ CRIADAS PELO USUÁRIO (#{@product.variation_axes.join(' / ')}): #{variations.join(' | ')}" if variations.any?}
         #{"JÁ PREENCHIDO PELO USUÁRIO (não mude, use como fato): #{filled}" if filled.present?}
 

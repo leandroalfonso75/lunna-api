@@ -21,6 +21,11 @@ Flex, frete grátis e a publicação no Mercado Livre.
 - **Kit** (`kit`): composição de produtos já existentes (SKU + quantidade), escolhidos dos produtos do ERP sincronizados no
   Lunna (`GET /api/catalog_products/sku_search`; pai de variações fica de fora). Opção **Não tenho / não quero SKUs de
   referência**: segue com as referências livres. O custo somado dos componentes aparece e pode ser usado como custo.
+  Com pelo menos um componente indicado (e sem "Não tenho / não quero SKUs"), aparece abaixo de Links a caixa **Usar como
+  referências os produtos que formarão o(s) kit(s), inclusive suas descrições, fichas técnicas e demais especificações**
+  (`use_component_references`, 26/11/2026). Marcada, Links e Texto ficam desabilitados (o conteúdo fica guardado) e a
+  IA usa só os componentes: cadastro do ERP, atributos do anúncio e a descrição do anúncio de cada componente
+  (`Catalog::Evidence#components_only?`). Sem componentes a caixa some e é desmarcada.
 
 ### Variação que é kit (decisão de 26/11/2026)
 

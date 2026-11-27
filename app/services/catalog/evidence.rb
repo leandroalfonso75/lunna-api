@@ -27,18 +27,24 @@ module Catalog
     def call
       blocks = []
       refs = @product.references.to_h
-      blocks << "TEXTO DO USUÁRIO:\n#{refs['text'].to_s.strip.first(TEXT_LIMIT)}" if refs["text"].present?
-      blocks << "OBSERVAÇÕES DO USUÁRIO:\n#{@product.notes.strip.first(4000)}" if @product.notes.present?
-      Array(refs["links"]).map { |l| l.is_a?(Hash) ? l["url"] : l }.compact_blank.uniq.first(MAX_LINKS).each do |url|
-        text = link_text(url.to_s.strip)
-        blocks << "LINK #{url}:\n#{text}" if text.present?
+      # kit com "usar como referências os produtos do kit": Links e Texto ficam de fora (desabilitados na tela)
+      unless components_only?
+        blocks << "TEXTO DO USUÁRIO:\n#{refs['text'].to_s.strip.first(TEXT_LIMIT)}" if refs["text"].present?
+        Array(refs["links"]).map { |l| l.is_a?(Hash) ? l["url"] : l }.compact_blank.uniq.first(MAX_LINKS).each do |url|
+          text = link_text(url.to_s.strip)
+          blocks << "LINK #{url}:\n#{text}" if text.present?
+        end
       end
+      blocks << "OBSERVAÇÕES DO USUÁRIO:\n#{@product.notes.strip.first(4000)}" if @product.notes.present?
       skus = reference_skus
       blocks.concat(skus.map { |sku| sku_block(sku) }.compact)
       Result.new(blocks: blocks, images: @product.reference_images.map(&:data_url), skus: skus, warnings: @warnings)
     end
 
     private
+
+    # a caixa só vale com componentes informados (a tela também esconde e desmarca sem eles)
+    def components_only? = @product.kind == "kit" && @product.use_component_references && !@product.no_reference_skus && @product.kit_components.any?
 
     def reference_skus
       list = case @product.kind
@@ -63,8 +69,21 @@ module Catalog
         # atributos com valor (nome: valor) do anúncio mais vendido do SKU, lidos na hora pela API do ML
         attrs = i.zero? ? live_attributes(it.item_id) : []
         lines << "  atributos: #{attrs.join('; ')}" if attrs.any?
+        # com "usar como referências os produtos do kit", vai também a descrição do anúncio do componente
+        if i.zero? && components_only? && (desc = listing_description(it.item_id)).present?
+          lines << "  descrição do anúncio: #{desc}"
+        end
       end
       lines.join("\n")
+    end
+
+    def listing_description(item_id)
+      client = ml_client
+      return nil unless client
+
+      client.item_description(item_id)["plain_text"].to_s.squish.first(3000).presence
+    rescue StandardError
+      nil
     end
 
     def live_attributes(item_id)

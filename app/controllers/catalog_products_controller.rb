@@ -17,7 +17,7 @@ class CatalogProductsController < ApplicationController
     name sku gtin unit price cost_price weight_net weight_gross package_width package_height package_length package_source
     stock_control initial_stock min_stock max_stock location preparation_days ncm cest icms_origin sped_item_type
     brand line model category condition sale_format description keywords seo_title seo_description video_url
-    warranty supplier notes no_reference_skus status
+    warranty supplier notes no_reference_skus use_component_references status
   ].freeze
   JSON_FIELDS = %i[titles technical_sheet variation_axes variations kit_components common_components references regulatory].freeze
 

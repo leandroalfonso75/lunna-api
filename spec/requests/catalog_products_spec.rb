@@ -130,4 +130,28 @@ RSpec.describe "Criar Produto com IA (/api/catalog_products)", type: :request do
     post "/api/catalog_products/#{product.id}/generate", headers: auth_headers(admin), as: :json
     expect(json["ai_review"]).to include(a_string_including("Link ignorado"))
   end
+
+  it "kit com 'usar como referências os produtos do kit': ignora links e texto e usa descrição e ficha dos componentes" do
+    olist("LS-DIF", "Difusor de Cachos Universal")
+    account = create(:ml_account, company: company)
+    create(:ml_item, item_id: "MLB900", ml_account: account, title: "Difusor Cachos Universal", sku: "LS-DIF", sold_quantity: 10)
+    client = instance_double(Ml::Client,
+      item_full: { "attributes" => [ { "id" => "MATERIAL", "name" => "Material", "value_name" => "Plástico" } ] },
+      item_description: { "plain_text" => "Difusor universal que encaixa na maioria dos secadores." })
+    product = company.catalog_products.create!(kind: "kit", use_component_references: true, kit_components: [ { sku: "LS-DIF", quantity: 1 } ],
+      references: { links: [ "https://exemplo.com/produto" ], text: "texto que deve ser ignorado" })
+
+    evidence = Catalog::Evidence.call(product, ml_client: client)
+    text = evidence.blocks.join("\n")
+    expect(text).to include("Material: Plástico", "descrição do anúncio: Difusor universal que encaixa")
+    expect(text).not_to include("texto que deve ser ignorado", "LINK https://exemplo.com")
+    expect(a_request(:get, "https://exemplo.com/produto")).not_to have_been_made
+
+    product.update!(use_component_references: false)
+    stub_request(:get, "https://exemplo.com/produto").to_return(status: 200, body: "<p>Página do produto</p>")
+    allow(Resolv).to receive(:getaddresses).and_return([ "93.184.216.34" ])
+    text = Catalog::Evidence.call(product, ml_client: client).blocks.join("\n")
+    expect(text).to include("texto que deve ser ignorado", "Página do produto")
+    expect(text).not_to include("descrição do anúncio")
+  end
 end
