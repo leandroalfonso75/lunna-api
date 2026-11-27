@@ -21,7 +21,9 @@
 #     quem opera ler; a rotina não interpreta regras escritas).
 module Painel
   class PromotionRoutine
-    ACT_ON = %w[trocar sem_promocao acima_maxima abaixo_minima].freeze
+    # baixar_alvo (27/11/2026): a mesma troca de antes, agora com nome próprio quando reduz o lucro dentro da tolerância
+    # (que passou a ser medida contra a referência fixa do anúncio, Painel::PromotionDropRef)
+    ACT_ON = %w[trocar baixar_alvo sem_promocao acima_maxima abaixo_minima].freeze
 
     def self.call(account, mode:, trigger: "agendada", user: nil)
       new(account, mode, trigger, user).call

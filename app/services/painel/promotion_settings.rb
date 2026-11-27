@@ -61,6 +61,8 @@ module Painel
       setting = account.ml_promotion_settings.find_or_initialize_by(item_id: item.item_id)
       setting.sku ||= item.sku
       setting.update!(review_dismissed_at: dismissed ? Time.current : nil, review_dismissed_by: dismissed ? user : nil)
+      # "Ciente" é decisão manual: renova a referência da redução de margem (vale a margem de hoje)
+      PromotionDropRef.renew!(account, item.item_id, source: "manual", user: user, note: "ciente, nada a ser feito") if dismissed
       setting
     end
 

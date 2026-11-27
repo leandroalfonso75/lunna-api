@@ -17,7 +17,7 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   o nome do pai, quantas variações e anúncios, faixa de preço e a situação mais urgente; clicando, abrem os anúncios
   dentro. "Limites do produto" grava os limites em todas as variações e nos anúncios do mesmo SKU. Anúncio sem pai
   fica numa linha própria. As guias de situação mostram a contagem de anúncios entre parênteses. Um anúncio ativo por linha, com preço cheio, promoção atual (preço, margem e lucro por unidade),
-  melhor oferta, ganho por unidade e situação: Trocar por melhor, Sem promoção, Abaixo da mínima, Na melhor, Sem custo.
+  melhor oferta, ganho por unidade e situação: Trocar por melhor, Baixar preço até o alvo, Sem promoção, Abaixo da mínima, Na melhor, Sem custo.
   Filtros por situação, por promoção e busca por anúncio, título ou SKU.
 - **Painel do anúncio (clique na linha):** todas as ofertas do anúncio com preço, parte do ML, tarifa e margem (a
   melhor marcada) e o formulário de margem mínima e máxima, com "aplicar aos outros anúncios do SKU".
@@ -118,6 +118,22 @@ oferta, ajustar o preço e sair, por anúncio ou em lote, **só administradores 
   reduzir o preço mesmo com redução da margem" (Configurações → Promoções; `companies.promo_allow_margin_drop` e
   `promo_margin_drop_tolerance`, em pontos percentuais), a margem pode cair até a tolerância. Fora dos limites (abaixo
   da mínima ou acima da máxima) não há trava: a regra manda mudar, e o preço vai para a margem mais perto da mínima.
+- **Referência fixa da redução ("escada travada", 27/11/2026):** a tolerância é medida contra uma referência por anúncio
+  (`ml_promotion_drop_refs`, `Painel::PromotionDropRef`), não contra a promoção do dia; as reduções somadas não passam
+  da tolerância abaixo dela. Referência = a margem logo depois da última decisão manual (aplicar, mesmo assim, cabível,
+  outro valor, lote pela tela; "sair" e "ciente" renovam) ou, sem decisão manual, a margem de antes da 1ª redução feita
+  pela automação. Na implantação (`bin/rails promotions:init_drop_refs`) cada anúncio em promoção dentro dos limites
+  recebeu a margem de hoje (fonte "inicial"; nada revertido no ML). É renovada (vale a margem de hoje) quando o usuário
+  decide manualmente ou quando mudam margem/tolerância/base (gerais ou do anúncio) ou o custo do produto (a `key` deixa
+  de bater). Se hoje já está abaixo do piso (referência − tolerância), não desce mais. Cada troca fica em `log`
+  (auditoria). O painel do anúncio mostra "Referência da redução: X% em dd/mm · tolerância usada a de b p.p. · não desce
+  abaixo de Y%". Vale na classificação da tela, no lote e na rotina (o mesmo avaliador).
+- **Trocar por melhor × Baixar preço até o alvo (27/11/2026):** "trocar" só quando a melhor oferta aumenta o lucro por
+  unidade; quando ela reduz o lucro (alvo na mínima, dentro da tolerância) a situação é `baixar_alvo` ("Baixar preço até
+  o alvo"), com filtro e contador próprios. O card de ganho (`switch_gain`) soma só ganhos reais; `to_lower`/`lower_loss`
+  trazem a contagem e o valor das reduções. A linha mostra "−R$ x/un. para vender mais barato" e o botão "Baixar preço";
+  a confirmação diz quanto o lucro por unidade cai. No Histórico e no relatório da rotina, troca/ajuste que reduziu o
+  lucro aparece como "Baixou o preço até o alvo". A rotina age em `baixar_alvo` como agia antes em "trocar" (com a trava).
 - **Começo da oferta:** só troca na hora se a nova já começou. Se a atual está valendo e a melhor começa depois, o
   anúncio continua na atual, entra na nova (`agendar`) e, se a atual ainda vale quando a nova começa, sai dela nessa
   hora (`Ml::PromotionsHandoffJob`, 5 minutos depois do início). Início = o da oferta ou, sem ele, o da campanha. Em empate de

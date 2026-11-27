@@ -95,7 +95,9 @@ module Painel
       end
       return schedule(client, ev[:item], current, chosen) if kind == "agendar"
 
-      execute(client, ev[:item], kind, current, chosen)
+      result = execute(client, ev[:item], kind, current, chosen)
+      remember_reference(ev, current, chosen) if result.ok
+      result
     rescue Ml::OAuth::Error
       Result.new(ok: false, message: "A conta do Mercado Livre precisa ser autorizada de novo.")
     end
@@ -111,6 +113,7 @@ module Painel
       begin
         leave_offer(client, ev[:item].item_id, current[:offer])
         log.update!(ok: true)
+        PromotionDropRef.renew!(@account, ev[:item].item_id, source: "manual", user: @user, note: "saiu de #{name_of(current)}") if manual_decision?
         Result.new(ok: true, message: "Anúncio saiu de #{name_of(current)}.", action: log)
       rescue Ml::Client::Error => e
         log.update!(error: e.message.truncate(500))
@@ -380,6 +383,27 @@ module Painel
     end
 
     def name_of(entry) = entry[:offer].name.presence || entry[:label]
+
+    # Decisão do usuário (tela, ou lote/extensão disparados por alguém); a rotina, as novas tentativas e as trocas
+    # programadas chegam sem usuário.
+    def manual_decision? = @source == "tela" || (@source == "lote" && @user.present?)
+
+    # Referência da redução de margem (Painel::PromotionDropRef, 27/11/2026): decisão manual grava a margem nova;
+    # a primeira redução feita pela automação grava a margem de antes dela. Falha aqui não desfaz a aplicação.
+    def remember_reference(ev, current, chosen)
+      return unless @account.company.promo_allow_margin_drop && ev[:evaluator] && ev[:drop_key]
+
+      e = ev[:evaluator]
+      if manual_decision?
+        PromotionDropRef.record!(@account, ev[:item].item_id, e.rule_margin(chosen), source: "manual", key: ev[:drop_key], user: @user,
+                                 note: "#{name_of(chosen)} a #{brl(chosen[:price])}")
+      elsif current && current[:valid] && e.rules.drop_ref_pct.nil? && chosen[:profit].to_f < current[:profit].to_f - PromotionsQuery::GAIN_EPSILON
+        PromotionDropRef.record!(@account, ev[:item].item_id, e.rule_margin(current), source: "automacao", key: ev[:drop_key],
+                                 note: "antes de baixar de #{name_of(current)} a #{brl(current[:price])} para #{name_of(chosen)} a #{brl(chosen[:price])}")
+      end
+    rescue StandardError => e
+      Rails.logger.error("PromotionActions#remember_reference #{ev[:item]&.item_id}: #{e.class}: #{e.message}")
+    end
 
     def brl(value) = ActiveSupport::NumberHelper.number_to_currency(value, unit: "R$", separator: ",", delimiter: ".")
 

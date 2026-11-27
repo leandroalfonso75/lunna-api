@@ -88,7 +88,9 @@ module Painel
       changes = %w[trocar ajustar_preco aderir agendar].include?(a.kind)
       {
         item_id: a.item_id, title: item[:title], sku: item[:sku], thumbnail: item[:thumbnail],
-        kind: a.kind, kind_label: RESULT_LABELS.fetch(a.kind, a.kind), changes: changes, ok: a.ok,
+        kind: a.kind,
+        # troca/ajuste que reduziu o lucro por unidade (dentro da tolerância): nome próprio desde 27/11/2026
+        kind_label: changes && a.gain.to_f < -PromotionsQuery::GAIN_EPSILON ? "Baixaria / baixou o preço até o alvo" : RESULT_LABELS.fetch(a.kind, a.kind), changes: changes, ok: a.ok,
         reason: a.error,
         before: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f, profit: a.from_profit&.to_f,
                                  start: a.from_start, finish: a.from_finish },

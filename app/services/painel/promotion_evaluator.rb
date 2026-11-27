@@ -22,6 +22,9 @@
 # - Trava de lucro: quando a situação de hoje (promoção atual ou, sem promoção, o preço do anúncio) já está dentro dos
 #   limites, uma oferta que reduz o lucro por unidade não serve. Se a empresa permite reduzir a margem
 #   (allow_margin_drop), vale até a tolerância em pontos percentuais (margin_drop_tol).
+#   Desde 27/11/2026 (pedido do usuário, "travar a escada"): a tolerância é medida contra uma REFERÊNCIA fixa do anúncio
+#   (`drop_ref_pct`, ver Painel::PromotionDropRef), e não contra a promoção do dia. Sem referência gravada, vale a margem
+#   de hoje (como antes). Assim as reduções somadas da automação nunca passam da tolerância abaixo da referência.
 #   Fora dos limites (abaixo da mínima, acima da máxima), não há trava: a regra manda mudar.
 # - Cupom e desconto no Pix (BANK) somam ao preço e não entram na escolha.
 module Painel
@@ -39,7 +42,8 @@ module Painel
 
     # basis: "after_ads" | "before_ads" (qual lucro vale para os limites); target: "min" | "max".
     Rules = Struct.new(:min_pct, :max_pct, :min_price, :max_price, :tax_pct, :fixed_pct, :ads_unit, :price_cap, :current_price,
-                       :allow_margin_drop, :margin_drop_tol, :basis, :target, :allow_increase, :allow_lightning, keyword_init: true) do
+                       :allow_margin_drop, :margin_drop_tol, :basis, :target, :allow_increase, :allow_lightning, :drop_ref_pct,
+                       keyword_init: true) do
       def before_ads? = basis.to_s == "before_ads"
       def target_max? = target.to_s == "max"
     end
@@ -182,6 +186,17 @@ module Painel
       pick && pick.merge(soft_reason: increase_reason(pick[:price].to_f))
     end
 
+    # Para a tela: referência, margem de hoje e quanto da tolerância já foi usado (nil sem redução permitida ou sem trava).
+    def drop_info
+      return nil unless @rules.allow_margin_drop && @guard && rule_margin(@guard)
+
+      today = rule_margin(@guard).to_f
+      ref = (@rules.drop_ref_pct || today).to_f
+      tol = @rules.margin_drop_tol.to_f
+      used = [ [ ref - today, 0 ].max, tol ].min
+      { ref_pct: ref.round(2), today_pct: today.round(2), tolerance_pp: tol, used_pp: used.round(2), floor_pct: drop_floor.round(2), stored: !@rules.drop_ref_pct.nil? }
+    end
+
     private
 
     # A regra de limite que o resultado fere (margem, valor, preço cheio), ou nil.
@@ -227,15 +242,28 @@ module Painel
       if @rules.allow_margin_drop
         tol = @rules.margin_drop_tol.to_f
         return nil if rule_margin(@guard).nil? || rule_margin(eco).nil?
-        return nil if rule_margin(eco) >= rule_margin(@guard) - tol - 0.005
+        return nil if rule_margin(eco) >= drop_floor - 0.005
 
-        format("reduziria a margem de %.1f%% para %.1f%% (tolerância de %g p.p.)", rule_margin(@guard).to_f, rule_margin(eco).to_f, tol)
+        if @rules.drop_ref_pct
+          format("reduziria a margem de %.1f%% para %.1f%% (tolerância de %g p.p. abaixo da referência de %.1f%%)",
+                 rule_margin(@guard).to_f, rule_margin(eco).to_f, tol, @rules.drop_ref_pct.to_f)
+        else
+          format("reduziria a margem de %.1f%% para %.1f%% (tolerância de %g p.p.)", rule_margin(@guard).to_f, rule_margin(eco).to_f, tol)
+        end
       else
         return nil if rule_profit(@guard).nil? || rule_profit(eco).nil?
         return nil if rule_profit(eco) >= rule_profit(@guard) - 0.005
 
         format("reduziria o lucro de R$ %.2f para R$ %.2f por unidade", rule_profit(@guard).to_f, rule_profit(eco).to_f).tr(".", ",")
       end
+    end
+
+    # Menor margem que a redução permitida alcança: a referência (ou, sem ela, a margem de hoje) menos a tolerância.
+    # Se hoje já está abaixo disso (custo subiu, por exemplo), não desce mais: o piso vira a margem de hoje.
+    def drop_floor
+      today = rule_margin(@guard).to_f
+      ref = (@rules.drop_ref_pct || today).to_f
+      [ ref - @rules.margin_drop_tol.to_f, today ].min
     end
 
     # Relâmpago e oferta do dia: o anúncio precisa ter o estoque que o ML sugere reservar.
@@ -271,7 +299,7 @@ module Painel
       floors << price_for_margin(@rules.min_pct, offer) if @rules.min_pct
       if @guard && !relaxed
         floors << if @rules.allow_margin_drop
-          price_for_margin(rule_margin(@guard) - @rules.margin_drop_tol.to_f, offer)
+          price_for_margin(drop_floor, offer)
         else
           price_for_profit(rule_profit(@guard), offer)
         end

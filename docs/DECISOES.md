@@ -168,5 +168,11 @@ Substitui o SSE do `POST /api/items/:id/ai-plan` (a resposta longa ficava presa 
   Promoção, tipo de anúncio e envio ficam para a publicação do anúncio. Ver `docs/secoes/produtos-ia.md`.
 - **Promoções:** "Aplicar a cabível"/"Aplicar mesmo assim" vão ao Mercado Livre na hora; se o ML recusar a volta ao
   desconto, novas tentativas a cada 2 minutos por 20 minutos e depois de hora em hora (ver `docs/secoes/promocoes.md`).
+- **Promoções, "Trocar por melhor" com ganho negativo (27/11):** com alvo na margem mínima e "permitir reduzir a margem"
+  (tolerância 0,5 p.p.), a "melhor oferta" podia reduzir o lucro e aparecia como troca que rende mais. Decisão do
+  usuário (opções A + C): nova situação "Baixar preço até o alvo" (o card de ganho soma só ganhos reais) e a tolerância
+  passou a ser medida contra uma referência fixa por anúncio (última decisão manual ou margem de antes da 1ª redução da
+  automação; renovada por decisão manual, mudança de margem/tolerância ou de custo), para a automação não descer 0,5 p.p.
+  por dia em escada. Regra de "acima da máxima" e piso da mínima sem mudança. Ver `docs/secoes/promocoes.md`.
 - **Dados de teste:** rascunhos e registros criados para testar são apagados só pelo número/ID exato de quem os criou,
   nunca por filtro (em 26/11 um filtro apagou dois rascunhos do usuário).

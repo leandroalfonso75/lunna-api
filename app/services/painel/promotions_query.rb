@@ -9,6 +9,9 @@ module Painel
     SORTS = %w[gain margin best_margin title price review_round].freeze
     STATUSES = {
       "trocar" => [ "Trocar por melhor", "warn" ], "acima_maxima" => [ "Acima da máxima", "warn" ],
+      # a melhor oferta (mais perto do alvo na mínima) reduz o lucro por unidade, dentro da tolerância de redução
+      # configurada: antes de 27/11/2026 aparecia como "Trocar por melhor" com ganho negativo (pedido do usuário)
+      "baixar_alvo" => [ "Baixar preço até o alvo", "neutral" ],
       "sem_promocao" => [ "Sem promoção", "warn" ],
       "ok" => [ "Na melhor", "ok" ], "abaixo_minima" => [ "Abaixo da mínima", "bad" ],
       "sem_custo" => [ "Sem custo", "neutral" ], "para_revisar" => [ "Para revisar", "bad" ],
@@ -29,6 +32,14 @@ module Painel
 
     KIND_LABELS = { "aderir" => "Entrou", "ajustar_preco" => "Ajustou o preço", "trocar" => "Trocou", "sair" => "Saiu",
                     "agendar" => "Entrou na próxima (começa depois)", "reverter" => "Voltou ao preço anterior" }.freeze
+    # Troca ou ajuste que reduziu o lucro por unidade (baixou o preço até o alvo, dentro da tolerância): nome próprio no Histórico.
+    LOWER_LABEL = "Baixou o preço até o alvo".freeze
+
+    def self.kind_label(kind, gain)
+      return LOWER_LABEL if %w[trocar ajustar_preco aderir].include?(kind) && gain && gain.to_f < -GAIN_EPSILON
+
+      KIND_LABELS.fetch(kind, kind)
+    end
     SOURCE_LABELS = { "tela" => "Pela tela", "lote" => "Em lote", "rotina" => "Rotina das 03:00", "simulacao" => "Simulação",
                       "catalogo" => "Catálogo (volta ao preço)" }.freeze
 
@@ -95,7 +106,7 @@ module Painel
     def evaluate_item(item_id)
       item = @account.ml_items.find(item_id)
       row, evaluated = build_row(item, offers_by_item([ item.item_id ])[item.item_id] || [], context([ item ]))
-      { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best, evaluator: @last_evaluator }
+      { item: item, row: row, evaluated: evaluated, current: @last_current, best: @last_best, evaluator: @last_evaluator, drop_key: @last_drop_key }
     end
 
     # => [ { item:, row:, current:, best: } ] de todos os anúncios ativos (usado pela rotina das 03:00).
@@ -105,7 +116,7 @@ module Painel
       items.map do |item|
         row, evaluated = build_row(item, ctx[:offers][item.item_id] || [], ctx)
         { item: item, row: row, current: @last_current, best: @last_best, setting: ctx[:settings][item.item_id],
-          evaluated: evaluated, evaluator: @last_evaluator, catalog_entry: @last_catalog_entry }
+          evaluated: evaluated, evaluator: @last_evaluator, catalog_entry: @last_catalog_entry, drop_key: @last_drop_key }
       rescue StandardError => e
         # um anúncio com dado inesperado não pode derrubar a rotina inteira (05/11/2026): fica de fora, com o motivo
         Rails.logger.error("PromotionsQuery.evaluate_all #{item.item_id}: #{e.class}: #{e.message}")
@@ -120,7 +131,7 @@ module Painel
       titles = @account.ml_items.where(item_id: scope.map(&:item_id).uniq).pluck(:item_id, :title).to_h
       users = User.where(id: scope.map(&:user_id).compact.uniq).pluck(:id, :name).to_h
       scope.map do |a|
-        { id: a.id, item_id: a.item_id, title: titles[a.item_id], kind: a.kind, kind_label: KIND_LABELS.fetch(a.kind, a.kind),
+        { id: a.id, item_id: a.item_id, title: titles[a.item_id], kind: a.kind, kind_label: self.class.kind_label(a.kind, a.gain),
           source: a.source, source_label: SOURCE_LABELS.fetch(a.source, a.source), ok: a.ok, error: a.error, forced_reason: a.forced_reason,
           from: a.from_type && { name: a.from_name, price: a.from_price&.to_f, margin_pct: a.from_margin_pct&.to_f },
           to: a.to_type && { name: a.to_name, price: a.to_price&.to_f, margin_pct: a.to_margin_pct&.to_f },
@@ -175,6 +186,7 @@ module Painel
         manual: manual,
         by_variation: VariationCost.for_items(@account, missing),
         settings: @account.ml_promotion_settings.where(item_id: items.map(&:item_id)).index_by(&:item_id),
+        drop_refs: @account.ml_promotion_drop_refs.where(item_id: items.map(&:item_id)).index_by(&:item_id),
         ads: ads_per_unit(items.map(&:item_id)),
         offers: offers_by_item(items.map(&:item_id)),
         sales: ItemMetric.where(item_id: items.map(&:item_id)).pluck(:item_id, :units_30d).to_h,
@@ -269,8 +281,14 @@ module Painel
                                             allow_margin_drop: @company.promo_allow_margin_drop,
                                             margin_drop_tol: @company.promo_margin_drop_tolerance&.to_f,
                                             basis: @company.promo_margin_basis, target: @company.promo_price_target,
-                                            allow_increase: @company.promo_allow_price_increase, allow_lightning: @company.promo_allow_lightning)
+                                            allow_increase: @company.promo_allow_price_increase, allow_lightning: @company.promo_allow_lightning,
+                                            drop_ref_pct: @company.promo_allow_margin_drop ? PromotionDropRef.effective(ctx[:drop_refs]&.dig(item.item_id), drop_key(item, ctx)) : nil)
       PromotionEvaluator.new(item: item, cost: unit_cost(item, ctx), rules: rules)
+    end
+
+    # Chave das configurações que renovam a referência da redução de margem (ver PromotionDropRef).
+    def drop_key(item, ctx)
+      PromotionDropRef.key_for(@company, ctx[:settings][item.item_id], unit_cost(item, ctx))
     end
 
     # Preço cheio do anúncio (o Lunna nunca altera): nenhuma oferta pode passar dele. O preço final da promoção pode
@@ -318,6 +336,7 @@ module Painel
       @last_current = current
       @last_best = best
       @last_evaluator = evaluator
+      @last_drop_key = drop_key(item, ctx)
       full_price = (item.original_price || item.price).to_f
       setting = ctx[:settings][item.item_id]
       cost = unit_cost(item, ctx)
@@ -335,6 +354,8 @@ module Painel
         ads: ctx[:ads][item.item_id] || { spend: 0.0, units: 0, unit: 0.0, days: @company.ads_cost_days },
         current: current && short(current), best: best && short(best),
         gain: gain(current, best),
+        # referência da redução de margem: "referência X% em dd/mm" e quanto da tolerância já foi usado (27/11/2026)
+        drop_ref: PromotionDropRef.info(ctx[:drop_refs]&.dig(item.item_id), drop_key(item, ctx), evaluator),
         offers_count: evaluated.count { |e| e[:valid] },
         settings: {
           limit_mode: setting&.limit_mode || "margin",
@@ -370,7 +391,7 @@ module Painel
       return "sem_promocao" if current.nil?
       return "acima_maxima" if current[:reason] == "acima da margem máxima"
       return "abaixo_minima" unless current[:valid]
-      return "trocar" if changes?(current, best)
+      return gain(current, best).to_f > GAIN_EPSILON ? "trocar" : "baixar_alvo" if changes?(current, best)
 
       "ok"
     end
@@ -521,7 +542,10 @@ module Painel
       {
         items: rows.size, with_promotion: with_promo, without_promotion: rows.size - with_promo,
         to_switch: rows.count { |r| r[:status][:key] == "trocar" },
-        switch_gain: rows.sum { |r| r[:status][:key] == "trocar" ? r[:gain].to_f : 0.0 }.round(2),
+        # só ganho de verdade (lucro por unidade que sobe); as reduções até o alvo têm contagem e valor à parte
+        switch_gain: rows.sum { |r| r[:status][:key] == "trocar" && r[:gain].to_f.positive? ? r[:gain].to_f : 0.0 }.round(2),
+        to_lower: rows.count { |r| r[:status][:key] == "baixar_alvo" },
+        lower_loss: rows.sum { |r| r[:status][:key] == "baixar_alvo" ? r[:gain].to_f : 0.0 }.round(2),
         below_min: rows.count { |r| r[:status][:key] == "abaixo_minima" },
         to_review: rows.count { |r| r[:status][:key] == "para_revisar" && !review_hidden?(r) },
         scheduled: rows.count { |r| r[:status][:key] == "programado" },
@@ -543,7 +567,7 @@ module Painel
 
     # --- agrupamento por produto (variações) ---
 
-    STATUS_PRIORITY = %w[para_revisar abaixo_minima minima_inalcancavel trocar acima_maxima sem_promocao sem_custo programado ok].freeze
+    STATUS_PRIORITY = %w[para_revisar abaixo_minima minima_inalcancavel trocar acima_maxima sem_promocao baixar_alvo sem_custo programado ok].freeze
 
     def group_rows(rows)
       skus = rows.map { |r| r[:sku] }.compact_blank.uniq

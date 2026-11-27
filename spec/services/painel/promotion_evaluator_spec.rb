@@ -159,6 +159,37 @@ RSpec.describe Painel::PromotionEvaluator do
       expect(best[:margin_pct]).to be_within(0.02).of(16.44)
     end
 
+    # "travar a escada" (27/11/2026): a tolerância é medida contra a referência fixa do anúncio, não contra a promoção do dia
+    it "escada travada: com a referência gravada, as reduções somadas não passam da tolerância, dia após dia" do
+      day1 = guarded(allow_margin_drop: true, margin_drop_tol: 3)
+      first = day1.best(day1.evaluate([ current, cheaper ]))
+      expect(first[:margin_pct]).to be_within(0.02).of(16.44) # 19,44% − 3 p.p.
+
+      price = first[:price]
+      3.times do # dias seguintes, com a campanha já no preço reduzido
+        today = offer("SELLER_CAMPAIGN", status: "started", price: price, min_price: 50, max_price: 95, fees: campaign.fees)
+
+        loose = evaluator(min: 10, current: price, allow_margin_drop: true, margin_drop_tol: 3) # como era: mede contra hoje
+        expect(loose.best(loose.evaluate([ today, cheaper ]))[:margin_pct]).to be_within(0.02).of(13.44)
+
+        locked = evaluator(min: 10, current: price, allow_margin_drop: true, margin_drop_tol: 3, drop_ref_pct: 19.44)
+        best = locked.best(locked.evaluate([ today, cheaper ]))
+        expect(best).to include(as_is: true)
+        expect(best[:margin_pct]).to be_within(0.02).of(16.44)
+        expect(locked.drop_info).to include(ref_pct: 19.44, tolerance_pp: 3.0, stored: true)
+        expect(locked.drop_info[:used_pp]).to be_within(0.03).of(3.0)
+      end
+    end
+
+    it "referência parcialmente usada: desce só o que falta; hoje abaixo do piso não desce mais" do
+      partial = guarded(allow_margin_drop: true, margin_drop_tol: 3, drop_ref_pct: 20.44) # já usou 1 p.p.: pode descer mais 2
+      expect(partial.best(partial.evaluate([ current, cheaper ]))[:margin_pct]).to be_within(0.02).of(17.44)
+
+      above = guarded(allow_margin_drop: true, margin_drop_tol: 3, drop_ref_pct: 25) # hoje (19,44%) já abaixo de 25 − 3
+      expect(above.best(above.evaluate([ current, cheaper ]))).to include(as_is: true)
+      expect(above.evaluate([ current, cheaper ]).find { |x| x[:offer] == cheaper }[:reason]).to include("abaixo da referência de 25.0%")
+    end
+
     it "fora dos limites (acima da máxima), não há trava: vai para a margem mais perto da mínima" do
       e = evaluator(min: 10, max: 15, current: 90)
       best = e.best(e.evaluate([ current, cheaper ]))

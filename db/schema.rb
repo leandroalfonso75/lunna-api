@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_27_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -815,6 +815,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_020000) do
     t.index ["user_id"], name: "index_ml_promotion_actions_on_user_id"
   end
 
+  create_table "ml_promotion_drop_refs", force: :cascade do |t|
+    t.uuid "ml_account_id", null: false
+    t.string "item_id", null: false
+    t.decimal "margin_pct", precision: 6, scale: 2, null: false
+    t.datetime "set_at", null: false
+    t.string "source", null: false
+    t.string "key", null: false
+    t.uuid "user_id"
+    t.jsonb "log", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ml_account_id", "item_id"], name: "index_ml_promotion_drop_refs_on_ml_account_id_and_item_id", unique: true
+    t.index ["user_id"], name: "index_ml_promotion_drop_refs_on_user_id"
+  end
+
   create_table "ml_promotion_offers", force: :cascade do |t|
     t.uuid "ml_account_id", null: false
     t.string "item_id", null: false
@@ -1398,6 +1413,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_020000) do
   add_foreign_key "ml_promotion_actions", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "ml_promotion_runs", column: "run_id", on_delete: :cascade
   add_foreign_key "ml_promotion_actions", "users", on_delete: :nullify
+  add_foreign_key "ml_promotion_drop_refs", "ml_accounts", on_delete: :cascade
+  add_foreign_key "ml_promotion_drop_refs", "users", on_delete: :nullify
   add_foreign_key "ml_promotion_offers", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_runs", "ml_accounts", on_delete: :cascade
   add_foreign_key "ml_promotion_runs", "users", on_delete: :nullify

@@ -40,8 +40,14 @@ RSpec.describe "/api/promotions", type: :request do
     row = json["items"].find { |r| r["item_id"] == item.item_id }
     expect(row["best"]).to include("name" => "Campanha 20%", "action" => "editar_preco")
     expect(row["best"]["margin_pct"]).to be_within(0.02).of(14.44)
-    expect(row["status"]["key"]).to eq("trocar")
+    # o lucro por unidade cai: não é "Trocar por melhor" (27/11/2026), é "Baixar preço até o alvo", fora do ganho do card
+    expect(row["status"]).to include("key" => "baixar_alvo", "label" => "Baixar preço até o alvo")
     expect(row["gain"]).to be < 0
+    expect(json["summary"]).to include("to_switch" => 0, "switch_gain" => 0.0, "to_lower" => 1)
+    expect(json["summary"]["lower_loss"]).to eq(row["gain"])
+    expect(json["counts"]["baixar_alvo"]).to eq(1)
+    expect(row["drop_ref"]).to include("tolerance_pp" => 5.0, "used_pp" => 0.0, "source" => nil)
+    expect(row["drop_ref"]["ref_pct"]).to be_within(0.02).of(19.44)
   end
 
   it "margem máxima por anúncio, aplicada aos outros anúncios do mesmo SKU (só administrador)" do
