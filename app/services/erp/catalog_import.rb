@@ -119,9 +119,10 @@ module Erp
       return nil unless res.is_a?(Net::HTTPSuccess)
 
       mime = MIMES[res.content_type.to_s.downcase] || sniff(res.body)
-      return nil unless mime && res.body.bytesize <= CatalogProductAsset::MAX_BYTES
+      return nil unless mime && res.body.bytesize <= 25.megabytes
 
-      [ res.body, mime ]
+      bytes, mime = ImageOptimizer.call(res.body, mime) # até 1.600 px, ~150–250 KB (decisão do usuário, 27/11/2026)
+      bytes.bytesize <= CatalogProductAsset::MAX_BYTES ? [ bytes, mime ] : nil
     rescue StandardError
       nil
     end

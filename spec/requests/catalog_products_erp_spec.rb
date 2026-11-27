@@ -34,4 +34,17 @@ RSpec.describe "/api/catalog_products (fichas do ERP)", type: :request do
     expect(response).to have_http_status(:not_found)
     expect(json["errors"].first).to include("ainda não foi importado")
   end
+
+  it "Reimportar do ERP: só administrador, relê a ficha pelo id do ERP" do
+    product = company.catalog_products.find_by(erp_id: 1)
+    allow(Erp::CatalogImport).to receive(:call).and_return(Erp::CatalogImport::Result.new(imported: [ { erp_id: 1 } ], skipped: [], errors: []))
+
+    post "/api/catalog_products/#{product.id}/reimport", headers: auth_headers(user)
+    expect(response).to have_http_status(:forbidden)
+
+    admin = create(:user, :admin, company: company)
+    post "/api/catalog_products/#{product.id}/reimport", headers: auth_headers(admin)
+    expect(response).to have_http_status(:ok)
+    expect(Erp::CatalogImport).to have_received(:call).with(company, erp_ids: [ 1 ])
+  end
 end

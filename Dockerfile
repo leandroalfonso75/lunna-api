@@ -23,9 +23,9 @@ RUN groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
 COPY Gemfile Gemfile.lock ./
 # Toolchain instalada e removida no MESMO RUN: numa camada separada ela ficaria
-# na imagem final mesmo depois do purge.
+# na imagem final mesmo depois do purge. ImageMagick fica: otimiza as fotos importadas do ERP (27/11/2026).
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential libpq-dev libyaml-dev curl libpq5 libyaml-0-2 && \
+    apt-get install --no-install-recommends -y build-essential libpq-dev libyaml-dev curl libpq5 libyaml-0-2 imagemagick && \
     bundle install --jobs 4 --retry 3 && \
     rm -rf /usr/local/bundle/cache && \
     apt-get purge -y build-essential libpq-dev libyaml-dev && apt-get autoremove -y && \

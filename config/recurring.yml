@@ -5,6 +5,10 @@ production: &default
   olist_sync:
     class: Olist::SyncAllJob
     schedule: every 3 minutes
+  # Fichas de produto vindas do ERP: reimporta o que mudou no ERP e importa os novos (migração de 27/11/2026)
+  erp_catalog_refresh:
+    class: Erp::CatalogRefreshJob
+    schedule: every 30 minutes
   olist_refresh:
     class: Olist::RefreshAllJob
     schedule: every 6 hours

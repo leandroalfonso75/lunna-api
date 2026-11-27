@@ -9,12 +9,13 @@
 #   GET    /api/catalog_product_assets/:id       → a imagem (bytes)
 #   DELETE /api/catalog_product_assets/:id       → remove a imagem
 #   GET    /api/catalog_products/sku_search      → busca SKUs para compor kits (produtos do ERP sincronizados no Lunna)
+#   POST   /api/catalog_products/:id/reimport    → relê a ficha no ERP agora (admin; só leitura no ERP)
 #   GET    /api/catalog_products/erp/:erp_id     → a ficha completa vinda do ERP de um produto (pelo id dele no ERP; a
 #                                                   variação abre a ficha do pai), com estoque e custo PEPS da cópia
 # A lista mostra os produtos criados no Lunna; ?source=erp lista os vindos do ERP (migração de 27/11/2026).
 class CatalogProductsController < ApplicationController
-  before_action :require_admin!, only: [ :create, :update, :destroy, :generate, :add_asset, :remove_asset ]
-  before_action :set_product, only: [ :show, :update, :destroy, :generate, :add_asset ]
+  before_action :require_admin!, only: [ :create, :update, :destroy, :generate, :add_asset, :remove_asset, :reimport ]
+  before_action :set_product, only: [ :show, :update, :destroy, :generate, :add_asset, :reimport ]
 
   EDITABLE = %i[
     name sku gtin unit price cost_price weight_net weight_gross package_width package_height package_length package_source
@@ -37,6 +38,17 @@ class CatalogProductsController < ApplicationController
 
   def show
     render json: detail(@product)
+  end
+
+  def reimport
+    return render_errors([ "Só fichas vindas do ERP podem ser reimportadas." ], status: :unprocessable_content) unless @product.from_erp?
+
+    result = Erp::CatalogImport.call(Current.company, erp_ids: [ @product.erp_id ])
+    if result.errors.any? || result.skipped.any?
+      msg = result.errors.first&.dig(:error) || "não importado: #{result.skipped.first[:reason]}"
+      return render_errors([ "Não foi possível reimportar: #{msg}" ], status: :unprocessable_content)
+    end
+    render json: detail(@product.reload)
   end
 
   def by_erp

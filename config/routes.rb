@@ -36,6 +36,7 @@ Rails.application.routes.draw do
     get "catalog_products/erp/:erp_id", to: "catalog_products#by_erp"
     resources :catalog_products, only: [ :index, :show, :create, :update, :destroy ]
     post "catalog_products/:id/generate", to: "catalog_products#generate"
+    post "catalog_products/:id/reimport", to: "catalog_products#reimport"
     post "catalog_products/:id/assets", to: "catalog_products#add_asset"
     get "catalog_product_assets/:id", to: "catalog_products#asset"
     delete "catalog_product_assets/:id", to: "catalog_products#remove_asset"
