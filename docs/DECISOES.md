@@ -174,5 +174,8 @@ Substitui o SSE do `POST /api/items/:id/ai-plan` (a resposta longa ficava presa 
   passou a ser medida contra uma referência fixa por anúncio (última decisão manual ou margem de antes da 1ª redução da
   automação; renovada por decisão manual, mudança de margem/tolerância ou de custo), para a automação não descer 0,5 p.p.
   por dia em escada. Regra de "acima da máxima" e piso da mínima sem mudança. Ver `docs/secoes/promocoes.md`.
+- **Layout novo, largura (27/11):** as páginas ocupam a largura total ao lado do menu, com respiro lateral pequeno; o
+  layout novo nunca reduz a largura útil nem a quantidade de informação visível (colunas, cartões) em relação ao layout
+  atual na mesma resolução. A fonte maior vale para textos e cartões, não para as tabelas (mantêm tamanho e colunas).
 - **Dados de teste:** rascunhos e registros criados para testar são apagados só pelo número/ID exato de quem os criou,
   nunca por filtro (em 26/11 um filtro apagou dois rascunhos do usuário).
