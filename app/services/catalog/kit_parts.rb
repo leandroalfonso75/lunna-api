@@ -3,8 +3,9 @@
 #   - confere os dois (existe? o simples é simples? o pai tem variações?);
 #   - lista as variações do pai (SKU, nome, EAN, custo) com o valor da variação tirado do fim da descrição
 #     ("... - 220V" → 220V) e o tipo de variação deduzido dos valores (Voltagem, Cor, Tom, Tamanho; senão "Variação");
-#   - sugere os SKUs seguindo o padrão dos kits que já existem no Olist: pai LS-SCN01 + simples LS-DIF → produto
-#     LS-SCN01-DIF e kits LS-SCN01-DIF-110 / LS-SCN01-DIF-220 (variação LS-SCN01-110 / LS-SCN01-220).
+#   - devolve o preço cheio (preço de venda cadastrado, não o promocional) de cada um, base da sugestão de preço do kit.
+# Não sugere SKU (27/11/2026, pedido do usuário): o Lunna poderá ser usado por outras lojas, e o padrão de SKU da loja
+# piloto não vale para elas; os SKUs dos kits ficam para a pessoa preencher (ou pela planilha).
 module Catalog
   class KitParts
     COLORS = %w[azul verde amarelo preto preta branco branca vermelho vermelha rosa roxo roxa lilas lilás cinza marrom bege
@@ -23,10 +24,7 @@ module Catalog
       simple = check_simple
       parent, children = check_parent
       values = children.map { |c| c[:value] }
-      {
-        simple: simple, parent: parent, axis: axis_for(values), children: children,
-        suggested: simple[:ok] && parent[:ok] ? suggestions(children) : nil
-      }
+      { simple: simple, parent: parent, axis: axis_for(values), children: children }
     end
 
     private
@@ -81,25 +79,6 @@ module Catalog
       return "Tom" if norm.all? { |v| v.match?(/\A\d{2,4}\z/) }
 
       "Variação"
-    end
-
-    # Padrão dos kits do Olist: pai + "-" + (simples sem o prefixo comum) [+ sufixo da variação]
-    def suggestions(children)
-      prefix = common_prefix(@simple_sku, @parent_sku)
-      tail = @simple_sku.delete_prefix(prefix).delete_prefix("-")
-      base = tail.present? ? "#{@parent_sku}-#{tail}" : "#{@parent_sku}-KIT"
-      kits = children.to_h do |c|
-        suffix = c[:sku].to_s.start_with?(@parent_sku) ? c[:sku].to_s.delete_prefix(@parent_sku).delete_prefix("-") : c[:value].to_s.parameterize.upcase
-        [ c[:sku], suffix.present? ? "#{base}-#{suffix}" : base ]
-      end
-      { product_sku: base, kit_skus: kits }
-    end
-
-    # prefixo comum até o último "-" (LS-DIF x LS-SCN01 → "LS-")
-    def common_prefix(a, b)
-      shared = a.chars.zip(b.chars).take_while { |x, y| x == y }.map(&:first).join
-      cut = shared.rindex("-")
-      cut ? shared[0..cut] : ""
     end
   end
 end

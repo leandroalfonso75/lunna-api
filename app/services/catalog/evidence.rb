@@ -38,13 +38,46 @@ module Catalog
       blocks << "OBSERVAÇÕES DO USUÁRIO:\n#{@product.notes.strip.first(4000)}" if @product.notes.present?
       skus = reference_skus
       blocks.concat(skus.map { |sku| sku_block(sku) }.compact)
-      Result.new(blocks: blocks, images: @product.reference_images.map(&:data_url), skus: skus, warnings: @warnings)
+      images = component_photos? ? component_photo_urls(skus) : @product.reference_images.map(&:data_url)
+      Result.new(blocks: blocks, images: images, skus: skus, warnings: @warnings)
     end
 
     private
 
     # a caixa só vale com componentes informados (a tela também esconde e desmarca sem eles)
     def components_only? = @product.kind == "kit" && @product.use_component_references && !@product.no_reference_skus && @product.component_skus.any?
+
+    # "Usar como referências as fotos dos produtos do kit" (27/11/2026): só com componentes informados
+    def component_photos? = @product.kind == "kit" && @product.use_component_photos && !@product.no_reference_skus && @product.component_skus.any?
+
+    PHOTOS_PER_SKU = 3
+    MAX_PHOTOS = 10
+
+    # Fotos do anúncio mais vendido de cada componente (lidas na hora pela API do ML), até 3 por SKU e 10 no total,
+    # repartidas entre os componentes para todos aparecerem.
+    def component_photo_urls(skus)
+      client = ml_client
+      per_sku = skus.filter_map do |sku|
+        item = MlItem.where(ml_account_id: @company.ml_accounts.select(:id), sku: sku).order(sold_quantity: :desc).first
+        unless item
+          @warnings << "SKU #{sku} não tem anúncio no Mercado Livre: sem fotos dele como referência."
+          next
+        end
+        urls = begin
+          client ? client.item_pictures(item.item_id).filter_map { |p| p["secure_url"] || p["url"] }.first(PHOTOS_PER_SKU) : []
+        rescue StandardError
+          []
+        end
+        urls = [ item.thumbnail ].compact if urls.empty?
+        urls.presence
+      end
+      interleave(per_sku).first(MAX_PHOTOS)
+    end
+
+    # 1ª foto de cada componente, depois a 2ª de cada um…
+    def interleave(lists)
+      (0...lists.map(&:size).max.to_i).flat_map { |i| lists.filter_map { |l| l[i] } }
+    end
 
     def reference_skus
       return [] if @product.kind == "simple"

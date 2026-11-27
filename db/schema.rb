@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_27_013000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -113,6 +113,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_013000) do
     t.decimal "kit_simple_quantity", precision: 10, scale: 3, default: "1.0", null: false
     t.string "kit_parent_sku"
     t.decimal "kit_parent_quantity", precision: 10, scale: 3, default: "1.0", null: false
+    t.boolean "use_component_photos", default: false, null: false
     t.index ["company_id", "created_at"], name: "index_catalog_products_on_company_id_and_created_at"
     t.index ["company_id"], name: "index_catalog_products_on_company_id"
     t.index ["created_by_id"], name: "index_catalog_products_on_created_by_id"

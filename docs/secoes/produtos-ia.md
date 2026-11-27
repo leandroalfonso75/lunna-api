@@ -36,9 +36,10 @@ simples (Não/Sim, com exemplo). Com **Sim**:
   SKU inexistente, simples que é pai de variações ou kit, pai que não tem variações (se for uma variação, diz qual é o pai);
 - importa as variações do pai (`parent_olist_id`), com o valor tirado do fim da descrição ("… - 220V" → 220V) e o tipo
   deduzido dos valores (Voltagem, Cor, Tom, Tamanho; senão "Variação", editável);
-- mostra a prévia: uma linha por variação = variação + simples, com o custo do kit (custos do ERP) e o SKU sugerido no
-  padrão dos kits que já existem no Olist (pai LS-SCN01 + simples LS-DIF → produto LS-SCN01-DIF, kits LS-SCN01-DIF-110 e
-  LS-SCN01-DIF-220); dá para desmarcar variações que não viram kit e desligar a sugestão de SKU;
+- mostra a prévia: uma linha por variação = variação + simples, com o custo do kit (custos do ERP) e o **preço
+  sugerido** (preço cheio da variação × qtd + preço cheio do simples × qtd); dá para desmarcar variações que não viram
+  kit. **Não sugere SKU** (27/11/2026, pedido do usuário): o Lunna poderá ser usado por outras lojas e o padrão de SKU da
+  loja piloto não vale para elas; os SKUs ficam em branco (ou pela planilha);
 - **Montar kits** grava (`kit_with_variations`, `kit_simple_sku`/`_quantity`, `kit_parent_sku`/`_quantity`) e leva tudo
   para a grade de variações ("2. Kits por variação"): cada linha é kit (`kit: true`, componente = a variação do pai) e o
   simples fica nos itens comuns (`common_components`). SKU, EAN, preço, estoque, "Repetir em todas" e a planilha valem
@@ -47,6 +48,20 @@ simples (Não/Sim, com exemplo). Com **Sim**:
 - A caixa "Usar como referências os produtos que formarão o(s) kit(s)" aparece com o simples e a grade montados; a IA
   recebe a composição de cada kit (`KIT COM VARIAÇÕES` no prompt) e escreve o kit em geral, sem fixar a variação, com o
   atributo da variação só no produto com variações e a embalagem em branco (regras do kit).
+
+### Ajustes de 27/11/2026 no Kit
+
+- **Preço sugerido** = soma do **preço cheio** (preço de venda cadastrado no ERP, não o promocional) dos componentes ×
+  quantidade (`compositionPrice`). No kit comum vai para o preço de venda se ele estiver vazio e acompanha a soma
+  enquanto for o valor sugerido (ao adicionar o 2º componente ela sobe); depois de editado, não muda mais. No kit com
+  variações, cada linha montada recebe o preço da sua composição. Componente sem preço: não sugere e avisa quais faltam.
+- **Usar como referências as fotos dos produtos que formarão o(s) kit(s)** (`use_component_photos`): caixa abaixo de
+  Fotos, com a mesma regra de exibição da caixa abaixo de Links (só com componentes indicados; sem eles some e é
+  desmarcada). Marcada, Anexar fotos e a área de colar ficam desabilitados (as já anexadas ficam guardadas) e a IA recebe
+  as fotos dos anúncios dos componentes (até 3 por SKU, 10 no total, alternando entre os componentes;
+  `Catalog::Evidence#component_photo_urls`), avisada de que cada foto mostra um componente, não o kit montado.
+- As duas caixas ("produtos" e "fotos" dos componentes) têm destaque maior: faixa azul clara, borda, texto em negrito.
+- Exemplos da tela sem SKUs da loja piloto (antes "LS-DIF", "LS-SCN01").
 
 ### Variação que é kit (decisão de 26/11/2026)
 

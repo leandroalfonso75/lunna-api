@@ -103,7 +103,7 @@ module Catalog
         EVIDÊNCIAS:
         #{evidence.blocks.join("\n\n")}
         #{"\nAVISOS DA COLETA: #{evidence.warnings.join(' | ')}" if evidence.warnings.any?}
-        #{evidence.images.any? ? "\n#{evidence.images.size} foto(s) do produto anexada(s): use para identificar o produto e o que vem nele, mas não deduza especificações técnicas pela foto." : ''}
+        #{evidence.images.any? ? "\n#{evidence.images.size} foto(s) #{photos_origin} anexada(s): use para identificar o produto e o que vem nele, mas não deduza especificações técnicas pela foto." : ''}
       TXT
     end
 
@@ -117,6 +117,11 @@ module Catalog
       "KIT COM VARIAÇÕES: cada variação do produto #{@product.kit_parent_sku} (#{@product.variation_axes.join(' / ')}) vem junto do produto " \
         "simples #{simple}. Kits: #{lines.join(' | ')}. Escreva nome, títulos e descrição do kit em geral (sem fixar uma variação); " \
         "o atributo da variação (#{@product.variation_axes.join(' / ')}) é do produto com variações, nunca do produto simples."
+    end
+
+    def photos_origin
+      kit_photos = @product.kind == "kit" && @product.use_component_photos && !@product.no_reference_skus && @product.component_skus.any?
+      kit_photos ? "dos produtos que formam o kit (anúncios de cada componente; cada foto mostra um componente, não o kit montado)" : "do produto"
     end
 
     def filled_by_user

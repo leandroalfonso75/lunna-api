@@ -161,7 +161,7 @@ RSpec.describe "Criar Produto com IA (/api/catalog_products)", type: :request do
                            variation_kind: "V", parent_olist_id: parent.olist_id, cost_price: 80, price: 200, synced_at: Time.current)
     end
 
-    it "confere os SKUs, importa as variações do pai, deduz o tipo de variação e sugere os SKUs no padrão dos kits" do
+    it "confere os SKUs, importa as variações do pai com o preço cheio e deduz o tipo de variação" do
       olist("LS-DIF", "Difusor Universal", cost: 7.6)
       pai = olist("LS-SCN01", "Secador Mondial SCN-01", kind: "V", variation_kind: "P")
       child(pai, "LS-SCN01-110", "Secador Mondial SCN-01 - 127V")
@@ -172,12 +172,13 @@ RSpec.describe "Criar Produto com IA (/api/catalog_products)", type: :request do
       expect(json["parent"]).to include("ok" => true)
       expect(json["axis"]).to eq("Voltagem")
       expect(json["children"].map { |c| [ c["sku"], c["value"] ] }).to eq([ [ "LS-SCN01-110", "127V" ], [ "LS-SCN01-220", "220V" ] ])
-      expect(json["suggested"]).to eq("product_sku" => "LS-SCN01-DIF", "kit_skus" => { "LS-SCN01-110" => "LS-SCN01-DIF-110", "LS-SCN01-220" => "LS-SCN01-DIF-220" })
+      expect(json).not_to have_key("suggested") # sem sugestão de SKU (o padrão da loja piloto não vale para outras lojas)
+      expect(json["simple"]["price"]).to eq(15.2) # preço cheio: base da sugestão de preço do kit
+      expect(json["children"].map { |c| c["price"] }).to eq([ 200.0, 200.0 ])
 
       get "/api/catalog_products/kit_parts", params: { simple: "LS-SCN01", parent: "LS-SCN01-220" }, headers: auth_headers(member)
       expect(json["simple"]["error"]).to include("produto com variações")
       expect(json["parent"]["error"]).to include("variação de LS-SCN01")
-      expect(json["suggested"]).to be_nil
     end
 
     it "cada variação vira um kit (variação + simples) e a IA recebe a composição de cada kit" do
@@ -200,5 +201,24 @@ RSpec.describe "Criar Produto com IA (/api/catalog_products)", type: :request do
       expect(response).to have_http_status(:ok)
       expect(request.with { |req| JSON.parse(req.body)["messages"][1]["content"].then { |c| c.include?("KIT COM VARIAÇÕES") && c.include?("127V = LS-SCN01-110 + LS-DIF") && c.include?("SKU DE REFERÊNCIA LS-SCN01-110") } }).to have_been_made
     end
+  end
+
+  it "kit com 'usar as fotos dos produtos do kit': a IA recebe as fotos dos anúncios dos componentes, não as anexadas" do
+    olist("LS-DIF", "Difusor")
+    olist("LS-SEC", "Secador")
+    account = create(:ml_account, company: company)
+    create(:ml_item, item_id: "MLB1", ml_account: account, sku: "LS-DIF", sold_quantity: 5)
+    create(:ml_item, item_id: "MLB2", ml_account: account, sku: "LS-SEC", sold_quantity: 9)
+    pics = { "MLB1" => %w[d1 d2 d3 d4], "MLB2" => %w[s1 s2] }
+    client = instance_double(Ml::Client, item_full: { "attributes" => [] }, item_description: { "plain_text" => "" })
+    allow(client).to receive(:item_pictures) { |id| pics[id].map { |n| { "secure_url" => "https://http2.mlstatic.com/#{n}.jpg" } } }
+    product = company.catalog_products.create!(kind: "kit", use_component_photos: true, kit_components: [ { sku: "LS-DIF", quantity: 1 }, { sku: "LS-SEC", quantity: 1 } ])
+    product.assets.create!(kind: "referencia", mime: "image/png", data: "x".b)
+
+    images = Catalog::Evidence.call(product, ml_client: client).images
+    expect(images).to eq(%w[d1 s1 d2 s2 d3].map { |n| "https://http2.mlstatic.com/#{n}.jpg" }) # 3 por SKU, alternando
+
+    product.update!(use_component_photos: false)
+    expect(Catalog::Evidence.call(product, ml_client: client).images.first).to start_with("data:image/png;base64,")
   end
 end

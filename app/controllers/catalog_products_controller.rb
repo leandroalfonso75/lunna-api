@@ -18,7 +18,7 @@ class CatalogProductsController < ApplicationController
     stock_control initial_stock min_stock max_stock location preparation_days ncm cest icms_origin sped_item_type
     brand line model category condition sale_format description keywords seo_title seo_description video_url
     warranty supplier notes no_reference_skus use_component_references status
-    kit_with_variations kit_simple_sku kit_simple_quantity kit_parent_sku kit_parent_quantity
+    kit_with_variations kit_simple_sku kit_simple_quantity kit_parent_sku kit_parent_quantity use_component_photos
   ].freeze
   JSON_FIELDS = %i[titles technical_sheet variation_axes variations kit_components common_components references regulatory].freeze
 
