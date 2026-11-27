@@ -36,8 +36,18 @@ module Payloads
       ai_model: company.ai_model,
       ai_image_model: company.ai_image_model,
       ai_configured: company.ai_configured?,
-      ai_key_hint: company.ai_key_hint
+      ai_key_hint: company.ai_key_hint,
+      # ERP conectado à empresa (27/11/2026): a tela mostra o nome dele nos textos, em vez de um ERP fixo (multi-loja)
+      erp: erp_payload(company)
     }
+  end
+
+  # Hoje o único adaptador de ERP é o Olist; outros (Bling, Upseller...) entram aqui com o próprio nome.
+  def erp_payload(company)
+    conn = company.olist_connection
+    return nil unless conn
+
+    { key: "olist", name: "Olist", status: conn.status }
   end
 
   def ml_account_payload(account)

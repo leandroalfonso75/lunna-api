@@ -23,6 +23,16 @@ RSpec.describe "GET /api/me", type: :request do
     expect(json["ml_accounts"].size).to eq(2)
   end
 
+  it "diz qual ERP está conectado à empresa (nome para os textos da tela), sem dados de acesso" do
+    get "/api/me", headers: auth_headers(user)
+    expect(json["company"]["erp"]).to be_nil
+
+    create(:olist_connection, company: company)
+    get "/api/me", headers: auth_headers(user)
+    expect(json["company"]["erp"]).to include("key" => "olist", "name" => "Olist")
+    expect(json["company"]["erp"].keys).to contain_exactly("key", "name", "status")
+  end
+
   it "nunca expõe access_token/refresh_token das ml_accounts" do
     create(:ml_account, company: company, access_token: "segredo-acesso", refresh_token: "segredo-refresh")
 

@@ -177,5 +177,7 @@ Substitui o SSE do `POST /api/items/:id/ai-plan` (a resposta longa ficava presa 
 - **Layout novo, largura (27/11):** as páginas ocupam a largura total ao lado do menu, com respiro lateral pequeno; o
   layout novo nunca reduz a largura útil nem a quantidade de informação visível (colunas, cartões) em relação ao layout
   atual na mesma resolução. A fonte maior vale para textos e cartões, não para as tabelas (mantêm tamanho e colunas).
+- **Nome do ERP nos textos (27/11):** nenhum texto da tela cita um ERP fixo. `company_payload` traz `erp` (`key`, `name`,
+  `status`) do ERP conectado à empresa (hoje só o adaptador Olist) e o front usa `useErpName()`; sem ERP, aparece "ERP".
 - **Dados de teste:** rascunhos e registros criados para testar são apagados só pelo número/ID exato de quem os criou,
   nunca por filtro (em 26/11 um filtro apagou dois rascunhos do usuário).
