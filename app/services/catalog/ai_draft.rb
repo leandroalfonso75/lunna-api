@@ -95,7 +95,8 @@ module Catalog
       filled = filled_by_user
       variations = @product.variations.map { |v| v["attrs"].map { |k, x| "#{k}: #{x}" }.join(", ") }.compact_blank
       <<~TXT
-        TIPO: #{kind}#{@product.kind == 'kit' && @product.no_reference_skus ? ' (sem SKUs de referência: use as referências livres)' : ''}#{@product.kind == 'kit' && @product.use_component_references && !@product.no_reference_skus && @product.kit_components.any? ? ' (referências = os produtos que formam o kit: use as descrições, fichas técnicas e especificações de cada componente, sem misturar atributos entre eles)' : ''}
+        TIPO: #{kind}#{@product.kind == 'kit' && @product.no_reference_skus ? ' (sem SKUs de referência: use as referências livres)' : ''}#{@product.kind == 'kit' && @product.use_component_references && !@product.no_reference_skus && @product.component_skus.any? ? ' (referências = os produtos que formam o kit: use as descrições, fichas técnicas e especificações de cada componente, sem misturar atributos entre eles)' : ''}
+        #{variation_kit_text}
         #{"VARIAÇÕES JÁ CRIADAS PELO USUÁRIO (#{@product.variation_axes.join(' / ')}): #{variations.join(' | ')}" if variations.any?}
         #{"JÁ PREENCHIDO PELO USUÁRIO (não mude, use como fato): #{filled}" if filled.present?}
 
@@ -104,6 +105,18 @@ module Catalog
         #{"\nAVISOS DA COLETA: #{evidence.warnings.join(' | ')}" if evidence.warnings.any?}
         #{evidence.images.any? ? "\n#{evidence.images.size} foto(s) do produto anexada(s): use para identificar o produto e o que vem nele, mas não deduza especificações técnicas pela foto." : ''}
       TXT
+    end
+
+    # Kit com variações: diz à IA que o produto tem uma variação por variação do pai, cada uma junto do mesmo simples. Os
+    # textos falam do kit em geral (a variação aparece na grade); a voltagem/cor é da variação, não do simples.
+    def variation_kit_text
+      return "" unless @product.variation_kit?
+
+      simple = @product.kit_simple_sku
+      lines = @product.variations.map { |v| "#{v['attrs'].values.join(' / ')} = #{Array(v['components']).map { |c| c['sku'] }.join(' + ')} + #{simple}" }
+      "KIT COM VARIAÇÕES: cada variação do produto #{@product.kit_parent_sku} (#{@product.variation_axes.join(' / ')}) vem junto do produto " \
+        "simples #{simple}. Kits: #{lines.join(' | ')}. Escreva nome, títulos e descrição do kit em geral (sem fixar uma variação); " \
+        "o atributo da variação (#{@product.variation_axes.join(' / ')}) é do produto com variações, nunca do produto simples."
     end
 
     def filled_by_user

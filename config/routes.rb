@@ -32,6 +32,7 @@ Rails.application.routes.draw do
     post "olist/sync", to: "olist#sync"
     get "olist/sync_runs", to: "olist#sync_runs"
     get "catalog_products/sku_search", to: "catalog_products#sku_search"
+    get "catalog_products/kit_parts", to: "catalog_products#kit_parts"
     resources :catalog_products, only: [ :index, :show, :create, :update, :destroy ]
     post "catalog_products/:id/generate", to: "catalog_products#generate"
     post "catalog_products/:id/assets", to: "catalog_products#add_asset"

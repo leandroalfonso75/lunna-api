@@ -27,6 +27,27 @@ Flex, frete grátis e a publicação no Mercado Livre.
   IA usa só os componentes: cadastro do ERP, atributos do anúncio e a descrição do anúncio de cada componente
   (`Catalog::Evidence#components_only?`). Sem componentes a caixa some e é desmarcada.
 
+### Kit = 1 produto com variações + 1 produto simples (26/11/2026)
+
+No tipo Kit, acima das Referências, o card **Composição do kit** pergunta se o kit é 1 produto com variações + 1 produto
+simples (Não/Sim, com exemplo). Com **Sim**:
+- duas colunas: **SKU do produto simples** e **SKU pai do produto com variações**, cada um com quantidade (padrão 1). O
+  Lunna confere os dois nos produtos do ERP sincronizados (`GET /api/catalog_products/kit_parts`, `Catalog::KitParts`):
+  SKU inexistente, simples que é pai de variações ou kit, pai que não tem variações (se for uma variação, diz qual é o pai);
+- importa as variações do pai (`parent_olist_id`), com o valor tirado do fim da descrição ("… - 220V" → 220V) e o tipo
+  deduzido dos valores (Voltagem, Cor, Tom, Tamanho; senão "Variação", editável);
+- mostra a prévia: uma linha por variação = variação + simples, com o custo do kit (custos do ERP) e o SKU sugerido no
+  padrão dos kits que já existem no Olist (pai LS-SCN01 + simples LS-DIF → produto LS-SCN01-DIF, kits LS-SCN01-DIF-110 e
+  LS-SCN01-DIF-220); dá para desmarcar variações que não viram kit e desligar a sugestão de SKU;
+- **Montar kits** grava (`kit_with_variations`, `kit_simple_sku`/`_quantity`, `kit_parent_sku`/`_quantity`) e leva tudo
+  para a grade de variações ("2. Kits por variação"): cada linha é kit (`kit: true`, componente = a variação do pai) e o
+  simples fica nos itens comuns (`common_components`). SKU, EAN, preço, estoque, "Repetir em todas" e a planilha valem
+  como em "Com variações"; a coluna Composição mostra "LS-SCN01-110 + LS-DIF". "Montar de novo" mantém o que já foi
+  preenchido nas variações que continuam. Responder "Não" com kits montados pede confirmação e tira a grade.
+- A caixa "Usar como referências os produtos que formarão o(s) kit(s)" aparece com o simples e a grade montados; a IA
+  recebe a composição de cada kit (`KIT COM VARIAÇÕES` no prompt) e escreve o kit em geral, sem fixar a variação, com o
+  atributo da variação só no produto com variações e a embalagem em branco (regras do kit).
+
 ### Variação que é kit (decisão de 26/11/2026)
 
 No Olist há 26 variações que são kits (`olist_products.kind = "K"` com `variation_kind = "V"`), sempre no formato

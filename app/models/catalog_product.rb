@@ -28,6 +28,17 @@ class CatalogProduct < ApplicationRecord
 
   def reference_images = assets.select { |a| a.kind == "referencia" }
 
+  # Kit com variações (1 produto com variações + 1 produto simples): a grade de variações vale como em "Com variações",
+  # cada linha é um kit (variação do pai + o simples, que fica nos itens comuns).
+  def variation_kit? = kind == "kit" && kit_with_variations
+  def has_variations? = kind == "variations" || variation_kit?
+
+  # SKUs usados como referência/composição: kit simples, itens comuns e itens próprios das variações-kit.
+  def component_skus
+    list = kind == "kit" && !kit_with_variations ? kit_components : common_components + variations.flat_map { |v| v["kit"] ? Array(v["components"]) : [] }
+    list.map { |c| c["sku"] }.compact_blank.uniq
+  end
+
   # Dígito verificador de EAN-8/12/13/14 (GTIN).
   def self.valid_gtin?(code)
     digits = code.to_s.gsub(/\D/, "")
@@ -94,7 +105,7 @@ class CatalogProduct < ApplicationRecord
   end
 
   def variations_valid
-    return unless kind == "variations"
+    return unless has_variations?
 
     errors.add(:variations, "no máximo #{MAX_VARIATIONS}") if variations.size > MAX_VARIATIONS
     skus = variations.filter_map { |v| v["sku"] }

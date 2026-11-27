@@ -44,15 +44,12 @@ module Catalog
     private
 
     # a caixa só vale com componentes informados (a tela também esconde e desmarca sem eles)
-    def components_only? = @product.kind == "kit" && @product.use_component_references && !@product.no_reference_skus && @product.kit_components.any?
+    def components_only? = @product.kind == "kit" && @product.use_component_references && !@product.no_reference_skus && @product.component_skus.any?
 
     def reference_skus
-      list = case @product.kind
-      when "kit" then @product.kit_components.map { |c| c["sku"] }
-      when "variations" then (@product.common_components + @product.variations.flat_map { |v| v["kit"] ? v["components"] : [] }).map { |c| c["sku"] }
-      else []
-      end
-      list.compact_blank.uniq.first(20)
+      return [] if @product.kind == "simple"
+
+      @product.component_skus.first(20)
     end
 
     def sku_block(sku)

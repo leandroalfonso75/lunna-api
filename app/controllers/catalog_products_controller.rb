@@ -18,6 +18,7 @@ class CatalogProductsController < ApplicationController
     stock_control initial_stock min_stock max_stock location preparation_days ncm cest icms_origin sped_item_type
     brand line model category condition sale_format description keywords seo_title seo_description video_url
     warranty supplier notes no_reference_skus use_component_references status
+    kit_with_variations kit_simple_sku kit_simple_quantity kit_parent_sku kit_parent_quantity
   ].freeze
   JSON_FIELDS = %i[titles technical_sheet variation_axes variations kit_components common_components references regulatory].freeze
 
@@ -100,6 +101,12 @@ class CatalogProductsController < ApplicationController
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render_errors([ "Imagem não encontrada." ], status: :not_found)
+  end
+
+  # Kit = 1 produto com variações + 1 produto simples: confere os dois SKUs, lista as variações do pai e sugere os SKUs.
+  #   GET /api/catalog_products/kit_parts?simple=LS-DIF&parent=LS-SCN01
+  def kit_parts
+    render json: Catalog::KitParts.call(Current.company, simple: params[:simple], parent: params[:parent])
   end
 
   # Produtos do ERP (sincronizados no Lunna) para compor kits: SKU, nome, EAN, preço, custo. Variação-pai fica de fora

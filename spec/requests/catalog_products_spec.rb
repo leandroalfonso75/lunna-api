@@ -154,4 +154,51 @@ RSpec.describe "Criar Produto com IA (/api/catalog_products)", type: :request do
     expect(text).to include("texto que deve ser ignorado", "Página do produto")
     expect(text).not_to include("descrição do anúncio")
   end
+
+  describe "kit = 1 produto com variações + 1 produto simples" do
+    def child(parent, sku, name)
+      OlistProduct.create!(company: company, olist_id: rand(1..9_999_999), sku: sku, description: name, kind: "S", status: "A",
+                           variation_kind: "V", parent_olist_id: parent.olist_id, cost_price: 80, price: 200, synced_at: Time.current)
+    end
+
+    it "confere os SKUs, importa as variações do pai, deduz o tipo de variação e sugere os SKUs no padrão dos kits" do
+      olist("LS-DIF", "Difusor Universal", cost: 7.6)
+      pai = olist("LS-SCN01", "Secador Mondial SCN-01", kind: "V", variation_kind: "P")
+      child(pai, "LS-SCN01-110", "Secador Mondial SCN-01 - 127V")
+      child(pai, "LS-SCN01-220", "Secador Mondial SCN-01 - 220V")
+
+      get "/api/catalog_products/kit_parts", params: { simple: "LS-DIF", parent: "LS-SCN01" }, headers: auth_headers(member)
+      expect(json["simple"]).to include("ok" => true, "name" => "Difusor Universal")
+      expect(json["parent"]).to include("ok" => true)
+      expect(json["axis"]).to eq("Voltagem")
+      expect(json["children"].map { |c| [ c["sku"], c["value"] ] }).to eq([ [ "LS-SCN01-110", "127V" ], [ "LS-SCN01-220", "220V" ] ])
+      expect(json["suggested"]).to eq("product_sku" => "LS-SCN01-DIF", "kit_skus" => { "LS-SCN01-110" => "LS-SCN01-DIF-110", "LS-SCN01-220" => "LS-SCN01-DIF-220" })
+
+      get "/api/catalog_products/kit_parts", params: { simple: "LS-SCN01", parent: "LS-SCN01-220" }, headers: auth_headers(member)
+      expect(json["simple"]["error"]).to include("produto com variações")
+      expect(json["parent"]["error"]).to include("variação de LS-SCN01")
+      expect(json["suggested"]).to be_nil
+    end
+
+    it "cada variação vira um kit (variação + simples) e a IA recebe a composição de cada kit" do
+      olist("LS-DIF", "Difusor Universal")
+      pai = olist("LS-SCN01", "Secador Mondial SCN-01", kind: "V", variation_kind: "P")
+      child(pai, "LS-SCN01-110", "Secador Mondial SCN-01 - 127V")
+      product = company.catalog_products.new(kind: "kit", kit_with_variations: true, kit_simple_sku: "LS-DIF", kit_parent_sku: "LS-SCN01",
+        variation_axes: [ "Voltagem" ], common_components: [ { sku: "LS-DIF", quantity: 1 } ],
+        variations: [ { attrs: { Voltagem: "127V" }, sku: "LS-SCN01-DIF-110", kit: true, components: [ { sku: "LS-SCN01-110", quantity: 1 } ] },
+                      { attrs: { Voltagem: "127V" }, sku: "X", kit: true, components: [] } ])
+      expect(product).not_to be_valid # variação repetida: a grade do kit vale como em "Com variações"
+      expect(product.errors.full_messages.join).to include("repetidas")
+
+      product.variations = product.variations.first(1)
+      product.save!
+      expect(product.component_skus).to contain_exactly("LS-DIF", "LS-SCN01-110")
+      request = ai_reply(name: "Kit Secador Mondial SCN-01 + Difusor", titles: [ "Kit Secador Mondial SCN-01 com Difusor" ], para_conferir: [])
+
+      post "/api/catalog_products/#{product.id}/generate", headers: auth_headers(admin), as: :json
+      expect(response).to have_http_status(:ok)
+      expect(request.with { |req| JSON.parse(req.body)["messages"][1]["content"].then { |c| c.include?("KIT COM VARIAÇÕES") && c.include?("127V = LS-SCN01-110 + LS-DIF") && c.include?("SKU DE REFERÊNCIA LS-SCN01-110") } }).to have_been_made
+    end
+  end
 end
