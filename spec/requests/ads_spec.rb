@@ -116,6 +116,41 @@ RSpec.describe "/api/ads", type: :request do
     expect(json["items"].first["metrics"]["cost"]).to eq(0.0)
   end
 
+  it "com os dias do período lidos, o gasto do anúncio vem das linhas diárias (igual a Vendas) e mostra as vendas reais" do
+    campaign(1)
+    ad("MLB1", 1, { "cost" => 43.3, "units_quantity" => 4, "total_amount" => 917.96, "organic_units_quantity" => 2 })
+    (0..6).each { |i| MlAdDaySync.create!(ml_account_id: account.id, date: Date.current - i, fetched_at: Time.current) }
+    [ [ 0, 6.55, 1 ], [ 1, 5.83, 0 ], [ 3, 5.27, 2 ], [ 6, 5.58, 1 ] ].each do |ago, cost, units|
+      MlAdItemDaily.create!(ml_account_id: account.id, item_id: "MLB1", campaign_id: 1, date: Date.current - ago, cost: cost, clicks: 10, prints: 1000,
+                            total_amount: units * 243.31, units: units)
+    end
+    { 1 => [ "paid", 1 ], 2 => [ "paid", 1 ], 3 => [ "cancelled", 1 ] }.each do |id, (status, qty)|
+      MlOrder.create!(order_id: id, ml_account: account, status: status, date_created: 2.days.ago, total_amount: 242.44)
+      MlOrderItem.create!(order_id: id, item_id: "MLB1", sku: "S", title: "Secador", quantity: qty, unit_price: 242.44, sale_fee: 1)
+    end
+    MlOrder.create!(order_id: 4, ml_account: account, status: "paid", date_created: 10.days.ago, total_amount: 242.44) # fora do período
+    MlOrderItem.create!(order_id: 4, item_id: "MLB1", sku: "S", title: "Secador", quantity: 1, unit_price: 242.44, sale_fee: 1)
+
+    get "/api/ads/items", params: { account_id: account.id, period: "7d" }, headers: auth_headers(member)
+
+    m = json["items"].first["metrics"]
+    expect(json["daily"]).to be(true)
+    expect(m).to include("cost" => 23.23, "units" => 4, "real_units" => 2, "cost_per_real_sale" => 11.62)
+    expect(m["organic_units"]).to eq(2) # a divisão orgânica segue a do ML
+    expect(json["totals"]).to include("real_units" => 2, "cost_per_real_sale" => 11.62)
+  end
+
+  it "se algum dia do período ainda não foi lido, a lista usa o total do ML (sem misturar)" do
+    campaign(1)
+    ad("MLB1", 1, { "cost" => 43.3, "units_quantity" => 4 })
+    MlAdItemDaily.create!(ml_account_id: account.id, item_id: "MLB1", campaign_id: 1, date: Date.current, cost: 6.55, clicks: 1, prints: 1, total_amount: 0, units: 0)
+
+    get "/api/ads/items", params: { account_id: account.id, period: "7d" }, headers: auth_headers(member)
+
+    expect(json["daily"]).to be(false)
+    expect(json["items"].first["metrics"]).to include("cost" => 43.3, "real_units" => 0, "cost_per_real_sale" => nil)
+  end
+
   it "7, 30 e 90 dias usam as janelas guardadas, sem chamar o Mercado Livre" do
     campaign(1)
     ad("MLB1", 1, { "cost" => 5.0 })

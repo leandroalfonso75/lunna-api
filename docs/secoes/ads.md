@@ -32,6 +32,18 @@ Campanhas e anúncios de publicidade (**Product Ads**) do Mercado Livre dos últ
 de 7, 30 e 90 dias; os outros períodos (Hoje, Ontem, 60 dias e datas escolhidas) são consultados no Mercado Livre na
 hora, em cerca de 4 segundos, e ficam 5 minutos em cache. Se o Mercado Livre não responder, a tela avisa.
 
+**Desde 27/11/2026 (pedido do usuário, divergência do MLB7410035586):** na lista de anúncios, investimento, cliques,
+impressões, vendas atribuídas e receita (e com eles ACOS, ROAS, CTR, CPC) vêm da soma das linhas diárias do período
+(`ml_ad_item_dailies`, as mesmas que a seção Vendas usa no Custo Ads), para o gasto bater sempre entre as duas telas.
+Antes vinham do total pronto do ML gravado na última leitura, que ficava horas defasado (ex.: R$ 43,30 gravado às 19:05
+x R$ 46,26 nas linhas relidas às 21:27). Se algum dia do período ainda não foi lido (`ml_ad_day_syncs`), a lista usa o
+total do ML, sem misturar (`daily: false`). A divisão orgânica/direta/indireta continua a do ML.
+Colunas novas: **Vendas reais** (unidades vendidas do anúncio no período, pedidos não cancelados, mesmo critério de
+Vendas) e **Ads por venda real** (investimento ÷ vendas reais, o mesmo rateio do Custo Ads de Vendas). A coluna de vendas
+do ML passou a se chamar **Vendas atribuídas (ML)**, com a explicação na tela: o ML credita ao anúncio patrocinado vendas
+que podem ser de outro anúncio da mesma família (no caso, o de 220V), pedidos cancelados e compras indiretas de outros
+produtos. A regra de Custo Ads por venda de Vendas (confirmada em 11/11) não mudou.
+
 ## Análise (aba "Análise", `Painel::AdsAnalysis`, `GET /api/ads/analysis`)
 Ferramenta de decisão baseada no plugin "Agente ads ml" (referência, não cópia). **Só recomenda**: nunca altera campanha;
 a execução é no Seller Center. Decisões do usuário (30/10): só recomendar; janela de 7 dias; até 7 ações; TACOS alvo 3% a 4%.

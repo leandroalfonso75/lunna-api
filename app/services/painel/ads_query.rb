@@ -12,7 +12,10 @@ module Painel
     DEFAULT_PERIOD = "30d"
     MAX_DAYS = 90
     PER_PAGES = [ 25, 50, 100 ].freeze
-    ITEM_SORTS = %w[cost total_amount acos roas clicks prints units organic_units title price].freeze
+    ITEM_SORTS = %w[cost total_amount acos roas clicks prints units organic_units real_units cost_per_real_sale title price].freeze
+    # Campos que, na lista de anúncios, vêm das linhas diárias (ml_ad_item_dailies, as mesmas da seção Vendas); anúncio
+    # sem linha no período = zero
+    DAILY_ZERO = { "cost" => 0.0, "clicks" => 0, "prints" => 0, "total_amount" => 0.0, "units_quantity" => 0 }.freeze
     MIN_COST_TO_FLAG = 10.0
 
     CAMPAIGN_STATUS = {
@@ -63,10 +66,17 @@ module Painel
       }
     end
 
+    # Lista de anúncios (27/11/2026, pedido do usuário): investimento, cliques, impressões, vendas atribuídas e receita
+    # vêm das linhas diárias do período (as mesmas da seção Vendas), para o gasto bater entre as duas telas; antes vinham
+    # do total pronto do ML gravado na última leitura (defasado em horas). A divisão orgânica/direta/indireta segue a do
+    # ML (total gravado ou consulta na hora). Vendas reais = unidades vendidas do anúncio no período (pedidos não
+    # cancelados, mesmo critério de Vendas) e Ads por venda real = investimento ÷ vendas reais.
     def items
       stored_key = preset_key if STORED_ITEM_WINDOWS.include?(preset_key)
       live = stored_key.nil?
       live_metrics = live ? live_item_metrics(*window) : nil
+      daily = daily_item_metrics(*window)
+      real = real_units(*window)
       campaigns = @account.ml_ad_campaigns.index_by(&:campaign_id)
       scope = @account.ml_ad_items
       scope = scope.where(campaign_id: @params[:campaign_id]) if @params[:campaign_id].present?
@@ -75,16 +85,17 @@ module Painel
 
       rows = scope.to_a.map do |item|
         raw = live ? (live_metrics&.dig(item.item_id) || {}) : (item.metrics[stored_key] || {})
-        item_payload(item, raw, campaigns)
+        raw = raw.merge(daily[item.item_id] || DAILY_ZERO) if daily
+        item_payload(item, raw, campaigns, real_units: real[item.item_id].to_i)
       end
       rows = rows.select { |r| r[:flag] && r[:flag][:key] == @params[:flag].to_s } if @params[:flag].present?
       sorted = sort_items(rows)
       page, per = paging
 
       {
-        window: stored_key || "custom", live: live, live_error: live && live_metrics.nil?, items: sorted.slice((page - 1) * per, per) || [], total: sorted.size, page: page, per_page: per,
+        window: stored_key || "custom", live: live, live_error: live && live_metrics.nil?, daily: !daily.nil?, items: sorted.slice((page - 1) * per, per) || [], total: sorted.size, page: page, per_page: per,
         sort: item_sort, dir: item_dir,
-        totals: derive(sum_hashes(rows.map { |r| r[:metrics] })),
+        totals: totals_with_real(rows),
         flags: rows.filter_map { |r| r[:flag]&.dig(:key) }.tally
       }
     end
@@ -220,13 +231,38 @@ module Painel
       nil
     end
 
-    def item_payload(item, raw, campaigns)
+    # Soma por anúncio das linhas diárias do período; nil se algum dia do período ainda não foi lido (aí fica o total do ML).
+    def daily_item_metrics(from, to)
+      return nil if @account.ml_ad_day_syncs.where(date: from..to).count < (to - from).to_i + 1
+
+      MlAdItemDaily.where(ml_account_id: @account.id, date: from..to).group(:item_id)
+        .pluck(:item_id, Arel.sql("SUM(cost)"), Arel.sql("SUM(clicks)"), Arel.sql("SUM(prints)"), Arel.sql("SUM(total_amount)"), Arel.sql("SUM(units)"))
+        .to_h { |id, cost, clicks, prints, amount, units| [ id, { "cost" => cost.to_f, "clicks" => clicks.to_i, "prints" => prints.to_i, "total_amount" => amount.to_f, "units_quantity" => units.to_i } ] }
+    end
+
+    # Unidades realmente vendidas de cada anúncio no período (pedidos não cancelados), como em Vendas.
+    def real_units(from, to)
+      zone = ActiveSupport::TimeZone["America/Sao_Paulo"]
+      MlOrderItem.joins("JOIN ml_orders o ON o.order_id = ml_order_items.order_id")
+        .where(o: { ml_account_id: @account.id }).where.not(o: { status: %w[cancelled invalid] })
+        .where("o.date_created BETWEEN ? AND ?", zone.local(from.year, from.month, from.day), zone.local(to.year, to.month, to.day).end_of_day)
+        .group("ml_order_items.item_id").sum("ml_order_items.quantity")
+    end
+
+    def totals_with_real(rows)
+      totals = derive(sum_hashes(rows.map { |r| r[:metrics] }))
+      real = rows.sum { |r| r[:metrics][:real_units].to_i }
+      totals.merge(real_units: real, cost_per_real_sale: real.positive? ? (totals[:cost] / real).round(2) : nil)
+    end
+
+    def item_payload(item, raw, campaigns, real_units: 0)
       metrics = derive(
         clicks: raw["clicks"].to_i, prints: raw["prints"].to_i, cost: raw["cost"].to_f, total_amount: raw["total_amount"].to_f,
         direct_amount: raw["direct_amount"].to_f, indirect_amount: raw["indirect_amount"].to_f, units: raw["units_quantity"].to_i,
         direct_units: raw["direct_units_quantity"].to_i, indirect_units: raw["indirect_units_quantity"].to_i,
         organic_units: raw["organic_units_quantity"].to_i, organic_amount: raw["organic_units_amount"].to_f
       )
+      metrics = metrics.merge(real_units: real_units, cost_per_real_sale: real_units.positive? ? (metrics[:cost] / real_units).round(2) : nil)
       campaign = campaigns[item.campaign_id]
       {
         item_id: item.item_id, title: item.title, thumbnail: item.thumbnail, permalink: item.permalink, price: item.price&.to_f,
