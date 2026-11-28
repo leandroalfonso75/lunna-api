@@ -119,6 +119,12 @@ module Olist
       raise Error.new(status: nil, path: path, body: e.message)
     end
 
+    # Edição da ficha (28/11/2026). PUT /produtos/{id}: o objeto inteiro (quem chama relê o produto antes e só troca o
+    # que mudou). PUT /produtos/{id}/variacoes/{idVariacao}. PUT /produtos/{id}/kit: [{ produto: { id }, quantidade }].
+    def update_product(id, body) = write(:put, "/produtos/#{Integer(id)}", body)
+    def update_variation(id, variation_id, body) = write(:put, "/produtos/#{Integer(id)}/variacoes/#{Integer(variation_id)}", body)
+    def update_kit(id, items) = write(:put, "/produtos/#{Integer(id)}/kit", items)
+
     def update_price(id, price:, promo_price: nil)
       body = { preco: price }
       body[:precoPromocional] = promo_price unless promo_price.nil?

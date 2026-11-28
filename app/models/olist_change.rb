@@ -1,7 +1,8 @@
 # Registro de auditoria de uma alteração feita no Olist ERP pelo Lunna.
 # Gravado ANTES de chamar o Olist (pending) e fechado como done/failed.
 class OlistChange < ApplicationRecord
-  KINDS = %w[price stock delete].freeze
+  # product/variation/kit: edição da ficha "Salvar no Lunna e ERP" (28/11/2026)
+  KINDS = %w[price stock delete product variation kit].freeze
   STATUSES = %w[pending done failed].freeze
 
   belongs_to :company

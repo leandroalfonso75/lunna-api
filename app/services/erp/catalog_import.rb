@@ -69,11 +69,43 @@ module Erp
       mapped = OlistProductMapper.call(payload, children: children)
       product = @company.catalog_products.find_or_initialize_by(erp_key: OlistProductMapper::ERP_KEY, erp_id: payload["id"])
       warnings = mapped[:warnings] + component_warnings(mapped[:attrs])
-      product.assign_attributes(mapped[:attrs].merge(erp_synced_at: Time.current, erp_warnings: warnings))
+      attrs = keep_local_overrides(product, mapped[:attrs])
+      product.assign_attributes(attrs.merge(erp_synced_at: Time.current, erp_warnings: warnings))
       product.save!
-      images = sync_images(product, mapped[:images], warnings)
+      images = product.local_overrides.key?("images") ? product.assets.where(kind: "foto").count : sync_images(product, mapped[:images], warnings)
       product.update_columns(erp_warnings: warnings.uniq) if warnings.size != product.erp_warnings.size
       { erp_id: product.erp_id, id: product.id, sku: product.sku, kind: product.kind, images: images, warnings: warnings.uniq }
+    end
+
+    # Campos ajustados no Lunna ("Salvar apenas no Lunna", 28/11/2026): a importação não os sobrescreve; guarda o valor
+    # novo do ERP no ajuste (para a tela mostrar a diferença) e, se o ERP passou a ter o mesmo valor, o ajuste some.
+    def keep_local_overrides(product, attrs)
+      return attrs if product.new_record? || product.local_overrides.blank?
+
+      ov = product.local_overrides.dup
+      attrs = attrs.dup
+      ov.each_key do |field|
+        next if field == "images"
+
+        sym = field.to_sym
+        next unless attrs.key?(sym)
+
+        erp = attrs.delete(sym)
+        if same_value?(erp, product.public_send(field))
+          ov.delete(field)
+          attrs[sym] = erp
+        else
+          ov[field] = ov[field].merge("erp_value" => erp.as_json)
+        end
+      end
+      attrs.merge(local_overrides: ov)
+    end
+
+    def same_value?(a, b)
+      num = ->(x) { x.is_a?(Numeric) }
+      return a.to_f.round(4) == b.to_f.round(4) if num.(a) || num.(b)
+
+      a.as_json == b.as_json
     end
 
     # Componente de kit que não existe (ativo) na cópia do ERP: o estoque do kit fica zero.

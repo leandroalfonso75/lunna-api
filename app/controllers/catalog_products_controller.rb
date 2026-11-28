@@ -10,12 +10,15 @@
 #   DELETE /api/catalog_product_assets/:id       → remove a imagem
 #   GET    /api/catalog_products/sku_search      → busca SKUs para compor kits (produtos do ERP sincronizados no Lunna)
 #   POST   /api/catalog_products/:id/reimport    → relê a ficha no ERP agora (admin; só leitura no ERP)
+#   POST   /api/catalog_products/:id/erp_edit    → edita a ficha vinda do ERP (admin): mode lunna | erp; dry_run = prévia
+#   POST   /api/catalog_products/:id/reset_override → volta um campo ajustado no Lunna ao valor do ERP (admin)
+#   POST   /api/catalog_products/:id/photos      → adiciona uma foto (otimizada como as importadas; admin)
 #   GET    /api/catalog_products/erp/:erp_id     → a ficha completa vinda do ERP de um produto (pelo id dele no ERP; a
 #                                                   variação abre a ficha do pai), com estoque e custo PEPS da cópia
 # A lista mostra os produtos criados no Lunna; ?source=erp lista os vindos do ERP (migração de 27/11/2026).
 class CatalogProductsController < ApplicationController
-  before_action :require_admin!, only: [ :create, :update, :destroy, :generate, :add_asset, :remove_asset, :reimport ]
-  before_action :set_product, only: [ :show, :update, :destroy, :generate, :add_asset, :reimport ]
+  before_action :require_admin!, only: [ :create, :update, :destroy, :generate, :add_asset, :remove_asset, :reimport, :erp_edit, :reset_override, :add_photo ]
+  before_action :set_product, only: [ :show, :update, :destroy, :generate, :add_asset, :reimport, :erp_edit, :reset_override, :add_photo ]
 
   EDITABLE = %i[
     name sku gtin unit price cost_price weight_net weight_gross package_width package_height package_length package_source
@@ -49,6 +52,38 @@ class CatalogProductsController < ApplicationController
       return render_errors([ "Não foi possível reimportar: #{msg}" ], status: :unprocessable_content)
     end
     render json: detail(@product.reload)
+  end
+
+  def erp_edit
+    mode = params[:mode] == "erp" ? "erp" : "lunna"
+    raw = params.to_unsafe_h.slice("fields", "variations", "kit_components", "variation_components", "photos")
+    result = Erp::CatalogEdit.new(Current.company, user: Current.user).call(@product, raw, mode: mode, dry_run: ActiveModel::Type::Boolean.new.cast(params[:dry_run]) == true)
+    render json: { product: detail(result.product), changes: result.changes, erp: result.erp }
+  rescue Erp::CatalogEdit::Invalid => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  rescue ActiveRecord::RecordInvalid => e
+    render_errors(e.record.errors.full_messages, status: :unprocessable_content)
+  end
+
+  def reset_override
+    Erp::CatalogEdit.new(Current.company, user: Current.user).reset!(@product, params[:field].to_s)
+    # fotos: relê já no ERP (só leitura) para voltar às dele; se o ERP não responder, a atualização automática faz depois
+    reread_from_erp(@product) if params[:field].to_s == "images"
+    render json: detail(@product.reload)
+  rescue Erp::CatalogEdit::Invalid => e
+    render_errors([ e.message ], status: :unprocessable_content)
+  end
+
+  def add_photo
+    m = params[:data].to_s.match(%r{\Adata:(image/(?:png|jpeg|webp));base64,(.+)\z}m)
+    return render_errors([ "Envie uma imagem PNG, JPG ou WEBP." ], status: :unprocessable_content) unless m
+
+    bytes, mime = Erp::ImageOptimizer.call(Base64.decode64(m[2]), m[1])
+    return render_errors([ "Imagem maior que 8 MB." ], status: :unprocessable_content) if bytes.bytesize > CatalogProductAsset::MAX_BYTES
+
+    asset = @product.assets.create!(kind: "foto", mime: mime, data: bytes, name: params[:name].to_s.first(120),
+                                    variation_key: params[:variation_key].presence, position: @product.assets.where(kind: "foto").maximum(:position).to_i + 1)
+    render json: asset_json(asset), status: :created
   end
 
   def by_erp
@@ -150,6 +185,12 @@ class CatalogProductsController < ApplicationController
 
   private
 
+  def reread_from_erp(product)
+    Erp::CatalogImport.call(Current.company, erp_ids: [ product.erp_id ])
+  rescue StandardError => e
+    Rails.logger.warn("[catalog] releitura do ERP falhou: #{e.class}: #{e.message}")
+  end
+
   def set_product
     @product = Current.company.catalog_products.find(params[:id])
   rescue ActiveRecord::RecordNotFound
@@ -180,11 +221,13 @@ class CatalogProductsController < ApplicationController
       "assets" => p.assets.map { |a| asset_json(a) },
       "components_info" => components_info(p),
       "erp_stock" => p.from_erp? ? Erp::CatalogStock.call(Current.company, p) : nil,
+      # anúncios vinculados ao produto, por canal de venda (28/11/2026)
+      "channels" => p.from_erp? ? Catalog::ChannelListings.call(Current.company, p) : nil,
       "erp_name" => p.from_erp? ? (p.erp_key == "olist" ? "Olist" : p.erp_key) : nil
     )
   end
 
-  def asset_json(a) = { id: a.id, kind: a.kind, name: a.name, mime: a.mime, variation_key: a.variation_key, position: a.position }
+  def asset_json(a) = { id: a.id, kind: a.kind, name: a.name, mime: a.mime, variation_key: a.variation_key, position: a.position, from_erp: a.source_url.present? }
 
   # nome e custo dos SKUs usados como componentes (para a tela mostrar e somar o custo do kit)
   def components_info(p)
