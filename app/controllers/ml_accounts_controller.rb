@@ -101,6 +101,8 @@ class MlAccountsController < ApplicationController
       scope: data["scope"],
       status: "active",
       last_error: nil,
+      auth_retry_count: 0,
+      auth_retry_at: nil,
       connected_by_user_id: user_id
     )
     account.save!

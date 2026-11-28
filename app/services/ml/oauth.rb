@@ -3,6 +3,10 @@
 module Ml
   class OAuth
     class Error < StandardError; end
+    # O Mercado Livre recusou o acesso de verdade (ex.: invalid_grant): só aqui a conta vira "autorizar de novo".
+    class RevokedError < Error; end
+    # Falha passageira (rede, tempo esgotado, 5xx, limite de chamadas): tenta de novo na próxima rodada, sem parar a conta.
+    class TransientError < Error; end
 
     BASE_URL = "https://api.mercadolibre.com"
     AUTHORIZATION_URL = "https://auth.mercadolivre.com.br/authorization"
@@ -10,6 +14,11 @@ module Ml
     READ_TIMEOUT = 20
     DEFAULT_EXPIRES_IN = 21_600
     RENEW_WINDOW = 10.minutes
+    # Conta marcada "autorizar de novo": tenta renovar sozinha até AUTO_RETRIES vezes, uma a cada AUTO_RETRY_EVERY
+    # (28/11/2026: em 27/11 o token ainda valia e a conta ficou 20 horas parada).
+    AUTO_RETRIES = 6
+    AUTO_RETRY_EVERY = 15.minutes
+    REVOKED_STATUSES = [ 400, 401, 403 ].freeze
 
     class << self
       def configured?
@@ -38,6 +47,9 @@ module Ml
         request_token(grant_type: "refresh_token", refresh_token: refresh_token)
       end
 
+      # Desde 28/11/2026: só RevokedError (o ML recusou o acesso) marca reauth_required; TransientError (rede, 5xx,
+      # 429) deixa a conta ativa e registra o motivo — a próxima rodada tenta de novo.
+      #
       # Renova o access_token da conta dentro de um lock (recarrega a linha);
       # só chama o ML se faltarem menos de 10 min para expirar. Grava sempre o
       # novo refresh_token (o ML rotaciona), mantendo o antigo se a resposta
@@ -62,8 +74,13 @@ module Ml
               expires_at: Time.current + (data["expires_in"] || DEFAULT_EXPIRES_IN),
               scope: data["scope"],
               status: "active",
-              last_error: nil
+              last_error: nil,
+              auth_retry_count: 0,
+              auth_retry_at: nil
             )
+          rescue TransientError => e
+            account.update!(last_error: "Falha passageira ao renovar o acesso ao Mercado Livre (#{e.message}). Nova tentativa na próxima rodada.")
+            failure = e
           rescue Error => e
             account.update!(
               status: "reauth_required",
@@ -78,6 +95,26 @@ module Ml
         account
       end
 
+      # Conta marcada "autorizar de novo": tenta renovar com o acesso salvo (o ML às vezes recusa por instantes e o
+      # token continua valendo). Até AUTO_RETRIES vezes, uma a cada AUTO_RETRY_EVERY. => true se voltou a valer.
+      def auto_retry!(account)
+        return false unless account.status == "reauth_required" && account.refresh_token.present?
+        return false if account.auth_retry_count >= AUTO_RETRIES
+        return false if account.auth_retry_at && account.auth_retry_at > AUTO_RETRY_EVERY.ago
+
+        account.update!(auth_retry_count: account.auth_retry_count + 1, auth_retry_at: Time.current)
+        data = refresh(account.refresh_token)
+        account.update!(
+          access_token: data["access_token"], refresh_token: data["refresh_token"].presence || account.refresh_token,
+          expires_at: Time.current + (data["expires_in"] || DEFAULT_EXPIRES_IN), scope: data["scope"],
+          status: "active", last_error: nil, auth_retry_count: 0, auth_retry_at: nil
+        )
+        true
+      rescue Error => e
+        account.update_columns(last_error: "Falha ao renovar token do Mercado Livre. Autorize de novo. (tentativa automática #{account.auth_retry_count} de #{AUTO_RETRIES}: #{e.message})")
+        false
+      end
+
       private
 
       def request_token(params)
@@ -87,12 +124,14 @@ module Ml
         }.merge(params))
 
         unless (200...300).cover?(response.status)
-          raise Error, "Falha ao trocar/renovar token do Mercado Livre (status #{response.status})"
+          kind = REVOKED_STATUSES.include?(response.status) ? RevokedError : TransientError
+          detail = (JSON.parse(response.body)["error"] rescue nil)
+          raise kind, "Falha ao trocar/renovar token do Mercado Livre (status #{response.status}#{detail ? ", #{detail}" : ''})"
         end
 
         JSON.parse(response.body)
-      rescue Faraday::ConnectionFailed, Faraday::TimeoutError => e
-        raise Error, "Falha ao contactar o Mercado Livre (#{e.class})"
+      rescue Faraday::ConnectionFailed, Faraday::TimeoutError, JSON::ParserError => e
+        raise TransientError, "Falha ao contactar o Mercado Livre (#{e.class})"
       end
 
       def connection

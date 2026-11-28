@@ -129,5 +129,54 @@ RSpec.describe Ml::OAuth, type: :model do
       expect(account.status).to eq("reauth_required")
       expect(account.last_error).to eq("Falha ao renovar token do Mercado Livre. Autorize de novo.")
     end
+
+    # 28/11/2026: em 27/11 uma falha passageira marcou a conta e parou a sincronização por 20 horas
+    it "falha passageira (5xx, 429, rede) NÃO marca reauth_required: a conta segue ativa e tenta na próxima rodada" do
+      account = create(:ml_account, expires_at: 1.minute.from_now, refresh_token: "TG-old", status: "active")
+
+      [ 500, 503, 429 ].each do |code|
+        stub_request(:post, "https://api.mercadolibre.com/oauth/token").to_return(status: code, body: "{}")
+        expect { described_class.refresh!(account) }.to raise_error(Ml::OAuth::TransientError)
+        expect(account.reload.status).to eq("active")
+      end
+      stub_request(:post, "https://api.mercadolibre.com/oauth/token").to_timeout
+      expect { described_class.refresh!(account) }.to raise_error(Ml::OAuth::TransientError)
+      expect(account.reload).to have_attributes(status: "active", refresh_token: "TG-old")
+      expect(account.last_error).to include("Falha passageira")
+    end
+
+    it "invalid_grant é RevokedError (recusa de verdade)" do
+      account = create(:ml_account, expires_at: 1.minute.from_now, refresh_token: "TG-old")
+      stub_request(:post, "https://api.mercadolibre.com/oauth/token").to_return(status: 400, body: ml_fixture("error_invalid_grant"))
+
+      expect { described_class.refresh!(account) }.to raise_error(Ml::OAuth::RevokedError)
+    end
+  end
+
+  describe ".auto_retry!" do
+    it "conta marcada tenta renovar sozinha; se o token ainda vale, volta a ficar ativa e zera as tentativas" do
+      account = create(:ml_account, status: "reauth_required", refresh_token: "TG-old", expires_at: 1.hour.ago)
+      stub_request(:post, "https://api.mercadolibre.com/oauth/token").to_return(status: 200, body: ml_fixture("oauth_refresh"))
+
+      expect(described_class.auto_retry!(account)).to be true
+      expect(account.reload).to have_attributes(status: "active", auth_retry_count: 0, last_error: nil, refresh_token: "TG-refresh-2")
+    end
+
+    it "no máximo 6 tentativas, uma a cada 15 minutos; depois espera o usuário autorizar" do
+      account = create(:ml_account, status: "reauth_required", refresh_token: "TG-old", expires_at: 1.hour.ago)
+      stub_request(:post, "https://api.mercadolibre.com/oauth/token").to_return(status: 400, body: ml_fixture("error_invalid_grant"))
+
+      expect(described_class.auto_retry!(account)).to be false
+      expect(account.reload.auth_retry_count).to eq(1)
+      expect(described_class.auto_retry!(account)).to be false # menos de 15 min depois: nem tenta
+      expect(account.reload.auth_retry_count).to eq(1)
+
+      base = Time.current
+      (1..6).each { |i| travel_to(base + (16 * i).minutes) { described_class.auto_retry!(account.reload) } }
+      expect(account.reload.auth_retry_count).to eq(6)
+      expect(WebMock).to have_requested(:post, "https://api.mercadolibre.com/oauth/token").times(6)
+      expect(account.last_error).to include("Autorize de novo")
+      expect(account.status).to eq("reauth_required")
+    end
   end
 end

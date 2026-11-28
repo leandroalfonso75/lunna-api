@@ -60,7 +60,10 @@ module Payloads
       connected_at: account.created_at,
       ads_roas_target_enabled: account.ads_roas_target_enabled,
       ads_roas_target: account.ads_roas_target&.to_f,
-      last_sync: last_sync_payload(account)
+      last_sync: last_sync_payload(account),
+      # aviso "Mercado Livre sem atualizar desde HH:MM" (28/11/2026)
+      last_ok_sync_at: account.ml_sync_runs.where(ok: true).maximum(:finished_at),
+      auth_retrying: account.status == "reauth_required" && account.auth_retry_count < Ml::OAuth::AUTO_RETRIES
     }
   end
 
